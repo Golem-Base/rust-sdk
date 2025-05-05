@@ -1,0 +1,66 @@
+name: Run Example with GolemBase
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  run-example:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Rust SDK repo
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.2'
+
+      - name: Install Docker Compose
+        run: sudo apt-get update && sudo apt-get install -y docker-compose
+
+      - name: Clone GolemBase OP-Geth repo
+        run: git clone https://github.com/Golem-Base/golembase-op-geth.git
+
+      - name: Start GolemBase services
+        run: docker-compose up -d
+        working-directory: ./golembase-op-geth
+
+      - name: Wait for OP-Geth to be available
+        run: |
+          for i in {1..20}; do
+            if curl -s http://localhost:8545 > /dev/null; then
+              echo "GolemBase is up!";
+              break;
+            fi
+            echo "Waiting for GolemBase RPC (localhost:8545)...";
+            sleep 5
+          done
+
+      - name: Install golembase-demo-cli
+        run: go install github.com/Golem-Base/golembase-demo-cli@latest
+
+      - name: Add Go bin to PATH
+        run: echo "$HOME/go/bin" >> $GITHUB_PATH
+
+      - name: Create GolemBase account
+        run: golembase-demo-cli account create
+
+      - name: Fund GolemBase account
+        run: golembase-demo-cli account fund
+
+      - name: Run Rust example
+        run: cargo run
+        working-directory: ./example
+
+      - name: Shutdown services
+        run: docker-compose down
+        working-directory: ./golembase-op-geth
