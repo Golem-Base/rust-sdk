@@ -25,7 +25,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let signer = PrivateKeySigner::from_bytes(&private_key)
         .map_err(|e| format!("Failed to parse private key: {}", e))?;
     let url = Url::parse("http://localhost:8545").unwrap();
-    let client = GolemBaseClient::new(signer, url);
+    let client = GolemBaseClient::builder()
+        .wallet(signer)
+        .rpc_url(url)
+        .build();
 
     info!("Fetching owner address...");
     let owner_address = client.get_owner_address();

@@ -1,11 +1,11 @@
-use crate::{GolemBaseClient, Hash, NumericAnnotation, StringAnnotation};
-use alloy::primitives::{address, Address, TxKind};
+use crate::GolemBaseClient;
+use alloy::primitives::{address, Address, TxKind, B256};
 use alloy::providers::Provider;
 use alloy::providers::ProviderBuilder;
 use alloy::rpc::types::{Log, TransactionReceipt, TransactionRequest};
 use alloy_rlp::{Encodable, RlpEncodable};
 use displaydoc::Display;
-use log::debug;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Represents errors that can occur in the GolemBase ETH client.
@@ -26,6 +26,41 @@ pub const STORAGE_ADDRESS: Address = address!("0x0000000000000000000000000000000
 
 /// The chain ID for the GolemBase Ethereum network.
 pub const CHAIN_ID: u64 = 1337;
+
+/// A type alias for the hash used to identify entities in GolemBase.
+pub type Hash = B256;
+
+/// Type alias for the key used in annotations.
+pub type Key = String;
+
+/// A generic key-value pair structure.
+#[derive(Debug, Clone, RlpEncodable, Serialize, Deserialize)]
+pub struct Annotation<T> {
+    /// The key of the annotation.
+    pub key: Key,
+    /// The value of the annotation.
+    pub value: T,
+}
+
+impl<T> Annotation<T> {
+    /// Creates a new key-value pair.
+    pub fn new<K, V>(key: K, value: V) -> Self
+    where
+        K: Into<Key>,
+        V: Into<T>,
+    {
+        Annotation {
+            key: key.into(),
+            value: value.into(),
+        }
+    }
+}
+
+/// Type alias for string annotations.
+pub type StringAnnotation = Annotation<String>;
+
+/// Type alias for numeric annotations.
+pub type NumericAnnotation = Annotation<u64>;
 
 /// Type representing a create transaction in GolemBase.
 #[derive(Debug, RlpEncodable)]
@@ -227,31 +262,31 @@ impl GolemBaseClient {
         &self,
         payload: GolemBaseTransaction,
     ) -> Result<TransactionReceipt, Error> {
-        debug!("payload: {:?}", payload);
+        log::debug!("payload: {:?}", payload);
         let mut buffer = Vec::new();
         payload.encode(&mut buffer);
-        debug!("buffer: {:?}", buffer);
+        log::debug!("buffer: {:?}", buffer);
         let tx = TransactionRequest {
             to: Some(TxKind::Call(STORAGE_ADDRESS)),
             input: buffer.into(),
             chain_id: Some(CHAIN_ID),
             ..Default::default()
         };
-        debug!("transaction: {:?}", tx);
+        log::debug!("transaction: {:?}", tx);
         let provider = ProviderBuilder::new()
             .wallet(self.wallet.clone())
             .connect_http(self.url.clone());
-        debug!("provider: {:?}", provider);
+        log::debug!("provider: {:?}", provider);
         let pending_tx = provider
             .send_transaction(tx)
             .await
             .map_err(|e| Error::TransactionSendError(e.to_string()))?;
-        debug!("pending transaction: {:?}", pending_tx);
+        log::debug!("pending transaction: {:?}", pending_tx);
         let receipt = pending_tx
             .get_receipt()
             .await
             .map_err(|e| Error::TransactionReceiptError(e.to_string()))?;
-        debug!("receipt: {:?}", receipt);
+        log::debug!("receipt: {:?}", receipt);
         Ok(receipt)
     }
 

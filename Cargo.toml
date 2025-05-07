@@ -7,12 +7,30 @@ license = "MIT"
 repository = "https://github.com/Golem-Base/rust-sdk"
 documentation = "https://docs.rs/golem-base-sdk"
 
+[workspace]
+members = [
+    "example"
+]
+
+
 [dependencies]
-alloy = { version = "0.15", features = ["json-rpc"] }
-alloy-rlp = { version = "0.3", features = ["derive"] }
+alloy = { version = "0.15", features = ["full", "json-rpc"] }
+alloy-signer-local = { version = "0.15", features = ["keystore"] }
+alloy-rlp = "0.3"
+alloy-json-rpc = "0.15"
+anyhow = "1.0"
+async-trait = "0.1"
 base64 = "0.22"
+bytes = "1.0"
+bigdecimal = "0.4"
 bon = "3.6"
+dirs = "5.0"
 displaydoc = "0.2"
 log = "0.4"
+rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2.0"
+
+[dev-dependencies]
+clap = { version = "4.4", features = ["derive"] }
+env_logger = "0.10"

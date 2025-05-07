@@ -1,14 +1,17 @@
-use crate::{GolemBaseClient, Hash, NumericAnnotation, StringAnnotation};
 use alloy::primitives::Address;
+use alloy::providers::Provider;
 use alloy::rpc::json_rpc::{RpcRecv, RpcSend};
+use alloy_json_rpc::RpcError;
+use anyhow::anyhow;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use displaydoc::Display;
-use log::debug;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::fmt::Debug;
 use thiserror::Error;
+
+use crate::{GolemBaseClient, Hash, NumericAnnotation, StringAnnotation};
 
 /// Represents errors that can occur in the GolemBase RPC module.
 #[derive(Debug, Display, Error)]
@@ -47,17 +50,25 @@ impl GolemBaseClient {
         params: S,
     ) -> Result<R, Error> {
         let method = method.into();
-        let request = self.client.request(method.clone(), params.clone());
-        match request.await {
-            Ok(response) => {
-                debug!("{}({:?}), response: {:?}", method, params, response);
-                Ok(response)
-            }
-            Err(err) => {
-                debug!("{}({:?}), error: {:?}", method, params, err);
-                Err(Error::RpcRequestError(err.to_string()))
-            }
-        }
+        log::debug!("RPC Call - Method: {}, Params: {:?}", method, params);
+        self.provider
+            .client()
+            .request(method.clone(), params)
+            .await
+            .map_err(|e| match e {
+                RpcError::ErrorResp(err) => {
+                    anyhow!("Error response from RPC service: {}", err)
+                }
+                RpcError::SerError(err) => {
+                    anyhow!("Serialization error: {err}")
+                }
+                RpcError::DeserError { err, text } => {
+                    log::debug!("Deserialization error: {err}, response text: {text}");
+                    anyhow!("Deserialization error: {err}")
+                }
+                _ => anyhow!("{e}"),
+            })
+            .map_err(|e| Error::RpcRequestError(e.to_string()))
     }
 
     /// Gets the total count of entities in GolemBase.
