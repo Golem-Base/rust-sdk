@@ -1992,10 +1992,13 @@ dependencies = [
  "dirs 5.0.1",
  "displaydoc",
  "env_logger 0.10.2",
+ "hex",
  "log",
  "rand 0.8.5",
  "serde",
  "thiserror 2.0.12",
+ "tokio",
+ "url",
 ]
 
 [[package]]

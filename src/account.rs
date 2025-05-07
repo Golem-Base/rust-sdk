@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use bigdecimal::BigDecimal;
 use std::sync::Arc;
 
-use crate::eth::GolemBaseTransaction;
+use crate::entity::GolemBaseTransaction;
 use crate::utils::eth_to_wei;
 
 /// The address of the GolemBase storage processor contract

@@ -4,7 +4,7 @@ pub use alloy::signers::local::PrivateKeySigner;
 pub use alloy::transports::http::reqwest::Url;
 
 pub use client::GolemBaseClient;
-pub use eth::{Annotation, Hash, NumericAnnotation, StringAnnotation};
+pub use entity::{Annotation, Hash, NumericAnnotation, StringAnnotation};
 
 /// Module for Ethereum transaction-related functionality.
 pub mod eth;
@@ -16,5 +16,6 @@ pub mod rpc;
 pub mod client;
 
 pub mod account;
+pub mod entity;
 pub mod signers;
 pub mod utils;

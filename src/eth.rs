@@ -1,11 +1,16 @@
+use crate::entity::Hash;
+use crate::entity::{
+    DeleteResult, EntityResult, ExtendResult, GolemBaseCreate, GolemBaseExtend,
+    GolemBaseTransaction, GolemBaseUpdate,
+};
 use crate::GolemBaseClient;
-use alloy::primitives::{address, Address, TxKind, B256};
+
+use alloy::primitives::{address, Address, TxKind};
 use alloy::providers::Provider;
 use alloy::providers::ProviderBuilder;
 use alloy::rpc::types::{Log, TransactionReceipt, TransactionRequest};
-use alloy_rlp::{Encodable, RlpEncodable};
+use alloy_rlp::Encodable;
 use displaydoc::Display;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Represents errors that can occur in the GolemBase ETH client.
@@ -26,133 +31,6 @@ pub const STORAGE_ADDRESS: Address = address!("0x0000000000000000000000000000000
 
 /// The chain ID for the GolemBase Ethereum network.
 pub const CHAIN_ID: u64 = 1337;
-
-/// A type alias for the hash used to identify entities in GolemBase.
-pub type Hash = B256;
-
-/// Type alias for the key used in annotations.
-pub type Key = String;
-
-/// A generic key-value pair structure.
-#[derive(Debug, Clone, RlpEncodable, Serialize, Deserialize)]
-pub struct Annotation<T> {
-    /// The key of the annotation.
-    pub key: Key,
-    /// The value of the annotation.
-    pub value: T,
-}
-
-impl<T> Annotation<T> {
-    /// Creates a new key-value pair.
-    pub fn new<K, V>(key: K, value: V) -> Self
-    where
-        K: Into<Key>,
-        V: Into<T>,
-    {
-        Annotation {
-            key: key.into(),
-            value: value.into(),
-        }
-    }
-}
-
-/// Type alias for string annotations.
-pub type StringAnnotation = Annotation<String>;
-
-/// Type alias for numeric annotations.
-pub type NumericAnnotation = Annotation<u64>;
-
-/// Type representing a create transaction in GolemBase.
-#[derive(Debug, RlpEncodable)]
-pub struct GolemBaseCreate {
-    /// The data associated with the entity.
-    pub data: String,
-    /// The time-to-live (TTL) for the entity.
-    pub ttl: u64,
-    /// String annotations for the entity.
-    pub string_annotations: Vec<StringAnnotation>,
-    /// Numeric annotations for the entity.
-    pub numeric_annotations: Vec<NumericAnnotation>,
-}
-
-/// Type representing an update transaction in GolemBase.
-#[derive(Debug, RlpEncodable)]
-pub struct GolemBaseUpdate {
-    /// The key of the entity to update.
-    pub entity_key: Hash,
-    /// The updated data for the entity.
-    pub data: String,
-    /// The updated time-to-live (TTL) for the entity.
-    pub ttl: u64,
-    /// Updated string annotations for the entity.
-    pub string_annotations: Vec<StringAnnotation>,
-    /// Updated numeric annotations for the entity.
-    pub numeric_annotations: Vec<NumericAnnotation>,
-}
-
-pub type GolemBaseDelete = Hash;
-
-/// Type representing an extend transaction in GolemBase.
-#[derive(Debug, RlpEncodable)]
-pub struct GolemBaseExtend {
-    /// The key of the entity to extend.
-    pub entity_key: Hash,
-    /// The number of blocks to extend the TTL by.
-    pub number_of_blocks: u64,
-}
-
-/// Type representing a transaction in GolemBase, including creates, updates, deletes, and extensions.
-#[derive(Debug, RlpEncodable)]
-pub struct GolemBaseTransaction {
-    /// A list of entities to create.
-    pub creates: Vec<GolemBaseCreate>,
-    /// A list of entities to update.
-    pub updates: Vec<GolemBaseUpdate>,
-    /// A list of entity keys to delete.
-    pub deletes: Vec<GolemBaseDelete>,
-    /// A list of entities to extend.
-    pub extensions: Vec<GolemBaseExtend>,
-}
-
-/// Represents an entity with data, TTL, and annotations.
-#[derive(Debug)]
-pub struct Entity {
-    /// The data associated with the entity.
-    pub data: String,
-    /// The time-to-live (TTL) for the entity.
-    pub ttl: u64,
-    /// String annotations for the entity.
-    pub string_annotations: Vec<StringAnnotation>,
-    /// Numeric annotations for the entity.
-    pub numeric_annotations: Vec<NumericAnnotation>,
-}
-
-/// Represents the result of creating or updating an entity.
-#[derive(Debug)]
-pub struct EntityResult {
-    /// The key of the entity.
-    pub entity_key: Hash,
-    /// The block number at which the entity expires.
-    pub expiration_block: u64,
-}
-
-/// Represents the result of extending an entity's TTL.
-#[derive(Debug)]
-pub struct ExtendResult {
-    /// The key of the entity.
-    pub entity_key: Hash,
-    /// The old expiration block of the entity.
-    pub old_expiration_block: u64,
-    /// The new expiration block of the entity.
-    pub new_expiration_block: u64,
-}
-
-/// Represents the result of deleting an entity.
-#[derive(Debug)]
-pub struct DeleteResult {
-    /// The key of the entity that was deleted.
-    pub entity_key: Hash,
-}
 
 impl GolemBaseClient {
     /// Creates one or more new entities in GolemBase and returns their results.

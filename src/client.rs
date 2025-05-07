@@ -14,7 +14,7 @@ use bon::bon;
 use bytes::Bytes;
 
 use crate::account::{Account, TransactionSigner};
-use crate::eth::{GolemBaseCreate, GolemBaseTransaction};
+use crate::entity::{GolemBaseCreate, GolemBaseTransaction};
 use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner};
 use crate::utils::wei_to_eth;
