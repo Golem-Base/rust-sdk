@@ -1,5 +1,5 @@
 use dirs::config_dir;
-use golem_base_sdk::eth::{EntityResult, GolemBaseCreate, GolemBaseUpdate};
+use golem_base_sdk::entity::{Create, EntityResult, Update};
 use golem_base_sdk::{Address, Annotation, GolemBaseClient, Hash, PrivateKeySigner, Url};
 use log::info;
 use std::fs;
@@ -37,20 +37,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Creating entities...");
     let creates = vec![
-        GolemBaseCreate {
-            data: "foo".to_string(),
+        Create {
+            data: "foo".into(),
             ttl: 25,
             string_annotations: vec![Annotation::new("key", "foo")],
             numeric_annotations: vec![Annotation::new("ix", 1u64)],
         },
-        GolemBaseCreate {
-            data: "bar".to_string(),
+        Create {
+            data: "bar".into(),
             ttl: 2,
             string_annotations: vec![Annotation::new("key", "bar")],
             numeric_annotations: vec![Annotation::new("ix", 2u64)],
         },
-        GolemBaseCreate {
-            data: "qux".to_string(),
+        Create {
+            data: "qux".into(),
             ttl: 50,
             string_annotations: vec![Annotation::new("key", "qux")],
             numeric_annotations: vec![Annotation::new("ix", 3u64)],
@@ -69,8 +69,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let metadata = client.get_entity_metadata(third_entity_key).await?;
     info!("... before the update: {:?}", metadata);
     client
-        .update_entities(vec![GolemBaseUpdate {
-            data: "foobar".to_string(),
+        .update_entities(vec![Update {
+            data: "foobar".into(),
             ttl: 40,
             string_annotations: vec![Annotation::new("key", "qux"), Annotation::new("foo", "bar")],
             numeric_annotations: vec![Annotation::new("ix", 2u64)],

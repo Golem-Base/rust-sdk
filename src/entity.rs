@@ -41,7 +41,7 @@ pub type Key = String;
 /// Type representing a create transaction in GolemBase.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
 #[rlp(trailing)]
-pub struct GolemBaseCreate {
+pub struct Create {
     /// The time-to-live (TTL) for the entity.
     pub ttl: u64,
     /// The data associated with the entity.
@@ -55,7 +55,7 @@ pub struct GolemBaseCreate {
 /// Type representing an update transaction in GolemBase.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
 #[rlp(trailing)]
-pub struct GolemBaseUpdate {
+pub struct Update {
     /// The key of the entity to update.
     pub entity_key: Hash,
     /// The updated data for the entity.
@@ -72,7 +72,7 @@ pub type GolemBaseDelete = Hash;
 
 /// Type representing an extend transaction in GolemBase.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
-pub struct GolemBaseExtend {
+pub struct Extend {
     /// The key of the entity to extend.
     pub entity_key: Hash,
     /// The number of blocks to extend the TTL by.
@@ -83,13 +83,13 @@ pub struct GolemBaseExtend {
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
 pub struct GolemBaseTransaction {
     /// A list of entities to create.
-    pub creates: Vec<GolemBaseCreate>,
+    pub creates: Vec<Create>,
     /// A list of entities to update.
-    pub updates: Vec<GolemBaseUpdate>,
+    pub updates: Vec<Update>,
     /// A list of entity keys to delete.
     pub deletes: Vec<GolemBaseDelete>,
     /// A list of entities to extend.
-    pub extensions: Vec<GolemBaseExtend>,
+    pub extensions: Vec<Extend>,
 }
 
 /// Represents an entity with data, TTL, and annotations.
@@ -132,7 +132,7 @@ pub struct DeleteResult {
     pub entity_key: Hash,
 }
 
-impl GolemBaseCreate {
+impl Create {
     /// Creates a new Create operation with empty annotations
     pub fn new(payload: Vec<u8>, ttl: u64) -> Self {
         Self {
@@ -162,7 +162,7 @@ impl GolemBaseCreate {
     }
 }
 
-impl GolemBaseUpdate {
+impl Update {
     /// Creates a new Update operation with empty annotations
     pub fn new(entity_key: B256, payload: Vec<u8>, ttl: u64) -> Self {
         Self {
@@ -217,7 +217,7 @@ mod tests {
 
     #[test]
     fn test_create_without_annotations() {
-        let create = GolemBaseCreate::new(b"test payload".to_vec(), 1000);
+        let create = Create::new(b"test payload".to_vec(), 1000);
 
         let mut tx = GolemBaseTransaction::default();
         tx.creates.push(create);
@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     fn test_create_with_annotations() {
-        let create = GolemBaseCreate::new(b"test payload".to_vec(), 1000)
+        let create = Create::new(b"test payload".to_vec(), 1000)
             .annotate_string("foo", "bar")
             .annotate_number("baz", 42);
 
@@ -245,7 +245,7 @@ mod tests {
 
     #[test]
     fn test_update_with_annotations() {
-        let update = GolemBaseUpdate::new(
+        let update = Update::new(
             B256::from_slice(&[1; 32]),
             b"updated payload".to_vec(),
             2000,
@@ -276,7 +276,7 @@ mod tests {
     #[test]
     fn test_extend_ttl() {
         let mut tx = GolemBaseTransaction::default();
-        tx.extensions.push(GolemBaseExtend {
+        tx.extensions.push(Extend {
             entity_key: B256::from_slice(&[3; 32]),
             number_of_blocks: 500,
         });
@@ -289,9 +289,8 @@ mod tests {
 
     #[test]
     fn test_mixed_operations() {
-        let create =
-            GolemBaseCreate::new(b"test payload".to_vec(), 1000).annotate_string("type", "test");
-        let update = GolemBaseUpdate::new(
+        let create = Create::new(b"test payload".to_vec(), 1000).annotate_string("type", "test");
+        let update = Update::new(
             B256::from_slice(&[1; 32]),
             b"updated payload".to_vec(),
             2000,
@@ -300,7 +299,7 @@ mod tests {
         tx.creates.push(create);
         tx.updates.push(update);
         tx.deletes.push(B256::from_slice(&[2; 32]));
-        tx.extensions.push(GolemBaseExtend {
+        tx.extensions.push(Extend {
             entity_key: B256::from_slice(&[3; 32]),
             number_of_blocks: 500,
         });

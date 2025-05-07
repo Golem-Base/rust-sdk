@@ -14,7 +14,7 @@ use bon::bon;
 use bytes::Bytes;
 
 use crate::account::{Account, TransactionSigner};
-use crate::entity::{GolemBaseCreate, GolemBaseTransaction};
+use crate::entity::{Create, GolemBaseTransaction};
 use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner};
 use crate::utils::wei_to_eth;
@@ -260,7 +260,7 @@ impl GolemBaseClient {
     pub async fn create_entry(
         &self,
         account: Address,
-        entry: GolemBaseCreate,
+        entry: Create,
     ) -> anyhow::Result<String> {
         let account = self.account_get(account)?;
         let tx = GolemBaseTransaction {

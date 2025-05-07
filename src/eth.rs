@@ -1,7 +1,6 @@
 use crate::entity::Hash;
 use crate::entity::{
-    DeleteResult, EntityResult, ExtendResult, GolemBaseCreate, GolemBaseExtend,
-    GolemBaseTransaction, GolemBaseUpdate,
+    Create, DeleteResult, EntityResult, Extend, ExtendResult, GolemBaseTransaction, Update,
 };
 use crate::GolemBaseClient;
 
@@ -34,10 +33,7 @@ pub const CHAIN_ID: u64 = 1337;
 
 impl GolemBaseClient {
     /// Creates one or more new entities in GolemBase and returns their results.
-    pub async fn create_entities(
-        &self,
-        creates: Vec<GolemBaseCreate>,
-    ) -> Result<Vec<EntityResult>, Error> {
+    pub async fn create_entities(&self, creates: Vec<Create>) -> Result<Vec<EntityResult>, Error> {
         let receipt = self
             .create_raw_transaction(GolemBaseTransaction {
                 creates,
@@ -60,10 +56,7 @@ impl GolemBaseClient {
     }
 
     /// Updates one or more entities in GolemBase and returns their results.
-    pub async fn update_entities(
-        &self,
-        updates: Vec<GolemBaseUpdate>,
-    ) -> Result<Vec<EntityResult>, Error> {
+    pub async fn update_entities(&self, updates: Vec<Update>) -> Result<Vec<EntityResult>, Error> {
         let receipt = self
             .create_raw_transaction(GolemBaseTransaction {
                 creates: vec![],
@@ -109,7 +102,7 @@ impl GolemBaseClient {
     /// Extends the TTL of one or more entities in GolemBase and returns their results.
     pub async fn extend_entities(
         &self,
-        extensions: Vec<GolemBaseExtend>,
+        extensions: Vec<Extend>,
     ) -> Result<Vec<ExtendResult>, Error> {
         let receipt = self
             .create_raw_transaction(GolemBaseTransaction {

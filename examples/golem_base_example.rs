@@ -6,7 +6,7 @@ use url::Url;
 
 use bigdecimal::BigDecimal;
 use golem_base_sdk::client::GolemBaseClient;
-use golem_base_sdk::entity::GolemBaseCreate;
+use golem_base_sdk::entity::Create;
 
 /// Simple program to connect to a Geth node
 #[derive(Parser, Debug)]
@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
 
     log::info!("Offer hash: {hash}");
     log::info!("Timestamp: {timestamp}");
-    let entry = GolemBaseCreate::new(test_payload.clone(), 1000)
+    let entry = Create::new(test_payload.clone(), 1000)
         .annotate_string("golem_marketplace_type", "Offer")
         .annotate_string("golem_marketplace_id", hash)
         .annotate_number("golem_marketplace_timestamp", timestamp as u64);
