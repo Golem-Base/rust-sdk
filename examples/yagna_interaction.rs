@@ -96,9 +96,9 @@ async fn main() -> Result<()> {
     log::info!("Offer hash: {hash}");
     log::info!("Timestamp: {timestamp}");
     let entry = Create::new(test_payload.clone(), 1000)
-        .annotate_string("golem_marketplace_type", "Offer")
-        .annotate_string("golem_marketplace_id", hash)
-        .annotate_number("golem_marketplace_timestamp", timestamp as u64);
+        .annotate_string("golem_marketplace_type_test", "Offer")
+        .annotate_string("golem_marketplace_id_test", hash)
+        .annotate_number("golem_marketplace_timestamp_test", timestamp as u64);
 
     // Create entry with the account
     let entry_id = client
@@ -115,7 +115,7 @@ async fn main() -> Result<()> {
     log::info!("Entry: {entry}");
 
     // Query for Offers
-    let query = format!("golem_marketplace_type = \"Offer\"");
+    let query = format!("golem_marketplace_type_test = \"Offer\"");
     log::info!("Querying entities with: {}", query);
 
     let offers = client

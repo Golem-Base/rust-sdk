@@ -58,10 +58,10 @@ pub struct Create {
 pub struct Update {
     /// The key of the entity to update.
     pub entity_key: Hash,
-    /// The updated data for the entity.
-    pub data: Bytes,
     /// The updated time-to-live (TTL) for the entity.
     pub ttl: u64,
+    /// The updated data for the entity.
+    pub data: Bytes,
     /// Updated string annotations for the entity.
     pub string_annotations: Vec<StringAnnotation>,
     /// Updated numeric annotations for the entity.
