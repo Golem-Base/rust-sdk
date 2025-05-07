@@ -55,7 +55,7 @@ jobs:
         run: golembase-demo-cli account create
 
       - name: Fund GolemBase account
-        run: golembase-demo-cli account fund
+        run: cargo run --example cli -- fund --amount 2
 
       - name: Run Rust example
         run: cargo run
