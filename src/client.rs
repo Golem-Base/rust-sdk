@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -123,6 +124,23 @@ impl GolemBaseClient {
         let _path = signer
             .save(password)
             .map_err(|e| anyhow::anyhow!("Failed to save account: {e}"))?;
+        self.account_register(signer).await
+    }
+
+    /// Loads a key from a raw private key file and registers it
+    pub async fn account_load_file(
+        &self,
+        path: PathBuf,
+        password: &str,
+    ) -> anyhow::Result<Address> {
+        // First try to load as keystore.
+        let signer = match InMemorySigner::load_keystore(path.clone(), password) {
+            Ok(signer) => signer,
+            Err(_) => {
+                // If keystore loading fails, try as raw key file
+                InMemorySigner::load_raw_key(path)?
+            }
+        };
         self.account_register(signer).await
     }
 
@@ -257,11 +275,7 @@ impl GolemBaseClient {
     }
 
     /// Creates an entry using the specified account
-    pub async fn create_entry(
-        &self,
-        account: Address,
-        entry: Create,
-    ) -> anyhow::Result<String> {
+    pub async fn create_entry(&self, account: Address, entry: Create) -> anyhow::Result<String> {
         let account = self.account_get(account)?;
         let tx = GolemBaseTransaction {
             creates: vec![entry],

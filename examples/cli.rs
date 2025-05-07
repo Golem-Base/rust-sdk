@@ -2,6 +2,7 @@ use alloy::primitives::Address;
 use anyhow::Result;
 use bigdecimal::BigDecimal;
 use clap::{Parser, Subcommand};
+use dirs::config_dir;
 use golem_base_sdk::client::GolemBaseClient;
 use url::Url;
 
@@ -24,9 +25,9 @@ enum Command {
     List,
     /// Fund an account with ETH
     Fund {
-        /// Address of the wallet to fund
+        /// Address of the wallet to fund (optional, uses default private key if not specified)
         #[arg(short, long)]
-        wallet: Address,
+        wallet: Option<Address>,
 
         /// Amount in ETH to fund
         #[arg(short, long, default_value = "1.0")]
@@ -77,11 +78,22 @@ async fn main() -> Result<()> {
             }
         }
         Command::Fund { wallet, amount } => {
-            let account_obj = client.account_load(wallet, "test123").await?;
-            log::info!("Using account: {account_obj:?}");
+            let account = if let Some(wallet) = wallet {
+                // Load account by address
+                client.account_load(wallet, "test123").await?
+            } else {
+                // Load default private key
+                let mut private_key_path = config_dir()
+                    .ok_or_else(|| anyhow::anyhow!("Failed to get config directory"))?;
+                private_key_path.push("golembase/private.key");
+                client
+                    .account_load_file(private_key_path, "test123")
+                    .await?
+            };
+            log::info!("Using account: {account:?}");
 
-            let fund_tx = client.fund(wallet, amount).await?;
-            log::info!("Account funded with transaction: {:?}", fund_tx);
+            let fund_tx = client.fund(account, amount.clone()).await?;
+            log::info!("Account funded with {amount} ETH, transaction hash: {fund_tx:?}");
         }
         Command::Transfer {
             from,

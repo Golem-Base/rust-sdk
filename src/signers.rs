@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::account::TransactionSigner;
+use crate::Hash;
 
 const DEFAULT_KEYSTORE_DIR: &str = ".local/share/GolemBase";
 
@@ -67,7 +68,7 @@ impl InMemorySigner {
     }
 
     /// Loads a private key from a keystore file
-    pub fn load(path: PathBuf, password: &str) -> anyhow::Result<Self> {
+    pub fn load_keystore(path: PathBuf, password: &str) -> anyhow::Result<Self> {
         let signer = PrivateKeySigner::decrypt_keystore(&path, password).map_err(|e| match e {
             LocalSignerError::EcdsaError(e) => anyhow!("ECDSA error: {e}"),
             LocalSignerError::EthKeystoreError(e) => anyhow!("Keystore error: {e}"),
@@ -79,7 +80,19 @@ impl InMemorySigner {
     /// Loads a signer by address from the default directory
     pub fn load_by_address(address: Address, password: &str) -> anyhow::Result<Self> {
         let path = Self::get_keystore_dir()?.join(format!("key_{}.json", address));
-        Self::load(path, password)
+        Self::load_keystore(path, password)
+    }
+
+    /// Loads a signer from a raw private key file
+    pub fn load_raw_key(path: PathBuf) -> anyhow::Result<Self> {
+        let private_key_bytes =
+            fs::read(&path).map_err(|e| anyhow!("Failed to read private key file: {}", e))?;
+
+        let private_key = Hash::from_slice(&private_key_bytes);
+        let signer = PrivateKeySigner::from_bytes(&private_key)
+            .map_err(|e| anyhow!("Failed to parse private key: {}", e))?;
+
+        Ok(Self { signer })
     }
 
     /// Lists all local accounts in the keystore directory
