@@ -34,7 +34,7 @@ golem-base-cli get-entity <ID>
 
 ## Configuration
 
-The CLI uses the system's config directory to store account information. On Linux, this is typically `~/.config/golem-base/`.
+The CLI uses the system's config directory to store account information. On Linux, this is typically `~/.config/golembase/`.
 
 ## Development
 

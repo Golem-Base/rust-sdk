@@ -13,7 +13,7 @@ use std::sync::Arc;
 use crate::account::TransactionSigner;
 use crate::Hash;
 
-const DEFAULT_KEYSTORE_DIR: &str = ".local/share/GolemBase";
+const DEFAULT_KEYSTORE_DIR: &str = "golembase";
 
 /// A signer that keeps the private key in memory
 pub struct InMemorySigner {
@@ -23,7 +23,7 @@ pub struct InMemorySigner {
 impl InMemorySigner {
     /// Gets the default keystore directory path
     fn get_keystore_dir() -> anyhow::Result<PathBuf> {
-        let path = dirs::home_dir()
+        let path = dirs::config_dir()
             .context("Could not find home directory")?
             .join(DEFAULT_KEYSTORE_DIR);
 

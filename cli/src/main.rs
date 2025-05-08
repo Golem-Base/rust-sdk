@@ -70,10 +70,10 @@ async fn main() -> Result<()> {
 
     match args.command {
         Command::List => {
-            log::info!("Available accounts:");
+            println!("Available accounts:");
             for &addr in &accounts {
                 let balance = client.get_balance(addr).await?;
-                log::info!("  {}: {} ETH", addr, balance);
+                println!("  {}: {} ETH", addr, balance);
             }
         }
         Command::Fund { wallet, amount } => {
@@ -89,10 +89,10 @@ async fn main() -> Result<()> {
                     .account_load_file(private_key_path, "test123")
                     .await?
             };
-            log::info!("Using account: {account:?}");
+            println!("Using account: {account:?}");
 
             let fund_tx = client.fund(account, amount.clone()).await?;
-            log::info!("Account funded with {amount} ETH, transaction hash: {fund_tx:?}");
+            println!("Account funded with {amount} ETH, transaction hash: {fund_tx:?}");
         }
         Command::Transfer {
             from,
@@ -102,11 +102,11 @@ async fn main() -> Result<()> {
         } => {
             // Load source account
             let account = client.account_load(from, &password).await?;
-            log::info!("Using account: {account:?}");
+            println!("Using account: {account:?}");
 
             // Transfer funds
             let transfer_tx = client.transfer(from, to, amount.clone()).await?;
-            log::info!(
+            println!(
                 "Transfer transaction hash for {amount} ETH: {:?}",
                 transfer_tx
             );
