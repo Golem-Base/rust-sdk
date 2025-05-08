@@ -323,7 +323,7 @@ impl GolemBaseClient {
     pub async fn remove_entries(
         &self,
         account: Address,
-        entry_ids: Vec<B256>,
+        entry_ids: Vec<Hash>,
     ) -> anyhow::Result<()> {
         if entry_ids.is_empty() {
             return Ok(());

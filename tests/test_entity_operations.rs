@@ -1,5 +1,6 @@
 use anyhow::Result;
 use bigdecimal::BigDecimal;
+use serial_test::serial;
 use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
 
@@ -17,6 +18,7 @@ fn init_logger(should_init: bool) {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_create_and_retrieve_entry() -> Result<()> {
     init_logger(false);
 
@@ -55,6 +57,7 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_entity_operations() -> Result<()> {
     init_logger(false);
 

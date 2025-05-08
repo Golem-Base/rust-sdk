@@ -1,5 +1,6 @@
 use anyhow::Result;
 use bigdecimal::BigDecimal;
+use serial_test::serial;
 use std::fs;
 
 use golem_base_sdk::{client::GolemBaseClient, signers::InMemorySigner, PrivateKeySigner, Url};
@@ -14,6 +15,7 @@ fn init_logger(should_init: bool) {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_account_creation_and_funding() -> Result<()> {
     init_logger(false);
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
@@ -41,6 +43,7 @@ async fn test_account_creation_and_funding() -> Result<()> {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_account_loading_by_address() -> Result<()> {
     init_logger(false);
     let client1 = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
@@ -60,6 +63,7 @@ async fn test_account_loading_by_address() -> Result<()> {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_account_loading_from_private_key() -> Result<()> {
     init_logger(false);
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
@@ -91,6 +95,7 @@ async fn test_account_loading_from_private_key() -> Result<()> {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_fund_transfer() -> Result<()> {
     init_logger(false);
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
