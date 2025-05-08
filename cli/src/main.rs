@@ -1,9 +1,8 @@
-use alloy::primitives::Address;
 use anyhow::Result;
 use bigdecimal::BigDecimal;
 use clap::{Parser, Subcommand};
 use dirs::config_dir;
-use golem_base_sdk::client::GolemBaseClient;
+use golem_base_sdk::{client::GolemBaseClient, Address};
 use url::Url;
 
 /// Program to fund and transfer funds between accounts on Golem Base

@@ -4,12 +4,11 @@ version = "0.1.0"
 edition = "2021"
 description = "A Rust SDK for interacting with GolemBase storage contracts."
 license = "MIT"
-repository = "https://github.com/Golem-Base/rust-sdk"
-documentation = "https://docs.rs/golem-base-sdk"
 
 [workspace]
 members = [
-    "example"
+    "example",
+    "cli"
 ]
 
 
@@ -33,6 +32,9 @@ serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 url = "2.4"
 thiserror = "2.0"
+
+[workspace.dependencies]
+golem-base-sdk = { path = "." }
 
 [dev-dependencies]
 clap = { version = "4.4", features = ["derive"] }
