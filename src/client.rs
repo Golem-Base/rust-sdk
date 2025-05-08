@@ -4,7 +4,6 @@ use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use alloy::eips::BlockNumberOrTag;
-use alloy::hex::FromHexError;
 use alloy::primitives::{Address, B256};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder};
 use alloy::rpc::client::ClientRef;
@@ -15,7 +14,7 @@ use bon::bon;
 use bytes::Bytes;
 
 use crate::account::{Account, TransactionSigner};
-use crate::entity::{Create, GolemBaseTransaction};
+use crate::entity::{Create, GolemBaseTransaction, Hash};
 use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner};
 use crate::utils::wei_to_eth;
@@ -275,7 +274,7 @@ impl GolemBaseClient {
     }
 
     /// Creates an entry using the specified account
-    pub async fn create_entry(&self, account: Address, entry: Create) -> anyhow::Result<String> {
+    pub async fn create_entry(&self, account: Address, entry: Create) -> anyhow::Result<Hash> {
         let account = self.account_get(account)?;
         let tx = GolemBaseTransaction {
             creates: vec![entry],
@@ -312,7 +311,7 @@ impl GolemBaseClient {
             .ok_or_else(|| anyhow::anyhow!("No entity ID found in transaction logs"))?;
 
         log::debug!("Created entity with ID: 0x{:x}", entity_id);
-        Ok(entity_id.to_string())
+        Ok(entity_id)
     }
 
     /// Removes entries from GolemBase
@@ -363,11 +362,8 @@ impl GolemBaseClient {
     }
 
     /// Retrieves an entry's payload from Golem Base by its ID
-    pub async fn cat(&self, id: String) -> anyhow::Result<String> {
-        let key: B256 = id
-            .parse()
-            .map_err(|e: FromHexError| Error::UnexpectedError(e.to_string()))?;
-        let bytes = self.get_storage_value::<Bytes>(key).await?;
+    pub async fn cat(&self, id: Hash) -> anyhow::Result<String> {
+        let bytes = self.get_storage_value::<Bytes>(id).await?;
         Ok(String::from_utf8(bytes.to_vec()).map_err(|e| Error::UnexpectedError(e.to_string()))?)
     }
 

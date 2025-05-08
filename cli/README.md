@@ -10,6 +10,12 @@ cargo install --path .
 
 ## Usage
 
+To see detailed debug logs, set the `RUST_LOG` environment variable before runnign any command:
+```bash
+export RUST_LOG=debug
+golem-base-cli <command>
+```
+
 The CLI provides several commands for managing accounts and transactions:
 
 ### List all accounts and their balances
@@ -35,6 +41,7 @@ golem-base-cli get-entity <ID>
 ## Configuration
 
 The CLI uses the system's config directory to store account information. On Linux, this is typically `~/.config/golembase/`.
+
 
 ## Development
 

@@ -93,7 +93,7 @@ pub struct GolemBaseTransaction {
 }
 
 /// Represents an entity with data, TTL, and annotations.
-#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
+#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Serialize, Deserialize)]
 pub struct Entity {
     /// The data associated with the entity.
     pub data: String,
