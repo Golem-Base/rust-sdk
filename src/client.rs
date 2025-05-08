@@ -14,10 +14,11 @@ use bon::bon;
 use bytes::Bytes;
 
 use crate::account::{Account, TransactionSigner};
-use crate::entity::{Create, GolemBaseTransaction, Hash};
+use crate::entity::{Create, GolemBaseTransaction, Hash, Update};
 use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner};
 use crate::utils::wei_to_eth;
+use log;
 
 /// Maximum age of the latest block in seconds to consider the node synced
 const MAX_BLOCK_AGE_SECONDS: u64 = 300;
@@ -316,15 +317,9 @@ impl GolemBaseClient {
 
     /// Removes entries from GolemBase
     ///
-    /// # Arguments
-    ///
+    /// # Arguments:
     /// * `account` - The account address that owns the entries
     /// * `entry_ids` - The IDs of the entries to remove
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` if the entries were successfully removed
-    /// * `Err` if there was an error removing the entries
     pub async fn remove_entries(
         &self,
         account: Address,
@@ -385,5 +380,48 @@ impl GolemBaseClient {
 
         // Consider node synced if latest block is less than 5 minutes old
         Ok(current_time - latest_block_timestamp < MAX_BLOCK_AGE_SECONDS)
+    }
+
+    /// Updates an entry using the specified account
+    ///
+    /// # Arguments:
+    /// * `account` - The account address that owns the entry
+    /// * `update` - The update operation containing new data and annotations
+    pub async fn update_entry(&self, account: Address, update: Update) -> anyhow::Result<()> {
+        let entity_key = update.entity_key;
+        let account = self.account_get(account)?;
+        let tx = GolemBaseTransaction {
+            creates: vec![],
+            updates: vec![update],
+            deletes: vec![],
+            extensions: vec![],
+        };
+
+        log::debug!(
+            "Sending update transaction from {} for entry 0x{:x}",
+            account.address(),
+            entity_key
+        );
+
+        let receipt = account.send_db_transaction(tx).await?;
+        if !receipt.status() {
+            return Err(anyhow::anyhow!(
+                "Transaction {} failed despite being mined.",
+                receipt.transaction_hash
+            ));
+        }
+
+        log::debug!("Successfully updated entry with ID: 0x{:x}", entity_key);
+        Ok(())
+    }
+
+    /// Gets the current block number
+    pub async fn get_current_block_number(&self) -> anyhow::Result<u64> {
+        let latest_block = self
+            .provider
+            .get_block_by_number(BlockNumberOrTag::Latest)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Failed to get latest block"))?;
+        Ok(latest_block.header.number)
     }
 }
