@@ -22,7 +22,7 @@ pub struct InMemorySigner {
 
 impl InMemorySigner {
     /// Gets the default keystore directory path
-    fn get_keystore_dir() -> anyhow::Result<PathBuf> {
+    pub fn get_keystore_dir() -> anyhow::Result<PathBuf> {
         let path = dirs::config_dir()
             .context("Could not find home directory")?
             .join(DEFAULT_KEYSTORE_DIR);
