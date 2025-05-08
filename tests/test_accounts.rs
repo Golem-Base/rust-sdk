@@ -89,3 +89,44 @@ async fn test_account_loading_from_private_key() -> Result<()> {
     fs::remove_file(private_key_path)?;
     Ok(())
 }
+
+#[tokio::test]
+async fn test_fund_transfer() -> Result<()> {
+    init_logger(false);
+    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+
+    // Create two accounts
+    let account1 = client.account_generate("test123").await?;
+    let account2 = client.account_generate("test456").await?;
+    log::info!("Created two accounts: {account1} and {account2}");
+
+    // Fund the first account
+    let fund_amount = BigDecimal::from(2);
+    let fund_tx = client.fund(account1, fund_amount.clone()).await?;
+    log::info!("Funded account {account1} with {fund_amount} ETH, tx: {fund_tx}");
+
+    // Check initial balances
+    let balance1_before = client.get_balance(account1).await?;
+    let balance2_before = client.get_balance(account2).await?;
+    log::info!("Initial balances - Account1: {balance1_before}, Account2: {balance2_before}");
+
+    // Transfer funds
+    let transfer_amount = BigDecimal::from(1);
+    let transfer_tx = client
+        .transfer(account1, account2, transfer_amount.clone())
+        .await?;
+    log::info!(
+        "Transferred {transfer_amount} ETH from {account1} to {account2}, tx: {transfer_tx}"
+    );
+
+    // Check final balances
+    let balance1_after = client.get_balance(account1).await?;
+    let balance2_after = client.get_balance(account2).await?;
+    log::info!("Final balances - Account1: {balance1_after}, Account2: {balance2_after}");
+
+    let fee_margin = BigDecimal::from(1) / BigDecimal::from(1000);
+    assert!(balance1_after >= balance1_before - transfer_amount.clone() - fee_margin);
+    assert_eq!(balance2_after, balance2_before + transfer_amount);
+
+    Ok(())
+}
