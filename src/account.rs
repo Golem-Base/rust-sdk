@@ -58,7 +58,7 @@ pub struct Account {
     /// The account's signer
     pub signer: Arc<Box<dyn TransactionSigner>>,
     /// The provider for making RPC calls
-    pub provider: Arc<Box<DynProvider>>,
+    pub provider: DynProvider,
     /// The chain ID of the connected network
     pub chain_id: u64,
 }

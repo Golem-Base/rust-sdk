@@ -8,7 +8,6 @@ use async_trait::async_trait;
 use rand::thread_rng;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use crate::account::TransactionSigner;
 use crate::Hash;
@@ -47,7 +46,7 @@ impl InMemorySigner {
 
     /// Returns the public key
     pub fn public_key(&self) -> VerifyingKey {
-        self.signer.credential().verifying_key().clone()
+        *self.signer.credential().verifying_key()
     }
 
     /// Saves the private key to a file in the standard directory using keystore format
@@ -144,14 +143,14 @@ pub struct GolemBaseSigner {
     /// The address of the account
     address: Address,
     /// The provider for signing
-    provider: Arc<Box<DynProvider>>,
+    provider: DynProvider,
     /// The chain ID for signing
     chain_id: u64,
 }
 
 impl GolemBaseSigner {
     /// Creates a new GolemBase signer
-    pub fn new(address: Address, provider: Arc<Box<DynProvider>>, chain_id: u64) -> Self {
+    pub fn new(address: Address, provider: DynProvider, chain_id: u64) -> Self {
         Self {
             address,
             provider,

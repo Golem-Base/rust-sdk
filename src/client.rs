@@ -27,7 +27,7 @@ const MAX_BLOCK_AGE_SECONDS: u64 = 300;
 #[derive(Clone)]
 pub struct GolemBaseClient {
     /// The underlying provider for making RPC calls
-    pub(crate) provider: Arc<Box<DynProvider>>,
+    pub(crate) provider: DynProvider,
     pub(crate) accounts: Arc<RwLock<HashMap<Address, Account>>>,
     /// The URL of the GolemBase endpoint
     pub(crate) url: Url,
@@ -39,11 +39,9 @@ pub struct GolemBaseClient {
 impl GolemBaseClient {
     #[builder]
     pub fn builder(wallet: PrivateKeySigner, rpc_url: Url) -> Self {
-        let provider = Arc::new(Box::new(
-            ProviderBuilder::new()
-                .connect_http(rpc_url.clone())
-                .erased(),
-        ));
+        let provider = ProviderBuilder::new()
+            .connect_http(rpc_url.clone())
+            .erased();
 
         Self {
             provider,
@@ -70,11 +68,9 @@ impl GolemBaseClient {
 
     /// Creates a new client without initializing it
     pub fn new_uninitialized(endpoint: Url) -> anyhow::Result<Self> {
-        let provider = Arc::new(Box::new(
-            ProviderBuilder::new()
-                .connect_http(endpoint.clone())
-                .erased(),
-        ));
+        let provider = ProviderBuilder::new()
+            .connect_http(endpoint.clone())
+            .erased();
 
         Ok(Self {
             provider,
