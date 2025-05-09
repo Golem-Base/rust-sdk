@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use alloy::eips::BlockNumberOrTag;
 use alloy::primitives::{Address, B256};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder};
 use alloy::rpc::client::ClientRef;
+use alloy::rpc::types::SyncStatus;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::http::reqwest::Url;
 use bigdecimal::BigDecimal;
@@ -19,9 +20,6 @@ use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner};
 use crate::utils::wei_to_eth;
 use log;
-
-/// Maximum age of the latest block in seconds to consider the node synced
-const MAX_BLOCK_AGE_SECONDS: u64 = 300;
 
 /// A client for interacting with the GolemBase system.
 #[derive(Clone)]
@@ -89,7 +87,20 @@ impl GolemBaseClient {
     }
 
     /// Checks chain ID and syncs accounts with GolemBase node
-    pub async fn sync_node(&self) -> anyhow::Result<()> {
+    pub async fn sync_node(&self, timeout: Duration) -> anyhow::Result<()> {
+        let start_time = Instant::now();
+        let stop_time = start_time + timeout;
+
+        while !self.is_synced().await? {
+            if Instant::now() > stop_time {
+                return Err(anyhow::anyhow!(
+                    "Timeout {} while syncing node",
+                    humantime::format_duration(timeout)
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
         let chain_id = self.get_chain_id().await?;
         self.sync_golem_base_accounts(chain_id).await?;
         Ok(())
@@ -361,21 +372,20 @@ impl GolemBaseClient {
     /// Checks if the node is synced by comparing the latest block timestamp with current time
     /// Returns true if the node is synced (latest block is less than 5 minutes old)
     pub async fn is_synced(&self) -> anyhow::Result<bool> {
-        let latest_block = self
-            .provider
-            .get_block_by_number(BlockNumberOrTag::Latest)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Failed to get latest block"))?;
+        let syncing = self.provider.syncing().await?;
+        match syncing {
+            SyncStatus::Info(sync) => {
+                let current_block = sync.current_block;
+                let highest_block = sync.highest_block;
 
-        let latest_block_timestamp = latest_block.header.timestamp;
-
-        let current_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        // Consider node synced if latest block is less than 5 minutes old
-        Ok(current_time - latest_block_timestamp < MAX_BLOCK_AGE_SECONDS)
+                if current_block == highest_block {
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            SyncStatus::None => Ok(true),
+        }
     }
 
     /// Updates an entry using the specified account

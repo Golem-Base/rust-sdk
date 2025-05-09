@@ -55,6 +55,12 @@ enum Command {
         /// Entity ID to get
         id: String,
     },
+    /// Wait until the node is synced
+    WaitSync {
+        /// Timeout in seconds
+        #[arg(short, long, default_value = "120")]
+        timeout: u64,
+    },
 }
 
 #[tokio::main]
@@ -114,6 +120,13 @@ async fn main() -> Result<()> {
         Command::GetEntity { id } => {
             let entry = client.cat(id.parse()?).await?;
             println!("Entry: {}", entry);
+        }
+        Command::WaitSync { timeout } => {
+            println!("Waiting for node to sync (timeout: {} seconds)...", timeout);
+            client
+                .sync_node(std::time::Duration::from_secs(timeout))
+                .await?;
+            println!("Node is synced!");
         }
     }
 

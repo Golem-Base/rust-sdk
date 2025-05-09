@@ -1,4 +1,4 @@
-name: Run Example with GolemBase
+name: Tests with GolemBase
 
 on:
   push:
@@ -79,16 +79,8 @@ jobs:
         run: docker-compose up -d
         working-directory: ./golembase-op-geth
 
-      - name: Wait for OP-Geth to be available
-        run: |
-          for i in {1..20}; do
-            if curl -s http://localhost:8545 > /dev/null; then
-              echo "GolemBase is up!";
-              break;
-            fi
-            echo "Waiting for GolemBase RPC (localhost:8545)...";
-            sleep 5
-          done
+      - name: Wait for node sync
+        run: ./bin/golem-base-cli wait-sync --timeout 120
 
       - name: Install golembase-demo-cli
         run: go install github.com/Golem-Base/golembase-demo-cli@latest
@@ -106,11 +98,15 @@ jobs:
         run: cargo run
         working-directory: ./example
 
+      - name: Run Rust yagna interaction example
+        run: cargo run --example yagna_interaction
+
       - name: Shutdown services
         run: docker-compose down
         working-directory: ./golembase-op-geth
 
   run-tests:
+    needs: build-artifacts
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Rust SDK repo
@@ -120,6 +116,15 @@ jobs:
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.rust_stable }}
+
+      - name: Download CLI binary
+        uses: actions/download-artifact@v4
+        with:
+          name: golem-base-cli
+          path: ./bin
+
+      - name: Make CLI binary executable
+        run: chmod +x ./bin/golem-base-cli
 
       - name: Install Docker Compose
         run: sudo apt-get update && sudo apt-get install -y docker-compose
@@ -131,16 +136,12 @@ jobs:
         run: docker-compose up -d
         working-directory: ./golembase-op-geth
 
-      - name: Wait for OP-Geth to be available
-        run: |
-          for i in {1..20}; do
-            if curl -s http://localhost:8545 > /dev/null; then
-              echo "GolemBase is up!";
-              break;
-            fi
-            echo "Waiting for GolemBase RPC (localhost:8545)...";
-            sleep 5
-          done
+        # Build tests when in the meantime GolemBase will sync.
+      - name: Run tests
+        run: cargo build --tests --workspace --all-targets
+
+      - name: Wait for node sync
+        run: ./bin/golem-base-cli wait-sync --timeout 120
 
       - name: Run tests
         run: cargo test --workspace --all-targets

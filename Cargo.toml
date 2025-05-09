@@ -26,6 +26,7 @@ bon = "3.6"
 dirs = "5.0"
 displaydoc = "0.2"
 hex = "0.4"
+humantime = "2.2"
 log = "0.4"
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }
