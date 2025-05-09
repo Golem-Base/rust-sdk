@@ -27,7 +27,7 @@ jobs:
           toolchain: ${{ env.rust_stable }}
 
       - name: Build workspace
-        run: cargo build --workspace --all-targets --examples --test -p golem-base-cli -p golem-base-sdk-example
+        run: cargo build --workspace --all-targets --examples --tests -p golem-base-cli -p golem-base-sdk-example
 
       - name: Upload CLI binary
         uses: actions/upload-artifact@v4
@@ -105,6 +105,45 @@ jobs:
       - name: Run Rust example
         run: cargo run
         working-directory: ./example
+
+      - name: Shutdown services
+        run: docker-compose down
+        working-directory: ./golembase-op-geth
+
+  run-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Rust SDK repo
+        uses: actions/checkout@v4
+
+      - name: Install Rust ${{ env.rust_stable }}
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.rust_stable }}
+
+      - name: Install Docker Compose
+        run: sudo apt-get update && sudo apt-get install -y docker-compose
+
+      - name: Clone GolemBase OP-Geth repo
+        run: git clone https://github.com/Golem-Base/golembase-op-geth.git
+
+      - name: Start GolemBase services
+        run: docker-compose up -d
+        working-directory: ./golembase-op-geth
+
+      - name: Wait for OP-Geth to be available
+        run: |
+          for i in {1..20}; do
+            if curl -s http://localhost:8545 > /dev/null; then
+              echo "GolemBase is up!";
+              break;
+            fi
+            echo "Waiting for GolemBase RPC (localhost:8545)...";
+            sleep 5
+          done
+
+      - name: Run tests
+        run: cargo test --workspace --all-targets
 
       - name: Shutdown services
         run: docker-compose down
