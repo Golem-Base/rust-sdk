@@ -27,7 +27,7 @@ jobs:
           toolchain: ${{ env.rust_stable }}
 
       - name: Build workspace
-        run: cargo build -p golem-base-cli -p golem-base-sdk-example
+        run: cargo build --workspace --all-targets --examples --test -p golem-base-cli -p golem-base-sdk-example
 
       - name: Upload CLI binary
         uses: actions/upload-artifact@v4

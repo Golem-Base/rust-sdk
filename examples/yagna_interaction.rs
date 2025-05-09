@@ -123,7 +123,11 @@ async fn main() -> Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to query entities: {e}"))?;
     for offer in offers {
-        log::info!("Offer: {:?}", offer);
+        log::info!(
+            "Offer key: {:?}, value: {}",
+            offer.key,
+            offer.value_as_string()?
+        );
     }
 
     Ok(())

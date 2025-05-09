@@ -3,8 +3,8 @@ use alloy::providers::Provider;
 use alloy::rpc::json_rpc::{RpcRecv, RpcSend};
 use alloy_json_rpc::RpcError;
 use anyhow::anyhow;
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use bytes::Bytes;
 use displaydoc::Display;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -42,6 +42,33 @@ pub struct EntityMetaData {
     pub owner: Address,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchResult {
+    #[serde(rename = "key")]
+    pub key: Hash,
+    #[serde(rename = "value", deserialize_with = "deserialize_base64")]
+    pub value: Bytes,
+}
+
+fn deserialize_base64<'de, D>(deserializer: D) -> Result<Bytes, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    BASE64
+        .decode(s)
+        .map(Bytes::from)
+        .map_err(serde::de::Error::custom)
+}
+
+impl SearchResult {
+    /// Converts the value to a UTF-8 string
+    pub fn value_as_string(&self) -> anyhow::Result<String> {
+        String::from_utf8(self.value.to_vec())
+            .map_err(|e| anyhow::anyhow!("Failed to decode search result to string: {}", e))
+    }
+}
+
 impl GolemBaseClient {
     /// Makes a JSON-RPC call to the GolemBase endpoint.
     pub(crate) async fn rpc_call<S: RpcSend, R: RpcRecv>(
@@ -55,6 +82,7 @@ impl GolemBaseClient {
             .client()
             .request(method.clone(), params)
             .await
+            .inspect(|res| log::debug!("RPC Response: {:?}", res))
             .map_err(|e| match e {
                 RpcError::ErrorResp(err) => {
                     anyhow!("Error response from RPC service: {}", err)
@@ -97,23 +125,25 @@ impl GolemBaseClient {
         let encoded_value = self
             .rpc_call::<&[Hash], String>("golembase_getStorageValue", &[key])
             .await?;
-        let decoded = STANDARD
+        let decoded = BASE64
             .decode(&encoded_value)
             .map_err(|e| Error::Base64DecodeError(e.to_string()))?;
         T::try_from(decoded).map_err(|e| Error::UnexpectedError(e.to_string()))
     }
 
     /// Queries entities in GolemBase based on annotations.
-    pub async fn query_entities(&self, query: &str) -> Result<Vec<Hash>, Error> {
-        #[derive(Debug, Deserialize)]
-        struct ReturnType {
-            pub key: Hash,
-            #[allow(dead_code)]
-            pub value: String,
-        }
+    pub async fn query_entities(&self, query: &str) -> Result<Vec<SearchResult>, Error> {
         let results = self
-            .rpc_call::<&[&str], Vec<ReturnType>>("golembase_queryEntities", &[query])
+            .rpc_call::<&[&str], Option<Vec<SearchResult>>>("golembase_queryEntities", &[query])
             .await?;
+        // GolemBase returns null if no entities are found. Option is used to corrently
+        // deserialize this value in Rust, since Vec<_> expects empty array [].
+        Ok(results.unwrap_or_default())
+    }
+
+    /// Queries entities in GolemBase based on annotations and returns only their keys.
+    pub async fn query_entity_keys(&self, query: &str) -> Result<Vec<Hash>, Error> {
+        let results = self.query_entities(query).await?;
         Ok(results.into_iter().map(|result| result.key).collect())
     }
 

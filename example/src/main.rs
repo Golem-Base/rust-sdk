@@ -81,7 +81,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("... after the update: {:?}", metadata);
 
     info!("Deleting remaining entities...");
-    let remaining_entities = client.query_entities("ix = 1 || ix = 2 || ix = 3").await?;
+    let remaining_entities = client
+        .query_entity_keys("ix = 1 || ix = 2 || ix = 3")
+        .await?;
     client.delete_entities(remaining_entities).await?;
     log_num_of_entities_owned(&client, owner_address).await;
 

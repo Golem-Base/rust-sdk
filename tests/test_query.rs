@@ -14,7 +14,7 @@ fn init_logger(should_init: bool) {
 #[tokio::test]
 #[serial]
 async fn test_query_entities() -> Result<()> {
-    init_logger(true);
+    init_logger(false);
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
 
     // Create test account
@@ -49,13 +49,13 @@ async fn test_query_entities() -> Result<()> {
     log::info!("Created entry3: {entry3_id}");
 
     // Test queries
-    let type_test_entries = client.query_entities("type = \"test\"").await?;
+    let type_test_entries = client.query_entity_keys("type = \"test\"").await?;
     log::info!("Entries with type = \"test\": {:?}", type_test_entries);
     assert_eq!(type_test_entries.len(), 2);
     assert!(type_test_entries.contains(&entry1_id));
     assert!(type_test_entries.contains(&entry2_id));
 
-    let category_alpha_entries = client.query_entities("category = \"alpha\"").await?;
+    let category_alpha_entries = client.query_entity_keys("category = \"alpha\"").await?;
     log::info!(
         "Entries with category = \"alpha\": {:?}",
         category_alpha_entries
@@ -64,13 +64,13 @@ async fn test_query_entities() -> Result<()> {
     assert!(category_alpha_entries.contains(&entry1_id));
     assert!(category_alpha_entries.contains(&entry3_id));
 
-    let type_demo_entries = client.query_entities("type = \"demo\"").await?;
+    let type_demo_entries = client.query_entity_keys("type = \"demo\"").await?;
     log::info!("Entries with type = \"demo\": {:?}", type_demo_entries);
     assert_eq!(type_demo_entries.len(), 1);
     assert!(type_demo_entries.contains(&entry3_id));
 
     let combined_and = client
-        .query_entities("type = \"test\" && category = \"beta\"")
+        .query_entity_keys("type = \"test\" && category = \"beta\"")
         .await?;
     log::info!(
         "Entries with type = \"test\" && category = \"beta\": {:?}",
@@ -80,7 +80,7 @@ async fn test_query_entities() -> Result<()> {
     assert!(combined_and.contains(&entry2_id));
 
     let combined_or = client
-        .query_entities("type = \"demo\" || category = \"beta\"")
+        .query_entity_keys("type = \"demo\" || category = \"beta\"")
         .await?;
     log::info!(
         "Entries with type = \"demo\" || category = \"beta\": {:?}",
@@ -91,13 +91,13 @@ async fn test_query_entities() -> Result<()> {
     assert!(combined_or.contains(&entry3_id));
 
     // Test empty result
-    let no_results = client.query_entities("type = \"nonexistent\"").await?;
+    let no_results = client.query_entity_keys("type = \"nonexistent\"").await?;
     log::info!("Entries with type = \"nonexistent\": {:?}", no_results);
     assert_eq!(no_results.len(), 0);
 
     // Test selecting all entries
     let all_entries = client
-        .query_entities("type = \"test\" || type = \"demo\"")
+        .query_entity_keys("type = \"test\" || type = \"demo\"")
         .await?;
     log::info!("All entries: {:?}", all_entries);
     assert_eq!(all_entries.len(), 3);
