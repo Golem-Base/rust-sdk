@@ -98,7 +98,7 @@ async fn main() -> Result<()> {
     let entry = Create::new(test_payload.clone(), 1000)
         .annotate_string("golem_marketplace_type_test", "Offer")
         .annotate_string("golem_marketplace_id_test", hash)
-        .annotate_number("golem_marketplace_timestamp_test", timestamp as u64);
+        .annotate_number("golem_marketplace_timestamp_test", timestamp);
 
     // Create entry with the account
     let entry_id = client
@@ -109,13 +109,13 @@ async fn main() -> Result<()> {
 
     // Get the entry
     let entry = client
-        .cat(entry_id.clone())
+        .cat(entry_id)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to get entry {entry_id}: {e}"))?;
     log::info!("Entry: {entry}");
 
     // Query for Offers
-    let query = format!("golem_marketplace_type_test = \"Offer\"");
+    let query = "golem_marketplace_type_test = \"Offer\"".to_string();
     log::info!("Querying entities with: {}", query);
 
     let offers = client

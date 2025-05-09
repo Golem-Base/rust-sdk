@@ -41,7 +41,7 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
     let entry_id = client.create_entry(account, entry).await?;
     log::info!("Entry created with ID: 0x{entry_id:x}");
 
-    let entry_str = client.cat(entry_id.clone()).await?;
+    let entry_str = client.cat(entry_id).await?;
     log::info!("Retrieved entry 0x{entry_id:x}: {entry_str}");
     assert_eq!(entry_str, String::from_utf8(test_payload)?);
 
@@ -88,8 +88,8 @@ async fn test_entity_operations() -> Result<()> {
     log::info!("Second entry created with ID: 0x{entry2_id:x}");
 
     // Verify both entities exist
-    let entry1_str = client.cat(entry1_id.clone()).await?;
-    let entry2_str = client.cat(entry2_id.clone()).await?;
+    let entry1_str = client.cat(entry1_id).await?;
+    let entry2_str = client.cat(entry2_id).await?;
     log::info!("Retrieved first entry 0x{entry1_id:x}: {entry1_str}");
     log::info!("Retrieved second entry 0x{entry2_id:x}: {entry2_str}");
     assert_eq!(entry1_str, String::from_utf8(payload1)?);
@@ -106,7 +106,7 @@ async fn test_entity_operations() -> Result<()> {
     log::info!("First entry 0x{entry1_id:x} updated");
 
     // Verify first entity was updated
-    let updated_str = client.cat(entry1_id.clone()).await?;
+    let updated_str = client.cat(entry1_id).await?;
     log::info!("Retrieved updated first entry 0x{entry1_id:x}: {updated_str}");
     assert_eq!(updated_str, String::from_utf8(updated_payload.clone())?);
 
