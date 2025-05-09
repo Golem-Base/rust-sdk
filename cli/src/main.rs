@@ -112,7 +112,7 @@ async fn main() -> Result<()> {
             );
         }
         Command::GetEntity { id } => {
-            let entry = client.cat(id).await?;
+            let entry = client.cat(id.parse()?).await?;
             println!("Entry: {}", entry);
         }
     }
