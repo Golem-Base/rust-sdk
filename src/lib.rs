@@ -1,6 +1,7 @@
 // Re-export commonly used types from `alloy`.
-pub use alloy::primitives::Address;
+pub use alloy::primitives::{keccak256, Address};
 pub use alloy::signers::local::PrivateKeySigner;
+pub use alloy::signers::Signature;
 pub use alloy::transports::http::reqwest::Url;
 
 pub use client::GolemBaseClient;
