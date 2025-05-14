@@ -116,11 +116,7 @@ impl GolemBaseClient {
         let mut accounts = self.accounts.write().unwrap();
         accounts.insert(
             address,
-            Account {
-                signer: Arc::new(Box::new(signer)),
-                provider: self.provider.clone(),
-                chain_id,
-            },
+            Account::new(Box::new(signer), self.provider.clone(), chain_id),
         );
         Ok(address)
     }
@@ -259,11 +255,7 @@ impl GolemBaseClient {
         let signer = create_signer(address);
         accounts.insert(
             address,
-            Account {
-                signer: Arc::new(signer),
-                provider: self.provider.clone(),
-                chain_id,
-            },
+            Account::new(signer, self.provider.clone(), chain_id),
         );
     }
 
