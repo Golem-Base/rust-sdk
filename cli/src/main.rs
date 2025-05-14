@@ -2,7 +2,10 @@ use anyhow::Result;
 use bigdecimal::BigDecimal;
 use clap::{Parser, Subcommand};
 use dirs::config_dir;
-use golem_base_sdk::{client::GolemBaseClient, Address};
+use golem_base_sdk::{
+    account::TransactionSigner, client::GolemBaseClient, signers::InMemorySigner, Address,
+};
+use std::fs;
 use url::Url;
 
 /// Program to fund and transfer funds between accounts on Golem Base
@@ -38,42 +41,41 @@ enum Command {
     },
 }
 
-#[derive(Subcommand, Debug)]
-enum AccountCommand {
-    /// List all accounts and their balances
+#[derive(Debug, Subcommand)]
+pub enum AccountCommand {
+    /// List all available accounts
     List,
     /// Create a new account
     Create {
-        /// Password for the new account
-        #[arg(short, long, default_value = "test123")]
+        /// Password for the keystore file
         password: String,
+        /// Save private key in raw format instead of keystore
+        #[arg(long)]
+        raw: bool,
     },
     /// Fund an account with ETH
     Fund {
-        /// Address of the wallet to fund (optional, uses default private key if not specified)
-        #[arg(short, long)]
+        /// The account to fund. If not provided, the default
+        /// private key will be used from raw format.
+        #[arg(long)]
         wallet: Option<Address>,
-
-        /// Amount in ETH to fund
-        #[arg(short, long, default_value = "1.0")]
+        /// Amount of ETH to send
+        #[arg(long)]
         amount: BigDecimal,
     },
-    /// Transfer ETH to another account
+    /// Transfer ETH between accounts
     Transfer {
-        /// Address of the source wallet
-        #[arg(short, long)]
+        /// Source account address
+        #[arg(long)]
         from: Address,
-
-        /// Address of the destination wallet
-        #[arg(short, long)]
+        /// Destination account address
+        #[arg(long)]
         to: Address,
-
-        /// Amount in ETH to transfer
-        #[arg(short, long)]
+        /// Amount of ETH to send
+        #[arg(long)]
         amount: BigDecimal,
-
-        /// Password for the source wallet
-        #[arg(short, long, default_value = "test123")]
+        /// Password for the source account
+        #[arg(long)]
         password: String,
     },
 }
@@ -82,7 +84,9 @@ impl AccountCommand {
     async fn execute(&self, client: &GolemBaseClient) -> Result<()> {
         match self {
             AccountCommand::List => self.handle_list(client).await,
-            AccountCommand::Create { password } => self.handle_create(client, password).await,
+            AccountCommand::Create { password, raw } => {
+                self.handle_create(client, password, *raw).await
+            }
             AccountCommand::Fund { wallet, amount } => {
                 self.handle_fund(client, *wallet, amount.clone()).await
             }
@@ -108,9 +112,33 @@ impl AccountCommand {
         Ok(())
     }
 
-    async fn handle_create(&self, client: &GolemBaseClient, password: &str) -> Result<()> {
-        let account = client.account_generate(password).await?;
-        println!("Created new account: {}", account);
+    async fn handle_create(
+        &self,
+        client: &GolemBaseClient,
+        password: &str,
+        raw: bool,
+    ) -> Result<()> {
+        if raw {
+            // Generate a new private key
+            let signer = InMemorySigner::generate();
+            let private_key = signer.private_key().to_bytes();
+            println!(
+                "Generated new private key for address: {}",
+                signer.address()
+            );
+
+            // Get keystore directory and save private key
+            let keystore_dir = InMemorySigner::get_keystore_dir()?;
+            let private_key_path = keystore_dir.join("private.key");
+            println!("Saving private key to: {}", private_key_path.display());
+
+            fs::write(&private_key_path, private_key)?;
+            let address = client.account_register(signer).await?;
+            println!("Account registered with address: {}", address);
+        } else {
+            let account = client.account_generate(password).await?;
+            println!("Created new account: {}", account);
+        }
         Ok(())
     }
 
