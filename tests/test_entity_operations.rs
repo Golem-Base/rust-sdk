@@ -148,7 +148,6 @@ async fn test_concurrent_entity_creation() -> Result<()> {
     // Spawn two tasks that will create entities concurrently
     let task1 = tokio::spawn({
         let client = client.clone();
-        let account = account;
         async move {
             let mut results = Vec::new();
             for i in 0..ENTITIES_PER_TASK {
@@ -167,7 +166,6 @@ async fn test_concurrent_entity_creation() -> Result<()> {
 
     let task2 = tokio::spawn({
         let client = client.clone();
-        let account = account;
         async move {
             let mut results = Vec::new();
             for i in 0..ENTITIES_PER_TASK {
