@@ -4,7 +4,7 @@ use alloy::consensus::{
 };
 use alloy::hex;
 use alloy::network::TransactionBuilder;
-use alloy::primitives::{address, keccak256, Address, B256, U256};
+use alloy::primitives::{address, Address, U256};
 use alloy::providers::{DynProvider, Provider};
 use alloy::rpc::types::eth::TransactionRequest;
 use alloy::rpc::types::TransactionReceipt;
@@ -22,26 +22,6 @@ use crate::utils::eth_to_wei;
 /// The address of the GolemBase storage processor contract
 pub const GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS: Address =
     address!("0x0000000000000000000000000000000060138453");
-
-/// Event signature for entity creation logs
-pub fn golem_base_storage_entity_created() -> B256 {
-    keccak256(b"GolemBaseStorageEntityCreated(uint256,uint256)")
-}
-
-/// Event signature for entity deletion logs
-pub fn golem_base_storage_entity_deleted() -> B256 {
-    keccak256(b"GolemBaseStorageEntityDeleted(uint256)")
-}
-
-/// Event signature for entity update logs
-pub fn golem_base_storage_entity_updated() -> B256 {
-    keccak256(b"GolemBaseStorageEntityUpdated(uint256,uint256)")
-}
-
-/// Event signature for extending TTL of an entity
-pub fn golem_base_storage_entity_ttl_extended() -> B256 {
-    keccak256(b"GolemBaseStorageEntityTTLExptended(uint256,uint256)")
-}
 
 /// A trait for signing transactions
 #[async_trait]
