@@ -1,11 +1,15 @@
-use crate::{GolemBaseClient, Hash, NumericAnnotation, StringAnnotation};
+use crate::entity::Hash;
+use crate::entity::{
+    Create, DeleteResult, EntityResult, Extend, ExtendResult, GolemBaseTransaction, Update,
+};
+use crate::GolemBaseClient;
+
 use alloy::primitives::{address, Address, TxKind};
 use alloy::providers::Provider;
 use alloy::providers::ProviderBuilder;
 use alloy::rpc::types::{Log, TransactionReceipt, TransactionRequest};
-use alloy_rlp::{Encodable, RlpEncodable};
+use alloy_rlp::Encodable;
 use displaydoc::Display;
-use log::debug;
 use thiserror::Error;
 
 /// Represents errors that can occur in the GolemBase ETH client.
@@ -27,104 +31,9 @@ pub const STORAGE_ADDRESS: Address = address!("0x0000000000000000000000000000000
 /// The chain ID for the GolemBase Ethereum network.
 pub const CHAIN_ID: u64 = 1337;
 
-/// Type representing a create transaction in GolemBase.
-#[derive(Debug, RlpEncodable)]
-pub struct GolemBaseCreate {
-    /// The data associated with the entity.
-    pub data: String,
-    /// The time-to-live (TTL) for the entity.
-    pub ttl: u64,
-    /// String annotations for the entity.
-    pub string_annotations: Vec<StringAnnotation>,
-    /// Numeric annotations for the entity.
-    pub numeric_annotations: Vec<NumericAnnotation>,
-}
-
-/// Type representing an update transaction in GolemBase.
-#[derive(Debug, RlpEncodable)]
-pub struct GolemBaseUpdate {
-    /// The key of the entity to update.
-    pub entity_key: Hash,
-    /// The updated data for the entity.
-    pub data: String,
-    /// The updated time-to-live (TTL) for the entity.
-    pub ttl: u64,
-    /// Updated string annotations for the entity.
-    pub string_annotations: Vec<StringAnnotation>,
-    /// Updated numeric annotations for the entity.
-    pub numeric_annotations: Vec<NumericAnnotation>,
-}
-
-pub type GolemBaseDelete = Hash;
-
-/// Type representing an extend transaction in GolemBase.
-#[derive(Debug, RlpEncodable)]
-pub struct GolemBaseExtend {
-    /// The key of the entity to extend.
-    pub entity_key: Hash,
-    /// The number of blocks to extend the TTL by.
-    pub number_of_blocks: u64,
-}
-
-/// Type representing a transaction in GolemBase, including creates, updates, deletes, and extensions.
-#[derive(Debug, RlpEncodable)]
-pub struct GolemBaseTransaction {
-    /// A list of entities to create.
-    pub creates: Vec<GolemBaseCreate>,
-    /// A list of entities to update.
-    pub updates: Vec<GolemBaseUpdate>,
-    /// A list of entity keys to delete.
-    pub deletes: Vec<GolemBaseDelete>,
-    /// A list of entities to extend.
-    pub extensions: Vec<GolemBaseExtend>,
-}
-
-/// Represents an entity with data, TTL, and annotations.
-#[derive(Debug)]
-pub struct Entity {
-    /// The data associated with the entity.
-    pub data: String,
-    /// The time-to-live (TTL) for the entity.
-    pub ttl: u64,
-    /// String annotations for the entity.
-    pub string_annotations: Vec<StringAnnotation>,
-    /// Numeric annotations for the entity.
-    pub numeric_annotations: Vec<NumericAnnotation>,
-}
-
-/// Represents the result of creating or updating an entity.
-#[derive(Debug)]
-pub struct EntityResult {
-    /// The key of the entity.
-    pub entity_key: Hash,
-    /// The block number at which the entity expires.
-    pub expiration_block: u64,
-}
-
-/// Represents the result of extending an entity's TTL.
-#[derive(Debug)]
-pub struct ExtendResult {
-    /// The key of the entity.
-    pub entity_key: Hash,
-    /// The old expiration block of the entity.
-    pub old_expiration_block: u64,
-    /// The new expiration block of the entity.
-    pub new_expiration_block: u64,
-}
-
-/// Represents the result of deleting an entity.
-#[derive(Debug)]
-pub struct DeleteResult {
-    /// The key of the entity that was deleted.
-    pub entity_key: Hash,
-}
-
 impl GolemBaseClient {
     /// Creates one or more new entities in GolemBase and returns their results.
-    pub async fn create_entities(
-        &self,
-        creates: Vec<GolemBaseCreate>,
-    ) -> Result<Vec<EntityResult>, Error> {
+    pub async fn create_entities(&self, creates: Vec<Create>) -> Result<Vec<EntityResult>, Error> {
         let receipt = self
             .create_raw_transaction(GolemBaseTransaction {
                 creates,
@@ -147,10 +56,7 @@ impl GolemBaseClient {
     }
 
     /// Updates one or more entities in GolemBase and returns their results.
-    pub async fn update_entities(
-        &self,
-        updates: Vec<GolemBaseUpdate>,
-    ) -> Result<Vec<EntityResult>, Error> {
+    pub async fn update_entities(&self, updates: Vec<Update>) -> Result<Vec<EntityResult>, Error> {
         let receipt = self
             .create_raw_transaction(GolemBaseTransaction {
                 creates: vec![],
@@ -196,7 +102,7 @@ impl GolemBaseClient {
     /// Extends the TTL of one or more entities in GolemBase and returns their results.
     pub async fn extend_entities(
         &self,
-        extensions: Vec<GolemBaseExtend>,
+        extensions: Vec<Extend>,
     ) -> Result<Vec<ExtendResult>, Error> {
         let receipt = self
             .create_raw_transaction(GolemBaseTransaction {
@@ -227,31 +133,31 @@ impl GolemBaseClient {
         &self,
         payload: GolemBaseTransaction,
     ) -> Result<TransactionReceipt, Error> {
-        debug!("payload: {:?}", payload);
+        log::debug!("payload: {:?}", payload);
         let mut buffer = Vec::new();
         payload.encode(&mut buffer);
-        debug!("buffer: {:?}", buffer);
+        log::debug!("buffer: {:?}", buffer);
         let tx = TransactionRequest {
             to: Some(TxKind::Call(STORAGE_ADDRESS)),
             input: buffer.into(),
             chain_id: Some(CHAIN_ID),
             ..Default::default()
         };
-        debug!("transaction: {:?}", tx);
+        log::debug!("transaction: {:?}", tx);
         let provider = ProviderBuilder::new()
             .wallet(self.wallet.clone())
             .connect_http(self.url.clone());
-        debug!("provider: {:?}", provider);
+        log::debug!("provider: {:?}", provider);
         let pending_tx = provider
             .send_transaction(tx)
             .await
             .map_err(|e| Error::TransactionSendError(e.to_string()))?;
-        debug!("pending transaction: {:?}", pending_tx);
+        log::debug!("pending transaction: {:?}", pending_tx);
         let receipt = pending_tx
             .get_receipt()
             .await
             .map_err(|e| Error::TransactionReceiptError(e.to_string()))?;
-        debug!("receipt: {:?}", receipt);
+        log::debug!("receipt: {:?}", receipt);
         Ok(receipt)
     }
 

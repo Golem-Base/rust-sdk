@@ -1,5 +1,5 @@
 use dirs::config_dir;
-use golem_base_sdk::eth::{EntityResult, GolemBaseCreate, GolemBaseUpdate};
+use golem_base_sdk::entity::{Create, EntityResult, Update};
 use golem_base_sdk::{Address, Annotation, GolemBaseClient, Hash, PrivateKeySigner, Url};
 use log::info;
 use std::fs;
@@ -25,7 +25,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let signer = PrivateKeySigner::from_bytes(&private_key)
         .map_err(|e| format!("Failed to parse private key: {}", e))?;
     let url = Url::parse("http://localhost:8545").unwrap();
-    let client = GolemBaseClient::new(signer, url);
+    let client = GolemBaseClient::builder()
+        .wallet(signer)
+        .rpc_url(url)
+        .build();
 
     info!("Fetching owner address...");
     let owner_address = client.get_owner_address();
@@ -34,20 +37,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Creating entities...");
     let creates = vec![
-        GolemBaseCreate {
-            data: "foo".to_string(),
+        Create {
+            data: "foo".into(),
             ttl: 25,
             string_annotations: vec![Annotation::new("key", "foo")],
             numeric_annotations: vec![Annotation::new("ix", 1u64)],
         },
-        GolemBaseCreate {
-            data: "bar".to_string(),
+        Create {
+            data: "bar".into(),
             ttl: 2,
             string_annotations: vec![Annotation::new("key", "bar")],
             numeric_annotations: vec![Annotation::new("ix", 2u64)],
         },
-        GolemBaseCreate {
-            data: "qux".to_string(),
+        Create {
+            data: "qux".into(),
             ttl: 50,
             string_annotations: vec![Annotation::new("key", "qux")],
             numeric_annotations: vec![Annotation::new("ix", 3u64)],
@@ -66,8 +69,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let metadata = client.get_entity_metadata(third_entity_key).await?;
     info!("... before the update: {:?}", metadata);
     client
-        .update_entities(vec![GolemBaseUpdate {
-            data: "foobar".to_string(),
+        .update_entities(vec![Update {
+            data: "foobar".into(),
             ttl: 40,
             string_annotations: vec![Annotation::new("key", "qux"), Annotation::new("foo", "bar")],
             numeric_annotations: vec![Annotation::new("ix", 2u64)],
@@ -78,7 +81,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("... after the update: {:?}", metadata);
 
     info!("Deleting remaining entities...");
-    let remaining_entities = client.query_entities("ix = 1 || ix = 2 || ix = 3").await?;
+    let remaining_entities = client
+        .query_entity_keys("ix = 1 || ix = 2 || ix = 3")
+        .await?;
     client.delete_entities(remaining_entities).await?;
     log_num_of_entities_owned(&client, owner_address).await;
 

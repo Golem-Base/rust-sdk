@@ -5,8 +5,10 @@ edition = "2021"
 
 [dependencies]
 alloy = "0.15"
+bytes = "1.0"
 dirs = "6.0"
 env_logger = "0.11"
-golem-base-sdk = { path = ".." }
 log = "0.4"
-tokio = { version = "1.44", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
+
+golem-base-sdk = { workspace = true }
