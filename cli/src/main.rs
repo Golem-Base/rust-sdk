@@ -48,6 +48,7 @@ pub enum AccountCommand {
     /// Create a new account
     Create {
         /// Password for the keystore file
+        #[arg(short, long, default_value = "test123")]
         password: String,
         /// Save private key in raw format instead of keystore
         #[arg(long)]
@@ -75,7 +76,7 @@ pub enum AccountCommand {
         #[arg(long)]
         amount: BigDecimal,
         /// Password for the source account
-        #[arg(long)]
+        #[arg(short, long, default_value = "test123")]
         password: String,
     },
 }
