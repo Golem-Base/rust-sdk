@@ -2366,6 +2366,7 @@ dependencies = [
  "dirs 5.0.1",
  "displaydoc",
  "env_logger 0.10.2",
+ "futures",
  "hex",
  "humantime",
  "log",
