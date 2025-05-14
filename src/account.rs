@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use bigdecimal::BigDecimal;
 use std::sync::Arc;
 
-use crate::entity::GolemBaseTransaction;
+use crate::entity::{GolemBaseTransaction, Hash};
 use crate::utils::eth_to_wei;
 
 /// The address of the GolemBase storage processor contract
@@ -95,8 +95,12 @@ impl Account {
         let signed = self.sign_transaction(tx).await?;
         let encoded = Self::encode_transaction(&signed)?;
 
-        let pending = self.provider.send_raw_transaction(&encoded).await?;
-        Ok(pending.get_receipt().await?)
+        let pending = self
+            .provider
+            .send_raw_transaction(&encoded)
+            .await
+            .map_err(|e| anyhow!("Failed to send raw transaction: {}", e))?;
+        self.get_receipt_with_retry(*pending.tx_hash()).await
     }
 
     /// Creates and sends a storage transaction
@@ -149,12 +153,34 @@ impl Account {
             .with_max_priority_fee_per_gas(1_000_000_000)
             .with_max_fee_per_gas(20_000_000_000);
 
-        Ok(self
+        let pending = self
             .provider
             .send_transaction(tx)
-            .await?
-            .get_receipt()
-            .await?)
+            .await
+            .map_err(|e| anyhow!("Failed to send transaction: {}", e))?;
+        self.get_receipt_with_retry(*pending.tx_hash()).await
+    }
+
+    /// Gets a transaction receipt with retries for "transaction indexing is in progress" errors
+    async fn get_receipt_with_retry(&self, tx_hash: Hash) -> anyhow::Result<TransactionReceipt> {
+        loop {
+            match self.provider.get_transaction_receipt(tx_hash).await {
+                Ok(Some(receipt)) => return Ok(receipt),
+                Ok(None) => {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    continue;
+                }
+                Err(e) => {
+                    if e.to_string()
+                        .contains("transaction indexing is in progress")
+                    {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        continue;
+                    }
+                    return Err(anyhow!("Failed to get transaction receipt: {}", e));
+                }
+            }
+        }
     }
 
     /// Encodes and decodes a transaction for debugging
