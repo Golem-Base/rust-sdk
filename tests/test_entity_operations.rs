@@ -20,7 +20,7 @@ fn init_logger(should_init: bool) {
 #[tokio::test]
 #[serial]
 async fn test_create_and_retrieve_entry() -> Result<()> {
-    init_logger(false);
+    init_logger(true);
 
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
     let account = client.account_generate("test123").await?;

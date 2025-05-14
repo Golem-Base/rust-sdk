@@ -11,7 +11,6 @@ use alloy::primitives::{Address, B256};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder};
 use alloy::rpc::client::ClientRef;
 use alloy::rpc::types::eth::Filter;
-use alloy::rpc::types::Log;
 use alloy::rpc::types::SyncStatus;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::http::reqwest::Url;
@@ -19,11 +18,12 @@ use bigdecimal::BigDecimal;
 use bon::bon;
 use bytes::Bytes;
 
-use crate::account::{
-    golem_base_storage_entity_created, golem_base_storage_entity_deleted,
-    golem_base_storage_entity_updated, Account, TransactionSigner,
-};
+use crate::account::{Account, TransactionSigner};
 use crate::entity::{Create, GolemBaseTransaction, Hash, Update};
+use crate::events::{
+    golem_base_storage_entity_created, golem_base_storage_entity_deleted,
+    golem_base_storage_entity_updated, Event,
+};
 use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner};
 use crate::utils::wei_to_eth;
@@ -305,8 +305,8 @@ impl GolemBaseClient {
         let entity_id = receipt
             .logs()
             .iter()
+            .inspect(|log| log::trace!("Log: {:?}", log))
             .find_map(|log| {
-                log::debug!("Log: {:?}", log);
                 if log.topics().len() >= 2 && log.topics()[0] == golem_base_storage_entity_created()
                 {
                     // Second topic is the entity ID
@@ -448,76 +448,5 @@ impl GolemBaseClient {
         Ok(Box::pin(
             subscription.into_stream().map(|log| Event::try_from(log)),
         ))
-    }
-}
-
-/// Represents an event from the blockchain
-#[derive(Debug)]
-pub enum Event {
-    /// Entity was created
-    EntityCreated {
-        /// The ID of the created entity
-        entity_id: Hash,
-        /// The block number where the event occurred
-        block_number: u64,
-        /// The transaction hash that triggered the event
-        transaction_hash: Hash,
-    },
-    /// Entity was updated
-    EntityUpdated {
-        /// The ID of the updated entity
-        entity_id: Hash,
-        /// The block number where the event occurred
-        block_number: u64,
-        /// The transaction hash that triggered the event
-        transaction_hash: Hash,
-    },
-    /// Entity was removed
-    EntityRemoved {
-        /// The ID of the removed entity
-        entity_id: Hash,
-        /// The block number where the event occurred
-        block_number: u64,
-        /// The transaction hash that triggered the event
-        transaction_hash: Hash,
-    },
-}
-
-impl TryFrom<Log> for Event {
-    type Error = anyhow::Error;
-
-    fn try_from(log: Log) -> anyhow::Result<Self> {
-        let block_number = log
-            .block_number
-            .ok_or_else(|| anyhow::anyhow!("Missing block number"))?;
-        let transaction_hash = log
-            .transaction_hash
-            .ok_or_else(|| anyhow::anyhow!("Missing transaction hash"))?;
-
-        if log.topics().len() < 2 {
-            return Err(anyhow::anyhow!("Missing entity ID in event"));
-        }
-
-        let entity_id = Hash::from(log.topics()[1]);
-        let transaction_hash = Hash::from(transaction_hash);
-
-        match log.topics()[0] {
-            topic if topic == golem_base_storage_entity_created() => Ok(Event::EntityCreated {
-                entity_id,
-                block_number,
-                transaction_hash,
-            }),
-            topic if topic == golem_base_storage_entity_updated() => Ok(Event::EntityUpdated {
-                entity_id,
-                block_number,
-                transaction_hash,
-            }),
-            topic if topic == golem_base_storage_entity_deleted() => Ok(Event::EntityRemoved {
-                entity_id,
-                block_number,
-                transaction_hash,
-            }),
-            _ => Err(anyhow::anyhow!("Unknown event topic")),
-        }
     }
 }
