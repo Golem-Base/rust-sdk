@@ -107,14 +107,18 @@ impl GolemBaseClient {
 
     /// Gets the entity keys of all entities in GolemBase.
     pub async fn get_all_entity_keys(&self) -> Result<Vec<Hash>, Error> {
-        self.rpc_call::<(), Vec<Hash>>("golembase_getAllEntityKeys", ())
-            .await
+        let result = self
+            .rpc_call::<(), Option<Vec<Hash>>>("golembase_getAllEntityKeys", ())
+            .await?;
+        Ok(result.unwrap_or_default())
     }
 
     /// Gets the entity keys of all entities owned by the given address.
     pub async fn get_entities_of_owner(&self, address: Address) -> Result<Vec<Hash>, Error> {
-        self.rpc_call::<&[Address], Vec<Hash>>("golembase_getEntitiesOfOwner", &[address])
-            .await
+        let result = self
+            .rpc_call::<&[Address], Option<Vec<Hash>>>("golembase_getEntitiesOfOwner", &[address])
+            .await?;
+        Ok(result.unwrap_or_default())
     }
 
     /// Gets the storage value associated with the given entity key.
@@ -152,8 +156,13 @@ impl GolemBaseClient {
         &self,
         block_number: u64,
     ) -> Result<Vec<Hash>, Error> {
-        self.rpc_call::<u64, Vec<Hash>>("golembase_getEntitiesToExpireAtBlock", block_number)
-            .await
+        let result = self
+            .rpc_call::<u64, Option<Vec<Hash>>>(
+                "golembase_getEntitiesToExpireAtBlock",
+                block_number,
+            )
+            .await?;
+        Ok(result.unwrap_or_default())
     }
 
     /// Gets metadata for a specific entity.
