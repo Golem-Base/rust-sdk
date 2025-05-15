@@ -1,11 +1,15 @@
-use anyhow::Result;
+use alloy::primitives::B256;
+use anyhow::{anyhow, Result};
+use dirs::config_dir;
 use serial_test::serial;
+use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
 
 use golem_base_sdk::{
     client::GolemBaseClient,
     entity::{Create, Update},
+    PrivateKeySigner,
 };
 use golem_base_test_utils::{create_test_account, init_logger, GOLEM_BASE_URL};
 
@@ -117,13 +121,29 @@ async fn test_entity_operations() -> Result<()> {
     Ok(())
 }
 
+fn get_client() -> Result<GolemBaseClient> {
+    let mut private_key_path =
+        config_dir().ok_or_else(|| anyhow!("Failed to get config directory"))?;
+    private_key_path.push("golembase/private.key");
+    let private_key_bytes = fs::read(&private_key_path)?;
+    let private_key = B256::from_slice(&private_key_bytes);
+
+    let signer = PrivateKeySigner::from_bytes(&private_key)
+        .map_err(|e| anyhow!("Failed to parse private key: {}", e))?;
+    let url = Url::parse(GOLEM_BASE_URL)?;
+    let client = GolemBaseClient::builder()
+        .wallet(signer)
+        .rpc_url(url)
+        .build();
+    Ok(client)
+}
+
 #[tokio::test]
 #[serial]
-async fn test_concurrent_entity_creation() -> Result<()> {
-    init_logger(false);
+async fn test_concurrent_entity_creation_batch() -> Result<()> {
+    init_logger(true);
 
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
-    let account = create_test_account(&client).await?;
+    let client = get_client()?;
 
     // Number of entities to create per task
     const ENTITIES_PER_TASK: usize = 15;
@@ -132,17 +152,15 @@ async fn test_concurrent_entity_creation() -> Result<()> {
     let task1 = tokio::spawn({
         let client = client.clone();
         async move {
-            let mut results = Vec::new();
+            let mut creates = Vec::new();
             for i in 0..ENTITIES_PER_TASK {
                 let payload = format!("task1_entity_{}", i).into_bytes();
                 let entry = Create::new(payload, 300)
                     .annotate_string("task", "task1")
                     .annotate_number("index", i as u64);
-
-                let entry_id = client.create_entry(account, entry).await?;
-                results.push(entry_id);
-                log::info!("Task 1 created entity: 0x{entry_id:x}");
+                creates.push(entry);
             }
+            let results = client.create_entities(creates).await?;
             Ok::<_, anyhow::Error>(results)
         }
     });
@@ -150,17 +168,15 @@ async fn test_concurrent_entity_creation() -> Result<()> {
     let task2 = tokio::spawn({
         let client = client.clone();
         async move {
-            let mut results = Vec::new();
+            let mut creates = Vec::new();
             for i in 0..ENTITIES_PER_TASK {
                 let payload = format!("task2_entity_{}", i).into_bytes();
                 let entry = Create::new(payload, 300)
                     .annotate_string("task", "task2")
                     .annotate_number("index", i as u64);
-
-                let entry_id = client.create_entry(account, entry).await?;
-                results.push(entry_id);
-                log::info!("Task 2 created entity: 0x{entry_id:x}");
+                creates.push(entry);
             }
+            let results = client.create_entities(creates).await?;
             Ok::<_, anyhow::Error>(results)
         }
     });
@@ -171,26 +187,26 @@ async fn test_concurrent_entity_creation() -> Result<()> {
     let task2_entities = task2_results??;
 
     // Verify all entities were created successfully
-    for (i, entry_id) in task1_entities.iter().enumerate() {
-        let entry_str = client.cat(*entry_id).await?;
+    for (i, result) in task1_entities.iter().enumerate() {
+        let entry_str = client.cat(result.entity_key).await?;
         assert_eq!(entry_str, format!("task1_entity_{}", i));
 
-        let metadata = client.get_entity_metadata(*entry_id).await?;
+        let metadata = client.get_entity_metadata(result.entity_key).await?;
         assert_eq!(metadata.string_annotations[0].value, "task1");
         assert_eq!(metadata.numeric_annotations[0].value, i as u64);
     }
 
-    for (i, entry_id) in task2_entities.iter().enumerate() {
-        let entry_str = client.cat(*entry_id).await?;
+    for (i, result) in task2_entities.iter().enumerate() {
+        let entry_str = client.cat(result.entity_key).await?;
         assert_eq!(entry_str, format!("task2_entity_{}", i));
 
-        let metadata = client.get_entity_metadata(*entry_id).await?;
+        let metadata = client.get_entity_metadata(result.entity_key).await?;
         assert_eq!(metadata.string_annotations[0].value, "task2");
         assert_eq!(metadata.numeric_annotations[0].value, i as u64);
     }
 
     log::info!(
-        "Successfully verified {} concurrent entity creations",
+        "Successfully verified {} concurrent batch entity creations",
         ENTITIES_PER_TASK * 2
     );
     Ok(())
