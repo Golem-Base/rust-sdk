@@ -10,6 +10,7 @@ on:
       - main
       - release/*
       - '**/all-tests'
+  workflow_dispatch:
 
 env:
   rust_stable: 1.84.0
