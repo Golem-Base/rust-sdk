@@ -16,6 +16,7 @@ use bytes::Bytes;
 
 use crate::account::{Account, TransactionSigner};
 use crate::entity::{Create, GolemBaseTransaction, Hash, Update};
+use crate::events::{golem_base_storage_entity_created, EventsClient};
 use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner};
 use crate::utils::wei_to_eth;
@@ -116,11 +117,7 @@ impl GolemBaseClient {
         let mut accounts = self.accounts.write().unwrap();
         accounts.insert(
             address,
-            Account {
-                signer: Arc::new(Box::new(signer)),
-                provider: self.provider.clone(),
-                chain_id,
-            },
+            Account::new(Box::new(signer), self.provider.clone(), chain_id),
         );
         Ok(address)
     }
@@ -259,11 +256,7 @@ impl GolemBaseClient {
         let signer = create_signer(address);
         accounts.insert(
             address,
-            Account {
-                signer: Arc::new(signer),
-                provider: self.provider.clone(),
-                chain_id,
-            },
+            Account::new(signer, self.provider.clone(), chain_id),
         );
     }
 
@@ -305,10 +298,9 @@ impl GolemBaseClient {
         let entity_id = receipt
             .logs()
             .iter()
+            .inspect(|log| log::trace!("Log: {:?}", log))
             .find_map(|log| {
-                log::debug!("Log: {:?}", log);
-                if log.topics().len() >= 2
-                    && log.topics()[0] == crate::account::golem_base_storage_entity_created()
+                if log.topics().len() >= 2 && log.topics()[0] == golem_base_storage_entity_created()
                 {
                     // Second topic is the entity ID
                     Some(log.topics()[1])
@@ -429,5 +421,10 @@ impl GolemBaseClient {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Failed to get latest block"))?;
         Ok(latest_block.header.number)
+    }
+
+    /// Creates a new WebSocket client for event subscriptions
+    pub async fn events_client(&self) -> anyhow::Result<EventsClient> {
+        EventsClient::new(self.url.clone()).await
     }
 }

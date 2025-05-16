@@ -1,18 +1,12 @@
 use anyhow::Result;
 use bigdecimal::BigDecimal;
+use golem_base_test_utils::{init_logger, GOLEM_BASE_URL};
 use serial_test::serial;
 use std::fs;
 
 use golem_base_sdk::{client::GolemBaseClient, signers::InMemorySigner, PrivateKeySigner, Url};
 
-const GOLEM_BASE_URL: &str = "http://localhost:8545";
 const TEST_PRIVATE_KEY_FILE: &str = "test_private.key";
-
-fn init_logger(should_init: bool) {
-    if should_init {
-        let _ = env_logger::try_init();
-    }
-}
 
 #[tokio::test]
 #[serial]

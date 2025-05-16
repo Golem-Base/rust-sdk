@@ -2,6 +2,7 @@ use alloy::primitives::B256;
 use alloy_rlp::{Encodable, RlpDecodable, RlpEncodable};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
+use std::convert::From;
 
 /// A generic key-value pair structure.
 #[derive(Debug, Clone, Serialize, Deserialize, RlpEncodable, RlpDecodable)]
@@ -143,6 +144,16 @@ impl Create {
         }
     }
 
+    /// Creates a new Create request from any type that can be converted to String
+    pub fn from_string<T: Into<String>>(payload: T, ttl: u64) -> Self {
+        Self {
+            ttl,
+            data: Bytes::from(payload.into().into_bytes()),
+            string_annotations: Vec::new(),
+            numeric_annotations: Vec::new(),
+        }
+    }
+
     /// Adds a string annotation to the entity
     pub fn annotate_string(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.string_annotations.push(Annotation {
@@ -169,6 +180,17 @@ impl Update {
             entity_key,
             ttl,
             data: Bytes::from(payload),
+            string_annotations: Vec::new(),
+            numeric_annotations: Vec::new(),
+        }
+    }
+
+    /// Creates a new Update request from any type that can be converted to String
+    pub fn from_string<T: Into<String>>(entity_key: B256, payload: T, ttl: u64) -> Self {
+        Self {
+            entity_key,
+            ttl,
+            data: Bytes::from(payload.into().into_bytes()),
             string_annotations: Vec::new(),
             numeric_annotations: Vec::new(),
         }
