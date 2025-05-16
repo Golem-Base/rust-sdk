@@ -1,8 +1,15 @@
+use alloy::eips::BlockNumberOrTag;
 use alloy::primitives::{keccak256, B256};
+use alloy::providers::{DynProvider, Provider, ProviderBuilder, WsConnect};
+use alloy::rpc::types::eth::Filter;
 use alloy::rpc::types::Log;
+use alloy::transports::http::reqwest::Url;
 use anyhow::Result;
+use futures::{Stream, StreamExt};
 use std::convert::TryFrom;
+use std::pin::Pin;
 
+use crate::account::GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS;
 use crate::entity::Hash;
 
 /// Event signature for entity creation logs
@@ -93,5 +100,43 @@ impl TryFrom<Log> for Event {
             }),
             _ => Err(anyhow::anyhow!("Unknown event topic")),
         }
+    }
+}
+
+/// Client for listening to GolemBase events
+pub struct EventsClient {
+    provider: DynProvider,
+}
+
+impl EventsClient {
+    /// Creates a new EventsClient by connecting to the given URL
+    pub async fn new(url: Url) -> anyhow::Result<Self> {
+        let mut ws_url = url.clone();
+        ws_url.set_scheme("ws").unwrap();
+
+        let provider = ProviderBuilder::new()
+            .connect_ws(WsConnect::new(ws_url))
+            .await?
+            .erased();
+
+        Ok(Self { provider })
+    }
+
+    /// Listens for events from the blockchain
+    /// Returns a stream of events that can be processed asynchronously
+    pub async fn events_stream(
+        &self,
+    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = anyhow::Result<Event>> + Send>>> {
+        let filter = Filter::new()
+            .address(GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS)
+            .from_block(BlockNumberOrTag::Latest)
+            .event_signature(vec![
+                golem_base_storage_entity_created(),
+                golem_base_storage_entity_updated(),
+                golem_base_storage_entity_deleted(),
+            ]);
+
+        let subscription = self.provider.subscribe_logs(&filter).await?;
+        Ok(Box::pin(subscription.into_stream().map(Event::try_from)))
     }
 }

@@ -1,5 +1,4 @@
 use anyhow::Result;
-use bigdecimal::BigDecimal;
 use serial_test::serial;
 use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
@@ -8,25 +7,15 @@ use golem_base_sdk::{
     client::GolemBaseClient,
     entity::{Create, Update},
 };
-
-const GOLEM_BASE_URL: &str = "http://localhost:8545";
-
-fn init_logger(should_init: bool) {
-    if should_init {
-        let _ = env_logger::try_init();
-    }
-}
+use golem_base_test_utils::{create_test_account, init_logger, GOLEM_BASE_URL};
 
 #[tokio::test]
 #[serial]
 async fn test_create_and_retrieve_entry() -> Result<()> {
-    init_logger(true);
+    init_logger(false);
 
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
-    let account = client.account_generate("test123").await?;
-    let fund_tx = client.fund(account, BigDecimal::from(1)).await?;
-
-    log::info!("Account {account} funded with transaction: {fund_tx}");
+    let account = create_test_account(&client).await?;
 
     let start_block = client.get_current_block_number().await?;
     log::info!("Starting at block: {start_block}");
@@ -62,10 +51,7 @@ async fn test_entity_operations() -> Result<()> {
     init_logger(false);
 
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
-    let account = client.account_generate("test123").await?;
-    let fund_tx = client.fund(account, BigDecimal::from(1)).await?;
-
-    log::info!("Account {account} funded with transaction: {fund_tx}");
+    let account = create_test_account(&client).await?;
 
     // Create first entity
     let payload1 = b"first entity".to_vec();
@@ -137,10 +123,7 @@ async fn test_concurrent_entity_creation() -> Result<()> {
     init_logger(false);
 
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
-    let account = client.account_generate("test123").await?;
-    let fund_tx = client.fund(account, BigDecimal::from(1)).await?;
-
-    log::info!("Account {account} funded with transaction: {fund_tx}");
+    let account = create_test_account(&client).await?;
 
     // Number of entities to create per task
     const ENTITIES_PER_TASK: usize = 15;

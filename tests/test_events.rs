@@ -1,33 +1,28 @@
-use alloy::transports::http::reqwest::Url;
-use bigdecimal::BigDecimal;
+use anyhow::Result;
 use futures::StreamExt;
-use golem_base_sdk::client::GolemBaseClient;
-use golem_base_sdk::entity::{Create, Update};
-use golem_base_sdk::events::Event;
+use golem_base_sdk::GolemBaseClient;
 use serial_test::serial;
 use std::time::Duration;
+use url::Url;
 
-const GOLEM_BASE_URL: &str = "http://localhost:8545";
-const TEST_TTL: u64 = 30;
-
-fn init_logger(should_init: bool) {
-    if should_init {
-        let _ = env_logger::try_init();
-    }
-}
+use golem_base_sdk::entity::{Create, Update};
+use golem_base_sdk::events::Event;
+use golem_base_test_utils::{
+    cleanup_entities, create_test_account, init_logger, GOLEM_BASE_URL, TEST_TTL,
+};
 
 #[tokio::test]
 #[serial]
-async fn test_event_listening() {
+async fn test_event_listening() -> Result<()> {
     init_logger(false);
 
-    let url = Url::parse(GOLEM_BASE_URL).unwrap();
-    let client = GolemBaseClient::new(url).unwrap();
-    let account = client.account_generate("test123").await.unwrap();
-    client.fund(account, BigDecimal::from(1)).await.unwrap();
+    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    let account = create_test_account(&client).await?;
+    cleanup_entities(&client, account).await?;
 
     // Start listening for events
-    let mut event_stream = client.listen_for_events().await.unwrap();
+    let events = client.events_client().await.unwrap();
+    let mut event_stream = events.events_stream().await.unwrap();
 
     // Create a test entity
     let create = Create::from_string("test payload", TEST_TTL);
@@ -35,6 +30,7 @@ async fn test_event_listening() {
 
     // Wait for and verify EntityCreated event
     let event = event_stream.next().await.unwrap().unwrap();
+    log::info!("Event: {:?}", event);
     match event {
         Event::EntityCreated { entity_id: id, .. } => {
             assert_eq!(id, entity_id);
@@ -69,20 +65,21 @@ async fn test_event_listening() {
         }
         _ => panic!("Expected EntityRemoved event"),
     }
+    Ok(())
 }
 
 #[tokio::test]
 #[serial]
-async fn test_event_listening_with_timeout() {
+async fn test_event_listening_with_timeout() -> Result<()> {
     init_logger(false);
 
-    let url = Url::parse(GOLEM_BASE_URL).unwrap();
-    let client = GolemBaseClient::new(url).unwrap();
-    let account = client.account_generate("test123").await.unwrap();
-    client.fund(account, BigDecimal::from(1)).await.unwrap();
+    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    let account = create_test_account(&client).await.unwrap();
+    cleanup_entities(&client, account).await.unwrap();
 
     // Start listening for events
-    let mut event_stream = client.listen_for_events().await.unwrap();
+    let events = client.events_client().await.unwrap();
+    let mut event_stream = events.events_stream().await.unwrap();
 
     // Create a test entity
     let create = Create::from_string("test payload", TEST_TTL);
@@ -101,4 +98,5 @@ async fn test_event_listening_with_timeout() {
         }
         _ => panic!("Expected EntityCreated event"),
     }
+    Ok(())
 }
