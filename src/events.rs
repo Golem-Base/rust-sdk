@@ -124,9 +124,13 @@ impl EventsClient {
 
     /// Listens for events from the blockchain
     /// Returns a stream of events that can be processed asynchronously
-    pub async fn events_stream(
-        &self,
-    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = anyhow::Result<Event>> + Send>>> {
+    ///
+    /// Note: Lifetimes are important here, despite this, code would compile without them.
+    /// WebSocket client (self.provider) must outlive the stream, otherwise it will be closed
+    /// and the stream will return None.
+    pub async fn events_stream<'a>(
+        &'a self,
+    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = anyhow::Result<Event>> + Send + 'a>>> {
         let filter = Filter::new()
             .address(GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS)
             .from_block(BlockNumberOrTag::Latest)
