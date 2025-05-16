@@ -131,15 +131,39 @@ impl EventsClient {
     pub async fn events_stream<'a>(
         &'a self,
     ) -> anyhow::Result<Pin<Box<dyn Stream<Item = anyhow::Result<Event>> + Send + 'a>>> {
-        let filter = Filter::new()
+        let filter = self.create_event_filter(BlockNumberOrTag::Latest);
+        self.create_stream_from_filter(filter).await
+    }
+
+    /// Creates a stream of events starting from a specific block number.
+    ///
+    /// # Arguments
+    /// * `from_block` - The block number to start listening for events from
+    pub async fn events_stream_from_block<'a>(
+        &'a self,
+        block: u64,
+    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = anyhow::Result<Event>> + Send + 'a>>> {
+        let filter = self.create_event_filter(BlockNumberOrTag::Number(block));
+        self.create_stream_from_filter(filter).await
+    }
+
+    /// Creates a filter for GolemBase events
+    fn create_event_filter(&self, block: BlockNumberOrTag) -> Filter {
+        Filter::new()
             .address(GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS)
-            .from_block(BlockNumberOrTag::Latest)
+            .from_block(block)
             .event_signature(vec![
                 golem_base_storage_entity_created(),
                 golem_base_storage_entity_updated(),
                 golem_base_storage_entity_deleted(),
-            ]);
+            ])
+    }
 
+    /// Creates a stream of events from a filter
+    async fn create_stream_from_filter<'a>(
+        &'a self,
+        filter: Filter,
+    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = anyhow::Result<Event>> + Send + 'a>>> {
         let subscription = self.provider.subscribe_logs(&filter).await?;
         Ok(Box::pin(subscription.into_stream().map(Event::try_from)))
     }
