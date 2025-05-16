@@ -37,9 +37,9 @@ pub fn golem_base_storage_entity_updated() -> B256 {
     keccak256(b"GolemBaseStorageEntityUpdated(uint256,uint256)")
 }
 
-/// Event signature for extending TTL of an entity
-pub fn golem_base_storage_entity_ttl_extended() -> B256 {
-    keccak256(b"GolemBaseStorageEntityTTLExptended(uint256,uint256)")
+/// Event signature for extending BTL of an entity
+pub fn golem_base_storage_entity_btl_extended() -> B256 {
+    keccak256(b"GolemBaseStorageEntityBTLExtended(uint256,uint256)")
 }
 
 /// A trait for signing transactions

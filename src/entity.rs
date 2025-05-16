@@ -42,8 +42,8 @@ pub type Key = String;
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
 #[rlp(trailing)]
 pub struct Create {
-    /// The time-to-live (TTL) for the entity.
-    pub ttl: u64,
+    /// The block-to-live (BTL) for the entity.
+    pub btl: u64,
     /// The data associated with the entity.
     pub data: Bytes,
     /// String annotations for the entity.
@@ -58,8 +58,8 @@ pub struct Create {
 pub struct Update {
     /// The key of the entity to update.
     pub entity_key: Hash,
-    /// The updated time-to-live (TTL) for the entity.
-    pub ttl: u64,
+    /// The updated block-to-live (BTL) for the entity.
+    pub btl: u64,
     /// The updated data for the entity.
     pub data: Bytes,
     /// Updated string annotations for the entity.
@@ -75,7 +75,7 @@ pub type GolemBaseDelete = Hash;
 pub struct Extend {
     /// The key of the entity to extend.
     pub entity_key: Hash,
-    /// The number of blocks to extend the TTL by.
+    /// The number of blocks to extend the BTL by.
     pub number_of_blocks: u64,
 }
 
@@ -92,13 +92,13 @@ pub struct GolemBaseTransaction {
     pub extensions: Vec<Extend>,
 }
 
-/// Represents an entity with data, TTL, and annotations.
+/// Represents an entity with data, BTL, and annotations.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Serialize, Deserialize)]
 pub struct Entity {
     /// The data associated with the entity.
     pub data: String,
-    /// The time-to-live (TTL) for the entity.
-    pub ttl: u64,
+    /// The block-to-live (BTL) for the entity.
+    pub btl: u64,
     /// String annotations for the entity.
     pub string_annotations: Vec<StringAnnotation>,
     /// Numeric annotations for the entity.
@@ -114,7 +114,7 @@ pub struct EntityResult {
     pub expiration_block: u64,
 }
 
-/// Represents the result of extending an entity's TTL.
+/// Represents the result of extending an entity's BTL.
 #[derive(Debug)]
 pub struct ExtendResult {
     /// The key of the entity.
@@ -134,9 +134,9 @@ pub struct DeleteResult {
 
 impl Create {
     /// Creates a new Create operation with empty annotations
-    pub fn new(payload: Vec<u8>, ttl: u64) -> Self {
+    pub fn new(payload: Vec<u8>, btl: u64) -> Self {
         Self {
-            ttl,
+            btl,
             data: Bytes::from(payload),
             string_annotations: Vec::new(),
             numeric_annotations: Vec::new(),
@@ -164,10 +164,10 @@ impl Create {
 
 impl Update {
     /// Creates a new Update operation with empty annotations
-    pub fn new(entity_key: B256, payload: Vec<u8>, ttl: u64) -> Self {
+    pub fn new(entity_key: B256, payload: Vec<u8>, btl: u64) -> Self {
         Self {
             entity_key,
-            ttl,
+            btl,
             data: Bytes::from(payload),
             string_annotations: Vec::new(),
             numeric_annotations: Vec::new(),
@@ -274,7 +274,7 @@ mod tests {
     }
 
     #[test]
-    fn test_extend_ttl() {
+    fn test_extend_btl() {
         let mut tx = GolemBaseTransaction::default();
         tx.extensions.push(Extend {
             entity_key: B256::from_slice(&[3; 32]),
