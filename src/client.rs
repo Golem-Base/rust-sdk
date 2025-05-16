@@ -1,8 +1,5 @@
-use futures::{Stream, StreamExt};
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::path::PathBuf;
-use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -10,7 +7,6 @@ use alloy::eips::BlockNumberOrTag;
 use alloy::primitives::{Address, B256};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder};
 use alloy::rpc::client::ClientRef;
-use alloy::rpc::types::eth::Filter;
 use alloy::rpc::types::SyncStatus;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::http::reqwest::Url;
@@ -20,10 +16,7 @@ use bytes::Bytes;
 
 use crate::account::{Account, TransactionSigner};
 use crate::entity::{Create, GolemBaseTransaction, Hash, Update};
-use crate::events::{
-    golem_base_storage_entity_created, golem_base_storage_entity_deleted,
-    golem_base_storage_entity_updated, Event,
-};
+use crate::events::{golem_base_storage_entity_created, EventsClient};
 use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner};
 use crate::utils::wei_to_eth;
@@ -430,23 +423,8 @@ impl GolemBaseClient {
         Ok(latest_block.header.number)
     }
 
-    /// Listens for events from the blockchain
-    /// Returns a stream of events that can be processed asynchronously
-    pub async fn listen_for_events(
-        &self,
-    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = anyhow::Result<Event>> + Send>>> {
-        let filter = Filter::new()
-            .address(crate::account::GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS)
-            .from_block(BlockNumberOrTag::Latest)
-            .event_signature(vec![
-                golem_base_storage_entity_created(),
-                golem_base_storage_entity_updated(),
-                golem_base_storage_entity_deleted(),
-            ]);
-
-        let subscription = self.provider.subscribe_logs(&filter).await?;
-        Ok(Box::pin(
-            subscription.into_stream().map(|log| Event::try_from(log)),
-        ))
+    /// Creates a new WebSocket client for event subscriptions
+    pub async fn events_client(&self) -> anyhow::Result<EventsClient> {
+        EventsClient::new(self.url.clone()).await
     }
 }

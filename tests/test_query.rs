@@ -1,15 +1,8 @@
 use anyhow::Result;
-use bigdecimal::BigDecimal;
-use golem_base_sdk::{client::GolemBaseClient, entity::Create, Url};
 use serial_test::serial;
 
-const GOLEM_BASE_URL: &str = "http://localhost:8545";
-
-fn init_logger(should_init: bool) {
-    if should_init {
-        let _ = env_logger::try_init();
-    }
-}
+use golem_base_sdk::{client::GolemBaseClient, entity::Create, Url};
+use golem_base_test_utils::{cleanup_entities, create_test_account, init_logger, GOLEM_BASE_URL};
 
 #[tokio::test]
 #[serial]
@@ -19,16 +12,8 @@ async fn test_query_entities() -> Result<()> {
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
 
     // Create test account
-    let account = client.account_generate("test123").await?;
-    let fund_tx = client.fund(account, BigDecimal::from(1)).await?;
-    log::info!("Created and funded account: {account}, tx: {fund_tx}");
-
-    // Cleanup - remove all existing entities
-    let all_entity_keys = client.get_all_entity_keys().await?;
-    log::info!("Removing all existing entities: {:?}", all_entity_keys);
-    if !all_entity_keys.is_empty() {
-        client.remove_entries(account, all_entity_keys).await?;
-    }
+    let account = create_test_account(&client).await?;
+    cleanup_entities(&client, account).await?;
 
     // Create entries with different annotations
     let entry1 = Create::new(b"test1".to_vec(), 1000)
