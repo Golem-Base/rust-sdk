@@ -8,30 +8,21 @@ use alloy::primitives::{address, Address, U256};
 use alloy::providers::{DynProvider, Provider};
 use alloy::rpc::types::eth::TransactionRequest;
 use alloy::rpc::types::TransactionReceipt;
-use alloy::signers::Signature;
 use alloy_rlp::{Decodable, Encodable};
 use anyhow::{anyhow, Result};
-use async_trait::async_trait;
 use bigdecimal::BigDecimal;
 use std::sync::Arc;
+use tokio::runtime::Builder;
 use tokio::sync::{mpsc, oneshot};
+use tokio::task::LocalSet;
 
 use crate::entity::{GolemBaseTransaction, Hash};
+use crate::signers::TransactionSigner;
 use crate::utils::eth_to_wei;
 
 /// The address of the GolemBase storage processor contract
 pub const GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS: Address =
     address!("0x0000000000000000000000000000000060138453");
-
-/// A trait for signing transactions
-#[async_trait]
-pub trait TransactionSigner: Send + Sync {
-    /// Returns the address of the signer
-    fn address(&self) -> Address;
-
-    /// Signs the given data
-    async fn sign(&self, data: &[u8]) -> anyhow::Result<Signature>;
-}
 
 /// Response type for queued transactions
 type TransactionResponse = Result<TransactionReceipt>;
@@ -172,15 +163,29 @@ impl TransactionQueue {
 
     /// Spawns a worker task to process transactions
     fn spawn_worker(mut rx: mpsc::Receiver<QueueMessage>, queue: Arc<Self>) {
-        tokio::spawn(async move {
-            while let Some(msg) = rx.recv().await {
-                let QueueMessage {
-                    request,
-                    response_tx,
-                } = msg;
-                let fut = queue.process_transaction(request);
-                let _ = response_tx.send(fut.await);
-            }
+        let runtime = Builder::new_current_thread().enable_all().build().unwrap();
+
+        // We have 2 options to spawn signing worker task: using `spawn` or `spawn_local`.
+        // Using `spawn_local` can panic when is called outside of LocalSet. That means that
+        // we force library consumer to use actix runtime or to manually create LocalSet.
+        // On the other hand using `spawn` will prevent consumer from using `spawn_local` in
+        // signing function.
+        // Spawning thread here might be overkill, but it's the only way to avoid affecting users.
+        std::thread::spawn(move || {
+            let local = LocalSet::new();
+
+            local.spawn_local(async move {
+                while let Some(msg) = rx.recv().await {
+                    let QueueMessage {
+                        request,
+                        response_tx,
+                    } = msg;
+                    let fut = queue.process_transaction(request);
+                    let _ = response_tx.send(fut.await);
+                }
+            });
+
+            runtime.block_on(local);
         });
     }
 

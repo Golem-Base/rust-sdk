@@ -14,11 +14,11 @@ use bigdecimal::BigDecimal;
 use bon::bon;
 use bytes::Bytes;
 
-use crate::account::{Account, TransactionSigner};
+use crate::account::Account;
 use crate::entity::{Create, GolemBaseTransaction, Hash, Update};
 use crate::events::{golem_base_storage_entity_created, EventsClient};
 use crate::rpc::Error;
-use crate::signers::{GolemBaseSigner, InMemorySigner};
+use crate::signers::{GolemBaseSigner, InMemorySigner, TransactionSigner};
 use crate::utils::wei_to_eth;
 use log;
 
