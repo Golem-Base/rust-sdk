@@ -1973,22 +1973,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8d1add55171497b4705a648c6b583acafb01d58050a51727785f0b2c8e0a2b2"
 
 [[package]]
-name = "golem-base-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bigdecimal",
- "clap",
- "dirs 5.0.1",
- "env_logger 0.11.8",
- "golem-base-sdk",
- "log",
- "thiserror 1.0.69",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "golem-base-sdk"
 version = "0.1.0"
 dependencies = [
@@ -2019,7 +2003,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "golem-base-sdk-example"
+name = "golem-base-sdk-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bigdecimal",
+ "clap",
+ "dirs 5.0.1",
+ "env_logger 0.11.8",
+ "golem-base-sdk",
+ "log",
+ "thiserror 1.0.69",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "golem-base-sdk-demo"
 version = "0.1.0"
 dependencies = [
  "alloy",

@@ -24,7 +24,7 @@ jobs:
 
       - name: Run Rust demo example
         run: cargo run
-        working-directory: ./example
+        working-directory: ./demo
 
       - name: Run Rust yagna interaction example
         run: cargo run --example yagna_interaction

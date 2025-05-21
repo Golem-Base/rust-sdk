@@ -13,29 +13,29 @@ cargo install --path .
 To see detailed debug logs, set the `RUST_LOG` environment variable before runnign any command:
 ```bash
 export RUST_LOG=debug
-golem-base-cli <command>
+golem-base-sdk-cli <command>
 ```
 
 The CLI provides several commands for managing accounts and transactions:
 
 ### List all accounts and their balances
 ```bash
-golem-base-cli list
+golem-base-sdk-cli list
 ```
 
 ### Fund an account
 ```bash
-golem-base-cli fund [--wallet <WALLET>] [--amount <AMOUNT>]
+golem-base-sdk-cli fund [--wallet <WALLET>] [--amount <AMOUNT>]
 ```
 
 ### Transfer ETH between accounts
 ```bash
-golem-base-cli transfer --from <FROM> --to <TO> --amount <AMOUNT> [--password <PASSWORD>]
+golem-base-sdk-cli transfer --from <FROM> --to <TO> --amount <AMOUNT> [--password <PASSWORD>]
 ```
 
 ### Get entity by ID
 ```bash
-golem-base-cli get-entity <ID>
+golem-base-sdk-cli get-entity <ID>
 ```
 
 ## Configuration
@@ -53,4 +53,4 @@ cargo build
 To run tests:
 ```bash
 cargo test
-``` 
+```
