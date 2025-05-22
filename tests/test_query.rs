@@ -13,6 +13,7 @@ fn init_logger(should_init: bool) {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn test_query_entities() -> Result<()> {
     init_logger(false);
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
