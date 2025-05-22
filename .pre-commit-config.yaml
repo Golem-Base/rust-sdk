@@ -1,0 +1,40 @@
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo
+        args: ["fmt", "--all", "--", "--check"]
+        language: system
+        types: [rust]
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo
+        args: ["clippy", "--all-targets", "--all-features", "--", "-D", "warnings"]
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+    #   - id: cargo-deny
+    #     name: cargo deny check
+    #     entry: cargo
+    #     args: ["deny", "check"]
+    #     language: system
+    #     files: ^(Cargo\.toml|Cargo\.lock)$
+    #     pass_filenames: false
+
+      - id: cargo-audit
+        name: cargo audit
+        entry: cargo
+        args: ["audit"]
+        language: system
+        files: ^(Cargo\.toml|Cargo\.lock)$
+        pass_filenames: false
+
+      - id: taplo-validate
+        name: Taplo TOML validate
+        entry: taplo
+        args: ["check"]
+        language: system
+        files: \.toml$
