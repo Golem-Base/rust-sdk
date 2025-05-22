@@ -111,6 +111,8 @@ pub struct EventsClient {
 impl EventsClient {
     /// Creates a new EventsClient by connecting to the given URL
     pub async fn new(url: Url) -> anyhow::Result<Self> {
+        log::debug!("Connecting to websocket provider: {}", url.to_string());
+
         let provider = ProviderBuilder::new()
             .connect_ws(WsConnect::new(url.clone()))
             .await?
