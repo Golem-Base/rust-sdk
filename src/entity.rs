@@ -39,7 +39,7 @@ pub type Hash = B256;
 pub type Key = String;
 
 /// Type representing a create transaction in GolemBase.
-#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
+#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Deserialize)]
 #[rlp(trailing)]
 pub struct Create {
     /// The time-to-live (TTL) for the entity.
@@ -53,7 +53,7 @@ pub struct Create {
 }
 
 /// Type representing an update transaction in GolemBase.
-#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
+#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Deserialize)]
 #[rlp(trailing)]
 pub struct Update {
     /// The key of the entity to update.
@@ -71,7 +71,7 @@ pub struct Update {
 pub type GolemBaseDelete = Hash;
 
 /// Type representing an extend transaction in GolemBase.
-#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
+#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Deserialize)]
 pub struct Extend {
     /// The key of the entity to extend.
     pub entity_key: Hash,
@@ -106,7 +106,7 @@ pub struct Entity {
 }
 
 /// Represents the result of creating or updating an entity.
-#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
+#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Serialize)]
 pub struct EntityResult {
     /// The key of the entity.
     pub entity_key: Hash,

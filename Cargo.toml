@@ -7,10 +7,10 @@ license = "MIT"
 
 [workspace]
 members = [
-    "example",
-    "cli"
+    "cli",
+    "demo",
+    "api"
 ]
-
 
 [dependencies]
 alloy = { version = "0.15", features = ["full", "json-rpc"] }
@@ -29,8 +29,8 @@ hex = "0.4"
 humantime = "2.2"
 log = "0.4"
 rand = "0.8"
-serde = { version = "1", features = ["derive"] }
-tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.0", features = ["full"] }
 url = "2.4"
 thiserror = "2.0"
 
