@@ -28,8 +28,8 @@ pub struct GolemBaseClient {
     pub(crate) provider: DynProvider,
     pub(crate) accounts: Arc<RwLock<HashMap<Address, Account>>>,
     /// The URL of the GolemBase endpoint
-    pub(crate) url: Url,
-    /// Temporary: The Ethereum address of the client owner.
+    pub(crate) rpc_url: Url,
+    /// The Ethereum address of the client owner.
     pub(crate) wallet: PrivateKeySigner,
 }
 
@@ -44,7 +44,7 @@ impl GolemBaseClient {
         Self {
             provider,
             accounts: Arc::new(RwLock::new(HashMap::new())),
-            url: rpc_url,
+            rpc_url,
             wallet,
         }
     }
@@ -73,7 +73,7 @@ impl GolemBaseClient {
         Ok(Self {
             provider,
             accounts: Arc::new(RwLock::new(HashMap::new())),
-            url: endpoint,
+            rpc_url: endpoint,
             wallet: PrivateKeySigner::random(),
         })
     }
