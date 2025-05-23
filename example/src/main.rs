@@ -39,19 +39,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let creates = vec![
         Create {
             data: "foo".into(),
-            ttl: 25,
+            btl: 25,
             string_annotations: vec![Annotation::new("key", "foo")],
             numeric_annotations: vec![Annotation::new("ix", 1u64)],
         },
         Create {
             data: "bar".into(),
-            ttl: 2,
+            btl: 2,
             string_annotations: vec![Annotation::new("key", "bar")],
             numeric_annotations: vec![Annotation::new("ix", 2u64)],
         },
         Create {
             data: "qux".into(),
-            ttl: 50,
+            btl: 50,
             string_annotations: vec![Annotation::new("key", "qux")],
             numeric_annotations: vec![Annotation::new("ix", 3u64)],
         },
@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     client
         .update_entities(vec![Update {
             data: "foobar".into(),
-            ttl: 40,
+            btl: 40,
             string_annotations: vec![Annotation::new("key", "qux"), Annotation::new("foo", "bar")],
             numeric_annotations: vec![Annotation::new("ix", 2u64)],
             entity_key: third_entity_key,
