@@ -14,10 +14,11 @@ use bigdecimal::BigDecimal;
 use bon::bon;
 use bytes::Bytes;
 
-use crate::account::{Account, TransactionSigner};
+use crate::account::Account;
 use crate::entity::{Create, GolemBaseTransaction, Hash, Update};
+use crate::events::{golem_base_storage_entity_created, EventsClient};
 use crate::rpc::Error;
-use crate::signers::{GolemBaseSigner, InMemorySigner};
+use crate::signers::{GolemBaseSigner, InMemorySigner, TransactionSigner};
 use crate::utils::wei_to_eth;
 use log;
 
@@ -116,11 +117,7 @@ impl GolemBaseClient {
         let mut accounts = self.accounts.write().unwrap();
         accounts.insert(
             address,
-            Account {
-                signer: Arc::new(Box::new(signer)),
-                provider: self.provider.clone(),
-                chain_id,
-            },
+            Account::new(Box::new(signer), self.provider.clone(), chain_id),
         );
         Ok(address)
     }
@@ -259,11 +256,7 @@ impl GolemBaseClient {
         let signer = create_signer(address);
         accounts.insert(
             address,
-            Account {
-                signer: Arc::new(signer),
-                provider: self.provider.clone(),
-                chain_id,
-            },
+            Account::new(signer, self.provider.clone(), chain_id),
         );
     }
 
@@ -305,10 +298,9 @@ impl GolemBaseClient {
         let entity_id = receipt
             .logs()
             .iter()
+            .inspect(|log| log::trace!("Log: {:?}", log))
             .find_map(|log| {
-                log::debug!("Log: {:?}", log);
-                if log.topics().len() >= 2
-                    && log.topics()[0] == crate::account::golem_base_storage_entity_created()
+                if log.topics().len() >= 2 && log.topics()[0] == golem_base_storage_entity_created()
                 {
                     // Second topic is the entity ID
                     Some(log.topics()[1])
@@ -429,5 +421,17 @@ impl GolemBaseClient {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Failed to get latest block"))?;
         Ok(latest_block.header.number)
+    }
+
+    /// Creates a new WebSocket client for event subscriptions
+    pub async fn events_client(&self) -> anyhow::Result<EventsClient> {
+        let mut ws_url = self.url.clone();
+        ws_url.set_scheme("ws").unwrap();
+        EventsClient::new(ws_url).await
+    }
+
+    /// Creates a new WebSocket client for event subscriptions with a custom WebSocket URL
+    pub async fn events_client_with_url(&self, ws_url: Url) -> anyhow::Result<EventsClient> {
+        EventsClient::new(ws_url).await
     }
 }

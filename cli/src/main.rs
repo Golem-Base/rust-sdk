@@ -3,7 +3,9 @@ use bigdecimal::BigDecimal;
 use clap::{Parser, Subcommand};
 use dirs::config_dir;
 use golem_base_sdk::{
-    account::TransactionSigner, client::GolemBaseClient, signers::InMemorySigner, Address,
+    client::GolemBaseClient,
+    signers::{InMemorySigner, TransactionSigner},
+    Address,
 };
 use std::fs;
 use url::Url;

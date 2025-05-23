@@ -9,8 +9,17 @@ use rand::thread_rng;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::account::TransactionSigner;
 use crate::Hash;
+
+/// A trait for signing transactions
+#[async_trait]
+pub trait TransactionSigner: Send + Sync {
+    /// Returns the address of the signer
+    fn address(&self) -> Address;
+
+    /// Signs the given data
+    async fn sign(&self, data: &[u8]) -> anyhow::Result<Signature>;
+}
 
 const DEFAULT_KEYSTORE_DIR: &str = "golembase";
 
