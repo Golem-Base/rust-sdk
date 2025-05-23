@@ -28,9 +28,6 @@ pub enum Error {
 /// The Ethereum address of the GolemBase storage contract.
 pub const STORAGE_ADDRESS: Address = address!("0x0000000000000000000000000000000060138453");
 
-/// The chain ID for the GolemBase Ethereum network.
-pub const CHAIN_ID: u64 = 1337;
-
 impl GolemBaseClient {
     /// Creates one or more new entities in GolemBase and returns their results.
     pub async fn create_entities(&self, creates: Vec<Create>) -> Result<Vec<EntityResult>, Error> {
@@ -140,13 +137,18 @@ impl GolemBaseClient {
         let tx = TransactionRequest {
             to: Some(TxKind::Call(STORAGE_ADDRESS)),
             input: buffer.into(),
-            chain_id: Some(CHAIN_ID),
+            chain_id: Some(
+                self.provider
+                    .get_chain_id()
+                    .await
+                    .map_err(|e| Error::TransactionSendError(e.to_string()))?,
+            ),
             ..Default::default()
         };
         log::debug!("transaction: {:?}", tx);
         let provider = ProviderBuilder::new()
             .wallet(self.wallet.clone())
-            .connect_http(self.url.clone());
+            .connect_http(self.rpc_url.clone());
         log::debug!("provider: {:?}", provider);
         let pending_tx = provider
             .send_transaction(tx)

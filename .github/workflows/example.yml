@@ -1,149 +1,42 @@
-name: Tests with GolemBase
+name: Run examples and tests
 
 on:
   push:
     branches:
       - main
-      - release/*
   pull_request:
     branches:
       - main
-      - release/*
-      - '**/all-tests'
   workflow_dispatch:
 
 env:
   rust_stable: 1.84.0
 
 jobs:
-  build-artifacts:
+  run-examples:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Rust SDK repo
+      - name: Check out the SDK repo
         uses: actions/checkout@v4
 
-      - name: Install Rust ${{ env.rust_stable }}
-        uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: ${{ env.rust_stable }}
+      - name: Setup Go, Rust and Golem Base
+        uses: ./.github/workflows/setup
 
-      - name: Build workspace
-        run: cargo build --workspace --all-targets --examples --tests -p golem-base-cli -p golem-base-sdk-example
-
-      - name: Upload CLI binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: golem-base-cli
-          path: ./target/debug/golem-base-cli
-          retention-days: 7
-
-      - name: Upload example binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: golem-base-sdk-example
-          path: ./target/debug/golem-base-sdk-example
-          retention-days: 7
-
-  run-example:
-    needs: build-artifacts
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Rust SDK repo
-        uses: actions/checkout@v4
-
-      - name: Install Rust ${{ env.rust_stable }}
-        uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: ${{ env.rust_stable }}
-
-      - name: Download CLI binary
-        uses: actions/download-artifact@v4
-        with:
-          name: golem-base-cli
-          path: ./bin
-
-      - name: Make CLI binary executable
-        run: chmod +x ./bin/golem-base-cli
-
-      - name: Install Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24.2'
-
-      - name: Install Docker Compose
-        run: sudo apt-get update && sudo apt-get install -y docker-compose
-
-      - name: Clone GolemBase OP-Geth repo
-        run: git clone https://github.com/Golem-Base/golembase-op-geth.git
-
-      - name: Start GolemBase services
-        run: docker-compose up -d
-        working-directory: ./golembase-op-geth
-
-      - name: Wait for node sync
-        run: ./bin/golem-base-cli wait-sync --timeout 120
-
-      - name: Add Go bin to PATH
-        run: echo "$HOME/go/bin" >> $GITHUB_PATH
-
-      - name: Create GolemBase account and fund it
-        run: |
-          ./bin/golem-base-cli account create --raw
-          ./bin/golem-base-cli account list
-          ./bin/golem-base-cli account fund --amount 2
-
-      - name: Run Rust example
+      - name: Run Rust demo example
         run: cargo run
         working-directory: ./example
 
       - name: Run Rust yagna interaction example
         run: cargo run --example yagna_interaction
 
-      - name: Shutdown services
-        run: docker-compose down
-        working-directory: ./golembase-op-geth
-
   run-tests:
-    needs: build-artifacts
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Rust SDK repo
+      - name: Check out the SDK repo
         uses: actions/checkout@v4
 
-      - name: Install Rust ${{ env.rust_stable }}
-        uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: ${{ env.rust_stable }}
-
-      - name: Download CLI binary
-        uses: actions/download-artifact@v4
-        with:
-          name: golem-base-cli
-          path: ./bin
-
-      - name: Make CLI binary executable
-        run: chmod +x ./bin/golem-base-cli
-
-      - name: Install Docker Compose
-        run: sudo apt-get update && sudo apt-get install -y docker-compose
-
-      - name: Clone GolemBase OP-Geth repo
-        run: git clone https://github.com/Golem-Base/golembase-op-geth.git
-
-      - name: Start GolemBase services
-        run: docker-compose up -d
-        working-directory: ./golembase-op-geth
-
-        # Build tests when in the meantime GolemBase will sync.
-      - name: Run tests
-        run: cargo build --tests --workspace --all-targets
-
-      - name: Wait for node sync
-        run: ./bin/golem-base-cli wait-sync --timeout 120
+      - name: Setup Go, Rust and Golem Base
+        uses: ./.github/workflows/setup
 
       - name: Run tests
-        run: cargo test --workspace --all-targets
-
-      - name: Shutdown services
-        run: docker-compose down
-        working-directory: ./golembase-op-geth
+        run: cargo test
