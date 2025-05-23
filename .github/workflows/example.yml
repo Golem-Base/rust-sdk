@@ -38,5 +38,11 @@ jobs:
       - name: Setup Go, Rust and Golem Base
         uses: ./.github/workflows/setup
 
+      - name: Create GolemBase account and fund it
+        run: |
+          ./bin/golem-base-cli account create --raw
+          ./bin/golem-base-cli account list
+          ./bin/golem-base-cli account fund --amount 2
+
       - name: Run tests
         run: cargo test
