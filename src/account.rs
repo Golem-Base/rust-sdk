@@ -16,6 +16,7 @@ use tokio::runtime::Builder;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::LocalSet;
 
+use crate::client::TransactionConfig;
 use crate::entity::{GolemBaseTransaction, Hash};
 use crate::signers::TransactionSigner;
 use crate::utils::eth_to_wei;
@@ -215,11 +216,18 @@ pub struct Account {
     pub chain_id: u64,
     /// Transaction queue for managing transaction submissions
     transaction_queue: Arc<TransactionQueue>,
+    /// Transaction configuration for storage operations
+    tx_config: Arc<TransactionConfig>,
 }
 
 impl Account {
     /// Creates a new account
-    pub fn new(signer: Box<dyn TransactionSigner>, provider: DynProvider, chain_id: u64) -> Self {
+    pub fn new(
+        signer: Box<dyn TransactionSigner>,
+        provider: DynProvider,
+        chain_id: u64,
+        tx_config: Arc<TransactionConfig>,
+    ) -> Self {
         let signer = Arc::new(signer);
         let transaction_queue = TransactionQueue::new(provider.clone(), signer.clone());
         Self {
@@ -227,6 +235,7 @@ impl Account {
             provider,
             chain_id,
             transaction_queue,
+            tx_config,
         }
     }
 
@@ -254,9 +263,9 @@ impl Account {
 
         let tx = TransactionRequest::default()
             .with_to(GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS)
-            .with_gas_limit(1_000_000)
-            .with_max_priority_fee_per_gas(1_000_000_000)
-            .with_max_fee_per_gas(20_000_000_000)
+            .with_gas_limit(self.tx_config.gas_limit)
+            .with_max_priority_fee_per_gas(self.tx_config.max_priority_fee_per_gas as u128)
+            .with_max_fee_per_gas(self.tx_config.max_fee_per_gas as u128)
             .with_input(data.to_vec());
 
         self.send_transaction(tx).await
@@ -268,8 +277,8 @@ impl Account {
             .with_to(to)
             .with_value(eth_to_wei(value)?)
             .with_gas_limit(21_000)
-            .with_max_priority_fee_per_gas(1_000_000_000)
-            .with_max_fee_per_gas(20_000_000_000);
+            .with_max_priority_fee_per_gas(1_000_000)
+            .with_max_fee_per_gas(20_000_000);
 
         self.send_transaction(tx).await
     }

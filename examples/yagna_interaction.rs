@@ -1,6 +1,8 @@
 use alloy::primitives::{keccak256, Address};
 use anyhow::Result;
 use clap::Parser;
+use std::fs;
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
 
@@ -27,6 +29,10 @@ struct Args {
     /// Entry to store in Golem Base (defaults to "test payload")
     #[arg(short, long, default_value = "test payload")]
     entry: String,
+
+    /// Path to file containing the entry content (overrides --entry if provided)
+    #[arg(long)]
+    entry_file: Option<PathBuf>,
 
     /// Skip funding the account
     #[arg(short, long, default_value = "false")]
@@ -85,8 +91,16 @@ async fn main() -> Result<()> {
         log::info!("Account balance: {} ETH", balance);
     }
 
+    // Read entry content from file if provided, otherwise use command line argument
+    let entry_content = if let Some(file_path) = args.entry_file {
+        fs::read_to_string(file_path)
+            .map_err(|e| anyhow::anyhow!("Failed to read entry file: {e}"))?
+    } else {
+        args.entry
+    };
+
     // Create a test entry
-    let test_payload = args.entry.as_bytes().to_vec();
+    let test_payload = entry_content.as_bytes().to_vec();
     let hash = format!("0x{:x}", keccak256(&test_payload));
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)

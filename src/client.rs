@@ -22,6 +22,27 @@ use crate::signers::{GolemBaseSigner, InMemorySigner, TransactionSigner};
 use crate::utils::wei_to_eth;
 use log;
 
+/// Configuration for transaction parameters
+#[derive(Debug, Clone)]
+pub struct TransactionConfig {
+    /// Gas limit for transactions
+    pub gas_limit: u64,
+    /// Maximum priority fee per gas (in wei)
+    pub max_priority_fee_per_gas: u64,
+    /// Maximum fee per gas (in wei)
+    pub max_fee_per_gas: u64,
+}
+
+impl Default for TransactionConfig {
+    fn default() -> Self {
+        Self {
+            gas_limit: 1_000_000,
+            max_priority_fee_per_gas: 1_000_000,
+            max_fee_per_gas: 20_000_000,
+        }
+    }
+}
+
 /// A client for interacting with the GolemBase system.
 #[derive(Clone)]
 pub struct GolemBaseClient {
@@ -32,6 +53,8 @@ pub struct GolemBaseClient {
     pub(crate) rpc_url: Url,
     /// The Ethereum address of the client owner.
     pub(crate) wallet: PrivateKeySigner,
+    /// Transaction configuration
+    pub(crate) tx_config: Arc<TransactionConfig>,
 }
 
 #[bon]
@@ -47,6 +70,7 @@ impl GolemBaseClient {
             accounts: Arc::new(RwLock::new(HashMap::new())),
             rpc_url,
             wallet,
+            tx_config: Arc::new(TransactionConfig::default()),
         }
     }
 
@@ -76,6 +100,7 @@ impl GolemBaseClient {
             accounts: Arc::new(RwLock::new(HashMap::new())),
             rpc_url: endpoint,
             wallet: PrivateKeySigner::random(),
+            tx_config: Arc::new(TransactionConfig::default()),
         })
     }
 
@@ -117,8 +142,14 @@ impl GolemBaseClient {
         let mut accounts = self.accounts.write().unwrap();
         accounts.insert(
             address,
-            Account::new(Box::new(signer), self.provider.clone(), chain_id),
+            Account::new(
+                Box::new(signer),
+                self.provider.clone(),
+                chain_id,
+                self.tx_config.clone(),
+            ),
         );
+
         Ok(address)
     }
 
@@ -256,7 +287,12 @@ impl GolemBaseClient {
         let signer = create_signer(address);
         accounts.insert(
             address,
-            Account::new(signer, self.provider.clone(), chain_id),
+            Account::new(
+                signer,
+                self.provider.clone(),
+                chain_id,
+                self.tx_config.clone(),
+            ),
         );
     }
 
