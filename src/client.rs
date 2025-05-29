@@ -28,17 +28,17 @@ pub struct TransactionConfig {
     /// Gas limit for transactions
     pub gas_limit: u64,
     /// Maximum priority fee per gas (in wei)
-    pub max_priority_fee_per_gas: u64,
+    pub max_priority_fee_per_gas: u128,
     /// Maximum fee per gas (in wei)
-    pub max_fee_per_gas: u64,
+    pub max_fee_per_gas: u128,
 }
 
 impl Default for TransactionConfig {
     fn default() -> Self {
         Self {
             gas_limit: 1_000_000,
-            max_priority_fee_per_gas: 1_000_000,
-            max_fee_per_gas: 20_000_000,
+            max_priority_fee_per_gas: 1,
+            max_fee_per_gas: 2_000_000,
         }
     }
 }
