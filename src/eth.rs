@@ -96,7 +96,7 @@ impl GolemBaseClient {
         .await
     }
 
-    /// Extends the TTL of one or more entities in GolemBase and returns their results.
+    /// Extends the BTL of one or more entities in GolemBase and returns their results.
     pub async fn extend_entities(
         &self,
         extensions: Vec<Extend>,
