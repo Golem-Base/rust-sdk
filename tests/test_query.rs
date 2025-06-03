@@ -6,7 +6,6 @@ use golem_base_test_utils::{GOLEM_BASE_URL, cleanup_entities, create_test_accoun
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn test_query_entities() -> Result<()> {
     init_logger(false);
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;

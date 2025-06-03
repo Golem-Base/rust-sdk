@@ -13,7 +13,6 @@ use golem_base_test_utils::{
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn test_event_listening() -> Result<()> {
     init_logger(false);
 
@@ -71,7 +70,6 @@ async fn test_event_listening() -> Result<()> {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn test_event_listening_with_timeout() -> Result<()> {
     init_logger(false);
 
