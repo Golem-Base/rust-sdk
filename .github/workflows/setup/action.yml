@@ -27,7 +27,12 @@ runs:
       working-directory: ./gb-op-geth
       shell: bash
 
-    - name: Install Rust ${{ env.rust_stable }}
+    - name: Set `env.rust_stable`
+      id: rust_toolchain
+      run: echo "RUST_STABLE=$(cat ./rust-toolchain)" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Install Rust
       uses: dtolnay/rust-toolchain@v1
       with:
-        toolchain: ${{ env.rust_stable }}
+        toolchain: ${{ env.RUST_STABLE }}
