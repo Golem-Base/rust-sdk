@@ -264,8 +264,8 @@ impl Account {
         let tx = TransactionRequest::default()
             .with_to(GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS)
             .with_gas_limit(self.tx_config.gas_limit)
-            .with_max_priority_fee_per_gas(self.tx_config.max_priority_fee_per_gas as u128)
-            .with_max_fee_per_gas(self.tx_config.max_fee_per_gas as u128)
+            .with_max_priority_fee_per_gas(self.tx_config.max_priority_fee_per_gas)
+            .with_max_fee_per_gas(self.tx_config.max_fee_per_gas)
             .with_input(data.to_vec());
 
         self.send_transaction(tx).await

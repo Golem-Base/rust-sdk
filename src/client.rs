@@ -461,7 +461,7 @@ impl GolemBaseClient {
 
     /// Creates a new WebSocket client for event subscriptions
     pub async fn events_client(&self) -> anyhow::Result<EventsClient> {
-        let mut ws_url = self.url.clone();
+        let mut ws_url = self.rpc_url.clone();
         ws_url.set_scheme("ws").unwrap();
         EventsClient::new(ws_url).await
     }
