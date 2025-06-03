@@ -13,6 +13,7 @@ use displaydoc::Display;
 use thiserror::Error;
 
 /// Represents errors that can occur in the GolemBase ETH client.
+/// Used for wrapping transaction, receipt, and log decoding errors.
 #[derive(Debug, Display, Error)]
 pub enum Error {
     /// Failed to send transaction: {0}
@@ -26,10 +27,12 @@ pub enum Error {
 }
 
 /// The Ethereum address of the GolemBase storage contract.
+/// All entity-related transactions are sent to this address.
 pub const STORAGE_ADDRESS: Address = address!("0x0000000000000000000000000000000060138453");
 
 impl GolemBaseClient {
     /// Creates one or more new entities in GolemBase and returns their results.
+    /// Sends a transaction to the storage contract and parses the resulting logs.
     pub async fn create_entities(&self, creates: Vec<Create>) -> Result<Vec<EntityResult>, Error> {
         let receipt = self
             .create_raw_transaction(GolemBaseTransaction {
@@ -53,6 +56,7 @@ impl GolemBaseClient {
     }
 
     /// Updates one or more entities in GolemBase and returns their results.
+    /// Sends a transaction to the storage contract and parses the resulting logs.
     pub async fn update_entities(&self, updates: Vec<Update>) -> Result<Vec<EntityResult>, Error> {
         let receipt = self
             .create_raw_transaction(GolemBaseTransaction {
@@ -76,6 +80,7 @@ impl GolemBaseClient {
     }
 
     /// Deletes one or more entities in GolemBase and returns their results.
+    /// Sends a transaction to the storage contract and parses the resulting logs.
     pub async fn delete_entities(&self, deletes: Vec<Hash>) -> Result<Vec<DeleteResult>, Error> {
         let receipt = self
             .create_raw_transaction(GolemBaseTransaction {
@@ -96,7 +101,8 @@ impl GolemBaseClient {
         .await
     }
 
-    /// Extends the BTL of one or more entities in GolemBase and returns their results.
+    /// Extends the BTL (block time to live) of one or more entities and returns their results.
+    /// Sends a transaction to the storage contract and parses the resulting logs for old and new expiration blocks.
     pub async fn extend_entities(
         &self,
         extensions: Vec<Extend>,
@@ -126,6 +132,7 @@ impl GolemBaseClient {
     }
 
     /// Creates and sends a raw transaction to the GolemBase storage contract.
+    /// Encodes the transaction payload and sends it to the contract address.
     pub async fn create_raw_transaction(
         &self,
         payload: GolemBaseTransaction,
@@ -164,6 +171,7 @@ impl GolemBaseClient {
     }
 
     /// Processes a transaction receipt and maps logs into the desired result type.
+    /// Filters logs for the storage contract and applies the provided mapping function.
     async fn process_receipt<T, F>(
         &self,
         receipt: TransactionReceipt,
@@ -182,6 +190,7 @@ impl GolemBaseClient {
     }
 
     /// Parses a single `u64` value from log data, padding the beginning with zeros if needed.
+    /// Used to extract expiration block numbers from log data fields.
     fn parse_expiration_block(data: &[u8]) -> u64 {
         let mut padded_data = [0u8; 8];
         let start = 8_usize.saturating_sub(data.len());

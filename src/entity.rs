@@ -4,7 +4,8 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::convert::From;
 
-/// A generic key-value pair structure.
+/// A generic key-value pair structure for entity annotations.
+/// Used for both string and numeric metadata attached to entities.
 #[derive(Debug, Clone, Serialize, Deserialize, RlpEncodable, RlpDecodable)]
 pub struct Annotation<T> {
     /// The key of the annotation.
@@ -14,7 +15,8 @@ pub struct Annotation<T> {
 }
 
 impl<T> Annotation<T> {
-    /// Creates a new key-value pair.
+    /// Creates a new key-value pair annotation.
+    /// Accepts any types convertible to `Key` and the annotation value.
     pub fn new<K, V>(key: K, value: V) -> Self
     where
         K: Into<Key>,
@@ -27,10 +29,10 @@ impl<T> Annotation<T> {
     }
 }
 
-/// Type alias for string annotations.
+/// Type alias for string annotations (key-value pairs with `String` values).
 pub type StringAnnotation = Annotation<String>;
 
-/// Type alias for numeric annotations.
+/// Type alias for numeric annotations (key-value pairs with `u64` values).
 pub type NumericAnnotation = Annotation<u64>;
 
 /// A type alias for the hash used to identify entities in GolemBase.
@@ -40,6 +42,7 @@ pub type Hash = B256;
 pub type Key = String;
 
 /// Type representing a create transaction in GolemBase.
+/// Used to define new entities, including their data, BTL, and annotations.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Deserialize)]
 #[rlp(trailing)]
 pub struct Create {
@@ -54,6 +57,7 @@ pub struct Create {
 }
 
 /// Type representing an update transaction in GolemBase.
+/// Used to update existing entities, including their data, BTL, and annotations.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Deserialize)]
 #[rlp(trailing)]
 pub struct Update {
@@ -69,9 +73,11 @@ pub struct Update {
     pub numeric_annotations: Vec<NumericAnnotation>,
 }
 
+/// Type alias for a delete operation (just the entity key).
 pub type GolemBaseDelete = Hash;
 
 /// Type representing an extend transaction in GolemBase.
+/// Used to extend the BTL of an entity by a number of blocks.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Deserialize)]
 pub struct Extend {
     /// The key of the entity to extend.
@@ -81,6 +87,7 @@ pub struct Extend {
 }
 
 /// Type representing a transaction in GolemBase, including creates, updates, deletes, and extensions.
+/// Used as the main payload for submitting entity changes to the chain.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
 pub struct GolemBaseTransaction {
     /// A list of entities to create.
@@ -94,6 +101,7 @@ pub struct GolemBaseTransaction {
 }
 
 /// Represents an entity with data, BTL, and annotations.
+/// Used for reading entity state from the chain.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Serialize, Deserialize)]
 pub struct Entity {
     /// The data associated with the entity.
@@ -107,6 +115,7 @@ pub struct Entity {
 }
 
 /// Represents the result of creating or updating an entity.
+/// Contains the entity key and its expiration block.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Serialize)]
 pub struct EntityResult {
     /// The key of the entity.
@@ -116,6 +125,7 @@ pub struct EntityResult {
 }
 
 /// Represents the result of extending an entity's BTL.
+/// Contains the entity key, old expiration block, and new expiration block.
 #[derive(Debug)]
 pub struct ExtendResult {
     /// The key of the entity.
@@ -127,6 +137,7 @@ pub struct ExtendResult {
 }
 
 /// Represents the result of deleting an entity.
+/// Contains the key of the deleted entity.
 #[derive(Debug)]
 pub struct DeleteResult {
     /// The key of the entity that was deleted.
@@ -134,7 +145,8 @@ pub struct DeleteResult {
 }
 
 impl Create {
-    /// Creates a new Create operation with empty annotations
+    /// Creates a new `Create` operation with empty annotations.
+    /// Accepts a payload as bytes and a BTL value.
     pub fn new(payload: Vec<u8>, btl: u64) -> Self {
         Self {
             btl,
@@ -144,7 +156,7 @@ impl Create {
         }
     }
 
-    /// Creates a new Create request from any type that can be converted to String
+    /// Creates a new `Create` request from any type that can be converted to `String`.
     pub fn from_string<T: Into<String>>(payload: T, btl: u64) -> Self {
         Self {
             btl,
@@ -154,7 +166,8 @@ impl Create {
         }
     }
 
-    /// Adds a string annotation to the entity
+    /// Adds a string annotation to the entity.
+    /// Returns the modified `Create` for chaining.
     pub fn annotate_string(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.string_annotations.push(Annotation {
             key: key.into(),
@@ -163,7 +176,8 @@ impl Create {
         self
     }
 
-    /// Adds a numeric annotation to the entity
+    /// Adds a numeric annotation to the entity.
+    /// Returns the modified `Create` for chaining.
     pub fn annotate_number(mut self, key: impl Into<String>, value: u64) -> Self {
         self.numeric_annotations.push(Annotation {
             key: key.into(),
@@ -174,7 +188,8 @@ impl Create {
 }
 
 impl Update {
-    /// Creates a new Update operation with empty annotations
+    /// Creates a new `Update` operation with empty annotations.
+    /// Accepts an entity key, payload as bytes, and a BTL value.
     pub fn new(entity_key: B256, payload: Vec<u8>, btl: u64) -> Self {
         Self {
             entity_key,
@@ -185,7 +200,7 @@ impl Update {
         }
     }
 
-    /// Creates a new Update request from any type that can be converted to String
+    /// Creates a new `Update` request from any type that can be converted to `String`.
     pub fn from_string<T: Into<String>>(entity_key: B256, payload: T, btl: u64) -> Self {
         Self {
             entity_key,
@@ -196,7 +211,8 @@ impl Update {
         }
     }
 
-    /// Adds a string annotation to the entity
+    /// Adds a string annotation to the entity.
+    /// Returns the modified `Update` for chaining.
     pub fn annotate_string(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.string_annotations.push(Annotation {
             key: key.into(),
@@ -205,7 +221,8 @@ impl Update {
         self
     }
 
-    /// Adds a numeric annotation to the entity
+    /// Adds a numeric annotation to the entity.
+    /// Returns the modified `Update` for chaining.
     pub fn annotate_number(mut self, key: impl Into<String>, value: u64) -> Self {
         self.numeric_annotations.push(Annotation {
             key: key.into(),
@@ -216,7 +233,8 @@ impl Update {
 }
 
 impl GolemBaseTransaction {
-    /// Returns the RLP-encoded bytes of the transaction
+    /// Returns the RLP-encoded bytes of the transaction.
+    /// Useful for submitting the transaction to the chain.
     pub fn encoded(&self) -> Vec<u8> {
         let mut encoded = Vec::new();
         self.encode(&mut encoded);

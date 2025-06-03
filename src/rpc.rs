@@ -14,6 +14,7 @@ use thiserror::Error;
 use crate::{GolemBaseClient, Hash, NumericAnnotation, StringAnnotation};
 
 /// Represents errors that can occur in the GolemBase RPC module.
+/// Used to wrap and describe errors from RPC requests, decoding, or deserialization.
 #[derive(Debug, Display, Error)]
 pub enum Error {
     /// Failed to send the RPC request: {0}
@@ -27,6 +28,7 @@ pub enum Error {
 }
 
 /// Type representing metadata for an entity.
+/// Contains information such as expiration, payload, annotations, and owner.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EntityMetaData {
@@ -42,6 +44,8 @@ pub struct EntityMetaData {
     pub owner: Address,
 }
 
+/// Represents a single search result from a query.
+/// Contains the entity key and the value (decoded from base64).
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SearchResult {
     #[serde(rename = "key")]
@@ -50,6 +54,8 @@ pub struct SearchResult {
     pub value: Bytes,
 }
 
+/// Helper for deserializing base64-encoded storage values.
+/// Used to decode entity values returned from the RPC API.
 fn deserialize_base64<'de, D>(deserializer: D) -> Result<Bytes, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -62,7 +68,8 @@ where
 }
 
 impl SearchResult {
-    /// Converts the value to a UTF-8 string
+    /// Converts the value to a UTF-8 string.
+    /// Returns an error if the value is not valid UTF-8.
     pub fn value_as_string(&self) -> anyhow::Result<String> {
         String::from_utf8(self.value.to_vec())
             .map_err(|e| anyhow::anyhow!("Failed to decode search result to string: {}", e))
@@ -71,6 +78,7 @@ impl SearchResult {
 
 impl GolemBaseClient {
     /// Makes a JSON-RPC call to the GolemBase endpoint.
+    /// Handles serialization, deserialization, and error mapping for RPC requests.
     pub(crate) async fn rpc_call<S: RpcSend, R: RpcRecv>(
         &self,
         method: impl Into<Cow<'static, str>>,
@@ -100,12 +108,14 @@ impl GolemBaseClient {
     }
 
     /// Gets the total count of entities in GolemBase.
+    /// Returns the number of entities currently stored.
     pub async fn get_entity_count(&self) -> Result<u64, Error> {
         self.rpc_call::<(), u64>("golembase_getEntityCount", ())
             .await
     }
 
     /// Gets the entity keys of all entities in GolemBase.
+    /// Returns a vector of all entity keys.
     pub async fn get_all_entity_keys(&self) -> Result<Vec<Hash>, Error> {
         let result = self
             .rpc_call::<(), Option<Vec<Hash>>>("golembase_getAllEntityKeys", ())
@@ -114,6 +124,7 @@ impl GolemBaseClient {
     }
 
     /// Gets the entity keys of all entities owned by the given address.
+    /// Returns a vector of entity keys for the specified owner.
     pub async fn get_entities_of_owner(&self, address: Address) -> Result<Vec<Hash>, Error> {
         let result = self
             .rpc_call::<&[Address], Option<Vec<Hash>>>("golembase_getEntitiesOfOwner", &[address])
@@ -122,6 +133,7 @@ impl GolemBaseClient {
     }
 
     /// Gets the storage value associated with the given entity key.
+    /// Decodes the value from base64 and attempts to convert it to the requested type.
     pub async fn get_storage_value<T: TryFrom<Vec<u8>>>(&self, key: Hash) -> Result<T, Error>
     where
         <T as TryFrom<Vec<u8>>>::Error: std::fmt::Display,
@@ -136,22 +148,25 @@ impl GolemBaseClient {
     }
 
     /// Queries entities in GolemBase based on annotations.
+    /// Returns a vector of `SearchResult` matching the query string.
     pub async fn query_entities(&self, query: &str) -> Result<Vec<SearchResult>, Error> {
         let results = self
             .rpc_call::<&[&str], Option<Vec<SearchResult>>>("golembase_queryEntities", &[query])
             .await?;
-        // GolemBase returns null if no entities are found. Option is used to corrently
+        // GolemBase returns null if no entities are found. Option is used to correctly
         // deserialize this value in Rust, since Vec<_> expects empty array [].
         Ok(results.unwrap_or_default())
     }
 
     /// Queries entities in GolemBase based on annotations and returns only their keys.
+    /// Returns a vector of entity keys matching the query string.
     pub async fn query_entity_keys(&self, query: &str) -> Result<Vec<Hash>, Error> {
         let results = self.query_entities(query).await?;
         Ok(results.into_iter().map(|result| result.key).collect())
     }
 
     /// Gets all entity keys for entities that will expire at the given block number.
+    /// Returns a vector of entity keys expiring at the specified block.
     pub async fn get_entities_to_expire_at_block(
         &self,
         block_number: u64,
@@ -166,6 +181,7 @@ impl GolemBaseClient {
     }
 
     /// Gets metadata for a specific entity.
+    /// Returns an `EntityMetaData` struct for the given entity key.
     pub async fn get_entity_metadata(&self, key: Hash) -> Result<EntityMetaData, Error> {
         self.rpc_call::<&[Hash], EntityMetaData>("golembase_getEntityMetaData", &[key])
             .await

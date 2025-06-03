@@ -1,3 +1,13 @@
+# `pre-commit` configuration for Rust projects.
+#
+# Defines formatting, linting, and TOML validation hooks.
+#
+# To enable these checks before every commit, install `pre-commit` and run:
+#
+#   pre-commit install
+#
+# This will set up the hooks as git `pre-commit` hooks.
+
 repos:
   - repo: local
     hooks:

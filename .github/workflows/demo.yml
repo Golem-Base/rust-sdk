@@ -26,7 +26,7 @@ jobs:
       - name: Run Rust yagna interaction example
         run: cargo run --example yagna_interaction
 
-  run-tests:
+  run-tests-and-docs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the SDK repo
@@ -37,3 +37,22 @@ jobs:
 
       - name: Run tests
         run: cargo test
+
+      - name: Build docs
+        run: cargo doc --no-deps --workspace
+
+      - name: Deploy docs to branch folder
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target/doc
+          publish_branch: gh-pages
+          destination_dir: ${{ github.head_ref }}
+
+      - name: Comment PR with docs URL
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            Preview the generated documentation for this PR at:
+            https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ github.head_ref }}/golem_base_sdk/
