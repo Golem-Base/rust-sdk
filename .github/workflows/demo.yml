@@ -9,9 +9,6 @@ on:
       - main
   workflow_dispatch:
 
-env:
-  rust_stable: 1.84.0
-
 jobs:
   run-examples:
     runs-on: ubuntu-latest
