@@ -16,21 +16,13 @@ repos:
         types: [rust]
         pass_filenames: false
 
-    #   - id: cargo-deny
-    #     name: cargo deny check
+    #   - id: cargo-audit
+    #     name: cargo audit
     #     entry: cargo
-    #     args: ["deny", "check"]
+    #     args: ["audit"]
     #     language: system
     #     files: ^(Cargo\.toml|Cargo\.lock)$
     #     pass_filenames: false
-
-      - id: cargo-audit
-        name: cargo audit
-        entry: cargo
-        args: ["audit"]
-        language: system
-        files: ^(Cargo\.toml|Cargo\.lock)$
-        pass_filenames: false
 
       - id: taplo-validate
         name: Taplo TOML validate

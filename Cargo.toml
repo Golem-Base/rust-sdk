@@ -6,25 +6,20 @@ description = "A Rust SDK for interacting with GolemBase."
 license = "MIT"
 
 [workspace]
-members = [
-    "api",
-    "cli",
-    "demo",
-    "test-utils",
-]
+members = ["api", "cli", "demo", "test-utils"]
 resolver = "2"
 
 [dependencies]
 alloy = { version = "0.15", features = ["full", "json-rpc"] }
-alloy-signer-local = { version = "0.15", features = ["keystore"] }
-alloy-rlp = "0.3"
 alloy-json-rpc = "0.15"
+alloy-rlp = "0.3"
+alloy-signer-local = { version = "0.15", features = ["keystore"] }
 anyhow = "1.0"
 async-trait = "0.1"
 base64 = "0.22"
-bytes = "1.0"
 bigdecimal = "0.4"
 bon = "3.6"
+bytes = "1.0"
 dirs = "5.0"
 displaydoc = "0.2"
 futures = "0.3"
@@ -33,9 +28,9 @@ humantime = "2.2"
 log = "0.4"
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
+thiserror = "2.0"
 tokio = { version = "1.0", features = ["full"] }
 url = "2.4"
-thiserror = "2.0"
 
 [workspace.dependencies]
 golem-base-sdk = { path = "." }
