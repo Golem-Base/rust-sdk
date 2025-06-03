@@ -1,5 +1,4 @@
 use anyhow::Result;
-use bigdecimal::BigDecimal;
 use serial_test::serial;
 use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
@@ -8,14 +7,7 @@ use golem_base_sdk::{
     client::GolemBaseClient,
     entity::{Create, Update},
 };
-
-const GOLEM_BASE_URL: &str = "http://localhost:8545";
-
-fn init_logger(should_init: bool) {
-    if should_init {
-        let _ = env_logger::try_init();
-    }
-}
+use golem_base_test_utils::{create_test_account, init_logger, GOLEM_BASE_URL};
 
 #[tokio::test]
 #[serial]
@@ -23,10 +15,7 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
     init_logger(false);
 
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
-    let account = client.account_generate("test123").await?;
-    let fund_tx = client.fund(account, BigDecimal::from(1)).await?;
-
-    log::info!("Account {account} funded with transaction: {fund_tx}");
+    let account = create_test_account(&client).await?;
 
     let start_block = client.get_current_block_number().await?;
     log::info!("Starting at block: {start_block}");
@@ -62,10 +51,7 @@ async fn test_entity_operations() -> Result<()> {
     init_logger(false);
 
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
-    let account = client.account_generate("test123").await?;
-    let fund_tx = client.fund(account, BigDecimal::from(1)).await?;
-
-    log::info!("Account {account} funded with transaction: {fund_tx}");
+    let account = create_test_account(&client).await?;
 
     // Create first entity
     let payload1 = b"first entity".to_vec();
@@ -128,5 +114,84 @@ async fn test_entity_operations() -> Result<()> {
     log::info!("Retrieved final first entry 0x{entry1_id:x}: {final_str}");
     assert_eq!(final_str, String::from_utf8(updated_payload)?);
 
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_concurrent_entity_creation() -> Result<()> {
+    init_logger(false);
+
+    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    let account = create_test_account(&client).await?;
+
+    // Number of entities to create per task
+    const ENTITIES_PER_TASK: usize = 15;
+
+    // Spawn two tasks that will create entities concurrently
+    let task1 = tokio::spawn({
+        let client = client.clone();
+        async move {
+            let mut results = Vec::new();
+            for i in 0..ENTITIES_PER_TASK {
+                let payload = format!("task1_entity_{}", i).into_bytes();
+                let entry = Create::new(payload, 300)
+                    .annotate_string("task", "task1")
+                    .annotate_number("index", i as u64);
+
+                let entry_id = client.create_entry(account, entry).await?;
+                results.push(entry_id);
+                log::info!("Task 1 created entity: 0x{entry_id:x}");
+            }
+            Ok::<_, anyhow::Error>(results)
+        }
+    });
+
+    let task2 = tokio::spawn({
+        let client = client.clone();
+        async move {
+            let mut results = Vec::new();
+            for i in 0..ENTITIES_PER_TASK {
+                let payload = format!("task2_entity_{}", i).into_bytes();
+                let entry = Create::new(payload, 300)
+                    .annotate_string("task", "task2")
+                    .annotate_number("index", i as u64);
+
+                let entry_id = client.create_entry(account, entry).await?;
+                results.push(entry_id);
+                log::info!("Task 2 created entity: 0x{entry_id:x}");
+            }
+            Ok::<_, anyhow::Error>(results)
+        }
+    });
+
+    // Wait for both tasks to complete
+    let (task1_results, task2_results) = tokio::join!(task1, task2);
+    let task1_entities = task1_results??;
+    let task2_entities = task2_results??;
+
+    // Verify all entities were created successfully
+    for (i, entry_id) in task1_entities.iter().enumerate() {
+        let entry_str = client.cat(*entry_id).await?;
+        assert_eq!(entry_str, format!("task1_entity_{}", i));
+
+        let metadata = client.get_entity_metadata(*entry_id).await?;
+        assert_eq!(metadata.string_annotations[0].value, "task1");
+        assert_eq!(metadata.numeric_annotations[0].value, i as u64);
+    }
+
+    for (i, entry_id) in task2_entities.iter().enumerate() {
+        let entry_str = client.cat(*entry_id).await?;
+        assert_eq!(entry_str, format!("task2_entity_{}", i));
+
+        let metadata = client.get_entity_metadata(*entry_id).await?;
+        assert_eq!(metadata.string_annotations[0].value, "task2");
+        assert_eq!(metadata.numeric_annotations[0].value, i as u64);
+    }
+
+    log::info!(
+        "Successfully verified {} concurrent entity creations",
+        ENTITIES_PER_TASK * 2
+    );
     Ok(())
 }

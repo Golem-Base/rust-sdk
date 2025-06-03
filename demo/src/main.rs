@@ -84,6 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let remaining_entities = client
         .query_entity_keys("ix = 1 || ix = 2 || ix = 3")
         .await?;
+    info!("Remaining entities: {:?}", remaining_entities);
     client.delete_entities(remaining_entities).await?;
     log_num_of_entities_owned(&client, owner_address).await;
 

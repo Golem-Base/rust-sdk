@@ -14,12 +14,34 @@ use bigdecimal::BigDecimal;
 use bon::bon;
 use bytes::Bytes;
 
-use crate::account::{Account, TransactionSigner};
+use crate::account::Account;
 use crate::entity::{Create, GolemBaseTransaction, Hash, Update};
+use crate::events::{golem_base_storage_entity_created, EventsClient};
 use crate::rpc::Error;
-use crate::signers::{GolemBaseSigner, InMemorySigner};
+use crate::signers::{GolemBaseSigner, InMemorySigner, TransactionSigner};
 use crate::utils::wei_to_eth;
 use log;
+
+/// Configuration for transaction parameters
+#[derive(Debug, Clone)]
+pub struct TransactionConfig {
+    /// Gas limit for transactions
+    pub gas_limit: u64,
+    /// Maximum priority fee per gas (in wei)
+    pub max_priority_fee_per_gas: u128,
+    /// Maximum fee per gas (in wei)
+    pub max_fee_per_gas: u128,
+}
+
+impl Default for TransactionConfig {
+    fn default() -> Self {
+        Self {
+            gas_limit: 1_000_000,
+            max_priority_fee_per_gas: 1,
+            max_fee_per_gas: 2_000_000,
+        }
+    }
+}
 
 /// A client for interacting with the GolemBase system.
 #[derive(Clone)]
@@ -31,6 +53,8 @@ pub struct GolemBaseClient {
     pub(crate) rpc_url: Url,
     /// The Ethereum address of the client owner.
     pub(crate) wallet: PrivateKeySigner,
+    /// Transaction configuration
+    pub(crate) tx_config: Arc<TransactionConfig>,
 }
 
 #[bon]
@@ -46,6 +70,7 @@ impl GolemBaseClient {
             accounts: Arc::new(RwLock::new(HashMap::new())),
             rpc_url,
             wallet,
+            tx_config: Arc::new(TransactionConfig::default()),
         }
     }
 
@@ -75,6 +100,7 @@ impl GolemBaseClient {
             accounts: Arc::new(RwLock::new(HashMap::new())),
             rpc_url: endpoint,
             wallet: PrivateKeySigner::random(),
+            tx_config: Arc::new(TransactionConfig::default()),
         })
     }
 
@@ -116,12 +142,14 @@ impl GolemBaseClient {
         let mut accounts = self.accounts.write().unwrap();
         accounts.insert(
             address,
-            Account {
-                signer: Arc::new(Box::new(signer)),
-                provider: self.provider.clone(),
+            Account::new(
+                Box::new(signer),
+                self.provider.clone(),
                 chain_id,
-            },
+                self.tx_config.clone(),
+            ),
         );
+
         Ok(address)
     }
 
@@ -259,11 +287,12 @@ impl GolemBaseClient {
         let signer = create_signer(address);
         accounts.insert(
             address,
-            Account {
-                signer: Arc::new(signer),
-                provider: self.provider.clone(),
+            Account::new(
+                signer,
+                self.provider.clone(),
                 chain_id,
-            },
+                self.tx_config.clone(),
+            ),
         );
     }
 
@@ -305,10 +334,9 @@ impl GolemBaseClient {
         let entity_id = receipt
             .logs()
             .iter()
+            .inspect(|log| log::trace!("Log: {:?}", log))
             .find_map(|log| {
-                log::debug!("Log: {:?}", log);
-                if log.topics().len() >= 2
-                    && log.topics()[0] == crate::account::golem_base_storage_entity_created()
+                if log.topics().len() >= 2 && log.topics()[0] == golem_base_storage_entity_created()
                 {
                     // Second topic is the entity ID
                     Some(log.topics()[1])
@@ -429,5 +457,17 @@ impl GolemBaseClient {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Failed to get latest block"))?;
         Ok(latest_block.header.number)
+    }
+
+    /// Creates a new WebSocket client for event subscriptions
+    pub async fn events_client(&self) -> anyhow::Result<EventsClient> {
+        let mut ws_url = self.rpc_url.clone();
+        ws_url.set_scheme("ws").unwrap();
+        EventsClient::new(ws_url).await
+    }
+
+    /// Creates a new WebSocket client for event subscriptions with a custom WebSocket URL
+    pub async fn events_client_with_url(&self, ws_url: Url) -> anyhow::Result<EventsClient> {
+        EventsClient::new(ws_url).await
     }
 }

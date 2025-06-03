@@ -18,5 +18,6 @@ pub mod client;
 
 pub mod account;
 pub mod entity;
+pub mod events;
 pub mod signers;
 pub mod utils;

@@ -2366,6 +2366,8 @@ dependencies = [
  "dirs 5.0.1",
  "displaydoc",
  "env_logger 0.10.2",
+ "futures",
+ "golem-base-test-utils",
  "hex",
  "humantime",
  "log",
@@ -2422,6 +2424,18 @@ dependencies = [
  "golem-base-sdk",
  "log",
  "tokio",
+]
+
+[[package]]
+name = "golem-base-test-utils"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anyhow",
+ "bigdecimal",
+ "env_logger 0.10.2",
+ "golem-base-sdk",
+ "log",
 ]
 
 [[package]]

@@ -2,15 +2,17 @@
 name = "golem-base-sdk"
 version = "0.1.0"
 edition = "2021"
-description = "A Rust SDK for interacting with GolemBase storage contracts."
+description = "A Rust SDK for interacting with GolemBase."
 license = "MIT"
 
 [workspace]
 members = [
+    "api",
     "cli",
     "demo",
-    "api"
+    "test-utils",
 ]
+resolver = "2"
 
 [dependencies]
 alloy = { version = "0.15", features = ["full", "json-rpc"] }
@@ -25,6 +27,7 @@ bigdecimal = "0.4"
 bon = "3.6"
 dirs = "5.0"
 displaydoc = "0.2"
+futures = "0.3"
 hex = "0.4"
 humantime = "2.2"
 log = "0.4"
@@ -36,9 +39,12 @@ thiserror = "2.0"
 
 [workspace.dependencies]
 golem-base-sdk = { path = "." }
+golem-base-test-utils = { path = "test-utils" }
 
 [dev-dependencies]
 clap = { version = "4.4", features = ["derive"] }
 env_logger = "0.10"
 serde_json = "1.0"
 serial_test = "3.2"
+
+golem-base-test-utils = { workspace = true }
