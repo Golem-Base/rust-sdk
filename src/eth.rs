@@ -141,6 +141,18 @@ impl GolemBaseClient {
         let mut buffer = Vec::new();
         payload.encode(&mut buffer);
         log::debug!("buffer: {:?}", buffer);
+        let nonce = {
+            let mut nm = self.nonce_manager.lock().await;
+            if nm.in_flight == 0 {
+                let wallet_address = self.wallet.address();
+                nm.base_nonce = self
+                    .provider
+                    .get_transaction_count(wallet_address)
+                    .await
+                    .map_err(|e| Error::TransactionSendError(e.to_string()))?;
+            }
+            nm.next_nonce().await
+        };
         let tx = TransactionRequest {
             to: Some(TxKind::Call(STORAGE_ADDRESS)),
             input: buffer.into(),
@@ -150,6 +162,7 @@ impl GolemBaseClient {
                     .await
                     .map_err(|e| Error::TransactionSendError(e.to_string()))?,
             ),
+            nonce: Some(nonce),
             ..Default::default()
         };
         log::debug!("transaction: {:?}", tx);
@@ -167,6 +180,10 @@ impl GolemBaseClient {
             .await
             .map_err(|e| Error::TransactionReceiptError(e.to_string()))?;
         log::debug!("receipt: {:?}", receipt);
+        {
+            let mut nm = self.nonce_manager.lock().await;
+            nm.complete().await;
+        }
         Ok(receipt)
     }
 
