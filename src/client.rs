@@ -13,6 +13,8 @@ use alloy::transports::http::reqwest::Url;
 use bigdecimal::BigDecimal;
 use bon::bon;
 use bytes::Bytes;
+use log;
+use tokio::sync::Mutex;
 
 use crate::account::Account;
 use crate::entity::{Create, GolemBaseTransaction, Hash, Update};
@@ -20,7 +22,30 @@ use crate::events::{golem_base_storage_entity_created, EventsClient};
 use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner, TransactionSigner};
 use crate::utils::wei_to_eth;
-use log;
+
+/// Tracks and assigns sequential Ethereum nonces for concurrent transactions.
+pub struct NonceManager {
+    /// Last known on-chain nonce.
+    pub base_nonce: u64,
+    /// Number of in-flight (pending) transactions.
+    pub in_flight: u64,
+}
+
+impl NonceManager {
+    /// Returns the next available nonce and increments the in-flight counter.
+    pub async fn next_nonce(&mut self) -> u64 {
+        let nonce = self.base_nonce + self.in_flight;
+        self.in_flight += 1;
+        nonce
+    }
+
+    /// Marks a transaction as completed by decrementing the in-flight counter.
+    pub async fn complete(&mut self) {
+        if self.in_flight > 0 {
+            self.in_flight -= 1;
+        }
+    }
+}
 
 /// Configuration for transaction parameters.
 /// Holds gas and fee settings used for sending transactions.
@@ -58,6 +83,8 @@ pub struct GolemBaseClient {
     pub(crate) wallet: PrivateKeySigner,
     /// Transaction configuration.
     pub(crate) tx_config: Arc<TransactionConfig>,
+    /// Nonce manager for tracking transaction nonces.
+    pub(crate) nonce_manager: Arc<Mutex<NonceManager>>,
 }
 
 #[bon]
@@ -76,6 +103,10 @@ impl GolemBaseClient {
             rpc_url,
             wallet,
             tx_config: Arc::new(TransactionConfig::default()),
+            nonce_manager: Arc::new(Mutex::new(NonceManager {
+                base_nonce: 0,
+                in_flight: 0,
+            })),
         }
     }
 
@@ -108,6 +139,10 @@ impl GolemBaseClient {
             rpc_url: endpoint,
             wallet: PrivateKeySigner::random(),
             tx_config: Arc::new(TransactionConfig::default()),
+            nonce_manager: Arc::new(Mutex::new(NonceManager {
+                base_nonce: 0,
+                in_flight: 0,
+            })),
         })
     }
 
