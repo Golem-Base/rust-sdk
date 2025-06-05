@@ -11,25 +11,28 @@ use std::path::PathBuf;
 
 use crate::Hash;
 
-/// A trait for signing transactions
+/// Trait for signing transactions with different backends.
+/// Implementors provide an address and a method to sign arbitrary data.
 #[async_trait]
 pub trait TransactionSigner: Send + Sync {
-    /// Returns the address of the signer
+    /// Returns the address of the signer as an `Address`.
     fn address(&self) -> Address;
 
-    /// Signs the given data
+    /// Signs the given data and returns a `Signature`.
     async fn sign(&self, data: &[u8]) -> anyhow::Result<Signature>;
 }
 
 const DEFAULT_KEYSTORE_DIR: &str = "golembase";
 
-/// A signer that keeps the private key in memory
+/// A signer that keeps the private key in memory and supports loading, saving, and listing keys.
+/// Useful for local development and testing, with support for keystore files and raw key files.
 pub struct InMemorySigner {
     signer: PrivateKeySigner,
 }
 
 impl InMemorySigner {
-    /// Gets the default keystore directory path
+    /// Gets the default keystore directory path according to the XDG spec.
+    /// Creates the directory if it does not exist.
     pub fn get_keystore_dir() -> anyhow::Result<PathBuf> {
         let path = dirs::config_dir()
             .context("Could not find home directory")?
@@ -42,23 +45,27 @@ impl InMemorySigner {
         Ok(path)
     }
 
-    /// Generates a new random private key
+    /// Generates a new random private key and returns an in-memory signer.
+    /// This is useful for creating new accounts programmatically.
     pub fn generate() -> Self {
         let signer = PrivateKeySigner::random();
         Self { signer }
     }
 
-    /// Returns the private key
+    /// Returns the private key as a `SigningKey`.
+    /// Can be used for exporting or further cryptographic operations.
     pub fn private_key(&self) -> SigningKey {
         self.signer.credential().clone()
     }
 
-    /// Returns the public key
+    /// Returns the public key as a `VerifyingKey`.
+    /// Useful for verifying signatures or exporting the public key.
     pub fn public_key(&self) -> VerifyingKey {
         *self.signer.credential().verifying_key()
     }
 
-    /// Saves the private key to a file in the standard directory using keystore format
+    /// Saves the private key to a file in the standard keystore directory using the provided password.
+    /// The file is encrypted and named after the account address.
     pub fn save(&self, password: &str) -> anyhow::Result<PathBuf> {
         let path = Self::get_keystore_dir()?;
         let name = format!("key_{}.json", self.address());
@@ -75,7 +82,8 @@ impl InMemorySigner {
         Ok(path)
     }
 
-    /// Loads a private key from a keystore file
+    /// Loads a private key from a keystore file at the given path using the provided password.
+    /// Returns an in-memory signer if successful.
     pub fn load_keystore(path: PathBuf, password: &str) -> anyhow::Result<Self> {
         let signer = PrivateKeySigner::decrypt_keystore(&path, password).map_err(|e| match e {
             LocalSignerError::EcdsaError(e) => anyhow!("ECDSA error: {e}"),
@@ -85,13 +93,15 @@ impl InMemorySigner {
         Ok(Self { signer })
     }
 
-    /// Loads a signer by address from the default directory
+    /// Loads a signer by address from the default keystore directory.
+    /// Looks for a file named after the address and decrypts it with the given password.
     pub fn load_by_address(address: Address, password: &str) -> anyhow::Result<Self> {
         let path = Self::get_keystore_dir()?.join(format!("key_{}.json", address));
         Self::load_keystore(path, password)
     }
 
-    /// Loads a signer from a raw private key file
+    /// Loads a signer from a raw private key file (not encrypted).
+    /// Expects the file to contain the raw private key bytes.
     pub fn load_raw_key(path: PathBuf) -> anyhow::Result<Self> {
         let private_key_bytes =
             fs::read(&path).map_err(|e| anyhow!("Failed to read private key file: {}", e))?;
@@ -103,7 +113,8 @@ impl InMemorySigner {
         Ok(Self { signer })
     }
 
-    /// Lists all local accounts in the keystore directory
+    /// Lists all local accounts found in the keystore directory.
+    /// Returns a vector of `Address` for each account found.
     pub fn list_local_accounts() -> anyhow::Result<Vec<Address>> {
         let keystore_dir = Self::get_keystore_dir()?;
         let mut accounts = Vec::new();
@@ -121,7 +132,8 @@ impl InMemorySigner {
         Ok(accounts)
     }
 
-    /// Parses an address from a keystore filename
+    /// Parses an `Address` from a keystore filename.
+    /// Expects filenames in the format `key_{address}.json`.
     fn parse_keystore_filename(file_name: &str) -> Option<Address> {
         if !file_name.starts_with("key_") || !file_name.ends_with(".json") {
             return None;
@@ -146,19 +158,20 @@ impl TransactionSigner for InMemorySigner {
     }
 }
 
-/// A signer that uses GolemBase to sign transactions
+/// A signer that uses GolemBase as a remote signing backend.
+/// Intended for scenarios where signing is delegated to a node or service.
 #[allow(dead_code)]
 pub struct GolemBaseSigner {
-    /// The address of the account
+    /// The address of the account as an `Address`.
     address: Address,
-    /// The provider for signing
+    /// The provider for signing, typically a remote node.
     provider: DynProvider,
-    /// The chain ID for signing
+    /// The chain ID for signing transactions.
     chain_id: u64,
 }
 
 impl GolemBaseSigner {
-    /// Creates a new GolemBase signer
+    /// Creates a new `GolemBaseSigner` with the given address, provider, and chain ID.
     pub fn new(address: Address, provider: DynProvider, chain_id: u64) -> Self {
         Self {
             address,

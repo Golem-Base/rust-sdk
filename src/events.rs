@@ -12,30 +12,36 @@ use std::pin::Pin;
 use crate::account::GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS;
 use crate::entity::Hash;
 
-/// Event signature for entity creation logs
+/// Returns the event signature hash for entity creation logs.
+/// Used to identify `GolemBaseStorageEntityCreated` events in the blockchain logs.
 pub fn golem_base_storage_entity_created() -> B256 {
     keccak256(b"GolemBaseStorageEntityCreated(uint256,uint256)")
 }
 
-/// Event signature for entity deletion logs
+/// Returns the event signature hash for entity deletion logs.
+/// Used to identify `GolemBaseStorageEntityDeleted` events in the blockchain logs.
 pub fn golem_base_storage_entity_deleted() -> B256 {
     keccak256(b"GolemBaseStorageEntityDeleted(uint256)")
 }
 
-/// Event signature for entity update logs
+/// Returns the event signature hash for entity update logs.
+/// Used to identify `GolemBaseStorageEntityUpdated` events in the blockchain logs.
 pub fn golem_base_storage_entity_updated() -> B256 {
     keccak256(b"GolemBaseStorageEntityUpdated(uint256,uint256)")
 }
 
-/// Event signature for extending TTL of an entity
+/// Returns the event signature hash for TTL extension logs.
+/// Used to identify `GolemBaseStorageEntityTTLExptended` events in the blockchain logs.
 pub fn golem_base_storage_entity_ttl_extended() -> B256 {
     keccak256(b"GolemBaseStorageEntityTTLExptended(uint256,uint256)")
 }
 
-/// Represents an event from the blockchain
+/// Represents a GolemBase event parsed from the blockchain log.
+/// Used to distinguish between entity creation, update, and removal events.
 #[derive(Debug)]
 pub enum Event {
-    /// Entity was created
+    /// Entity was created.
+    /// Contains the entity ID, block number, and transaction hash.
     EntityCreated {
         /// The ID of the created entity
         entity_id: Hash,
@@ -44,7 +50,8 @@ pub enum Event {
         /// The transaction hash that triggered the event
         transaction_hash: Hash,
     },
-    /// Entity was updated
+    /// Entity was updated.
+    /// Contains the entity ID, block number, and transaction hash.
     EntityUpdated {
         /// The ID of the updated entity
         entity_id: Hash,
@@ -53,7 +60,8 @@ pub enum Event {
         /// The transaction hash that triggered the event
         transaction_hash: Hash,
     },
-    /// Entity was removed
+    /// Entity was removed.
+    /// Contains the entity ID, block number, and transaction hash.
     EntityRemoved {
         /// The ID of the removed entity
         entity_id: Hash,
@@ -67,6 +75,8 @@ pub enum Event {
 impl TryFrom<Log> for Event {
     type Error = anyhow::Error;
 
+    /// Attempts to parse a blockchain log into a `Event`.
+    /// Returns an error if required fields are missing or the event type is unknown.
     fn try_from(log: Log) -> Result<Self> {
         let block_number = log
             .block_number
@@ -103,13 +113,15 @@ impl TryFrom<Log> for Event {
     }
 }
 
-/// Client for listening to GolemBase events
+/// Client for subscribing to and streaming GolemBase events from the blockchain.
+/// Provides methods to connect to a node and receive event streams for entity changes.
 pub struct EventsClient {
     provider: DynProvider,
 }
 
 impl EventsClient {
-    /// Creates a new EventsClient by connecting to the given URL
+    /// Creates a new `EventsClient` by connecting to the given websocket `Url`.
+    /// Establishes a connection to the blockchain node for event streaming.
     pub async fn new(url: Url) -> anyhow::Result<Self> {
         log::debug!("Connecting to websocket provider: {}", url);
 
@@ -122,12 +134,8 @@ impl EventsClient {
         Ok(Self { provider })
     }
 
-    /// Listens for events from the blockchain
-    /// Returns a stream of events that can be processed asynchronously
-    ///
-    /// Note: Lifetimes are important here, despite this, code would compile without them.
-    /// WebSocket client (self.provider) must outlive the stream, otherwise it will be closed
-    /// and the stream will return None.
+    /// Listens for GolemBase events from the blockchain, starting from the latest block.
+    /// Returns a stream of parsed `Event` items that can be processed asynchronously.
     pub async fn events_stream<'a>(
         &'a self,
     ) -> anyhow::Result<Pin<Box<dyn Stream<Item = anyhow::Result<Event>> + Send + 'a>>> {
@@ -135,10 +143,11 @@ impl EventsClient {
         self.create_stream_from_filter(filter).await
     }
 
-    /// Creates a stream of events starting from a specific block number.
+    /// Listens for GolemBase events starting from a specific block number.
+    /// Returns a stream of parsed `Event` items from the given block onward.
     ///
     /// # Arguments
-    /// * `from_block` - The block number to start listening for events from
+    /// * `block` - The block number to start listening for events from.
     pub async fn events_stream_from_block<'a>(
         &'a self,
         block: u64,
@@ -147,7 +156,7 @@ impl EventsClient {
         self.create_stream_from_filter(filter).await
     }
 
-    /// Creates a filter for GolemBase events
+    /// Creates a filter for GolemBase events, specifying the contract address and event signatures.
     fn create_event_filter(&self, block: BlockNumberOrTag) -> Filter {
         Filter::new()
             .address(GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS)
@@ -159,7 +168,8 @@ impl EventsClient {
             ])
     }
 
-    /// Creates a stream of events from a filter
+    /// Creates a stream of events from a filter.
+    /// Subscribes to logs matching the filter and maps them to `Event` values.
     async fn create_stream_from_filter<'a>(
         &'a self,
         filter: Filter,

@@ -22,14 +22,15 @@ use crate::signers::{GolemBaseSigner, InMemorySigner, TransactionSigner};
 use crate::utils::wei_to_eth;
 use log;
 
-/// Configuration for transaction parameters
+/// Configuration for transaction parameters.
+/// Holds gas and fee settings used for sending transactions.
 #[derive(Debug, Clone)]
 pub struct TransactionConfig {
-    /// Gas limit for transactions
+    /// Gas limit for transactions.
     pub gas_limit: u64,
-    /// Maximum priority fee per gas (in wei)
+    /// Maximum priority fee per gas (in wei).
     pub max_priority_fee_per_gas: u128,
-    /// Maximum fee per gas (in wei)
+    /// Maximum fee per gas (in wei).
     pub max_fee_per_gas: u128,
 }
 
@@ -44,21 +45,25 @@ impl Default for TransactionConfig {
 }
 
 /// A client for interacting with the GolemBase system.
+/// Provides methods for account management, entity operations, balance queries, and event subscriptions.
 #[derive(Clone)]
 pub struct GolemBaseClient {
-    /// The underlying provider for making RPC calls
+    /// The underlying provider for making RPC calls.
     pub(crate) provider: DynProvider,
+    /// Registered accounts mapped by address.
     pub(crate) accounts: Arc<RwLock<HashMap<Address, Account>>>,
-    /// The URL of the GolemBase endpoint
+    /// The URL of the GolemBase endpoint.
     pub(crate) rpc_url: Url,
     /// The Ethereum address of the client owner.
     pub(crate) wallet: PrivateKeySigner,
-    /// Transaction configuration
+    /// Transaction configuration.
     pub(crate) tx_config: Arc<TransactionConfig>,
 }
 
 #[bon]
 impl GolemBaseClient {
+    /// Creates a new builder for `GolemBaseClient` with the given wallet and RPC URL.
+    /// Initializes the provider and sets up default configuration.
     #[builder]
     pub fn builder(wallet: PrivateKeySigner, rpc_url: Url) -> Self {
         let provider = ProviderBuilder::new()
@@ -84,12 +89,14 @@ impl GolemBaseClient {
         self.wallet.address()
     }
 
-    /// Creates a new client
+    /// Creates a new client with the given endpoint.
+    /// Initializes with a random wallet.
     pub fn new(endpoint: Url) -> anyhow::Result<Self> {
         Self::new_uninitialized(endpoint)
     }
 
-    /// Creates a new client without initializing it
+    /// Creates a new client without initializing it.
+    /// Useful for advanced scenarios or custom initialization.
     pub fn new_uninitialized(endpoint: Url) -> anyhow::Result<Self> {
         let provider = ProviderBuilder::new()
             .connect_http(endpoint.clone())
@@ -104,7 +111,8 @@ impl GolemBaseClient {
         })
     }
 
-    /// Gets the chain ID from the provider
+    /// Gets the chain ID from the provider.
+    /// Returns the chain ID as a `u64`.
     pub async fn get_chain_id(&self) -> anyhow::Result<u64> {
         self.provider
             .get_chain_id()
@@ -112,7 +120,8 @@ impl GolemBaseClient {
             .map_err(|e| anyhow::anyhow!("Failed to get chain ID: {}", e))
     }
 
-    /// Checks chain ID and syncs accounts with GolemBase node
+    /// Checks chain ID and syncs accounts with the GolemBase node.
+    /// Waits until the node is synced or the timeout is reached.
     pub async fn sync_node(&self, timeout: Duration) -> anyhow::Result<()> {
         let start_time = Instant::now();
         let stop_time = start_time + timeout;
@@ -132,7 +141,8 @@ impl GolemBaseClient {
         Ok(())
     }
 
-    /// Registers a user-managed account with custom signer.
+    /// Registers a user-managed account with a custom signer.
+    /// Returns the registered account's address.
     pub async fn account_register(
         &self,
         signer: impl TransactionSigner + 'static,
@@ -153,7 +163,8 @@ impl GolemBaseClient {
         Ok(address)
     }
 
-    /// Generates a new local key, saves it to a keystore file, and registers it
+    /// Generates a new local key, saves it to a keystore file, and registers it.
+    /// Returns the address of the new account.
     pub async fn account_generate(&self, password: &str) -> anyhow::Result<Address> {
         let signer = InMemorySigner::generate();
         let _path = signer
@@ -162,7 +173,8 @@ impl GolemBaseClient {
         self.account_register(signer).await
     }
 
-    /// Loads a key from a raw private key file and registers it
+    /// Loads a key from a raw private key file or keystore and registers it.
+    /// Returns the address of the loaded account.
     pub async fn account_load_file(
         &self,
         path: PathBuf,
@@ -179,7 +191,8 @@ impl GolemBaseClient {
         self.account_register(signer).await
     }
 
-    /// Loads a key from the default directory and registers it
+    /// Loads a key from the default directory and registers it.
+    /// Returns the address if successful.
     pub async fn account_load(&self, address: Address, password: &str) -> anyhow::Result<Address> {
         // This will load all available accounts from GolemBase.
         // We check only the registered accounts, because sync returns local as well.
@@ -202,13 +215,15 @@ impl GolemBaseClient {
         self.account_register(signer).await
     }
 
-    /// Lists all registered accounts
+    /// Lists all registered accounts.
+    /// Returns a vector of `Address`.
     pub fn accounts_list(&self) -> Vec<Address> {
         let accounts = self.accounts.read().unwrap();
         accounts.keys().cloned().collect()
     }
 
-    /// Synchronizes accounts with GolemBase, adding any new accounts to our local state
+    /// Synchronizes accounts with GolemBase, adding any new accounts to local state.
+    /// Returns a vector of all available account addresses.
     pub async fn account_sync(&self) -> anyhow::Result<Vec<Address>> {
         let chain_id = self.get_chain_id().await?;
 
@@ -229,13 +244,14 @@ impl GolemBaseClient {
         Ok(all_accounts)
     }
 
-    /// Gets an account's ETH balance
+    /// Gets an account's ETH balance as a `BigDecimal`.
     pub async fn get_balance(&self, account: Address) -> anyhow::Result<BigDecimal> {
         let balance = self.provider.get_balance(account).await?;
         Ok(wei_to_eth(balance))
     }
 
-    /// Transfers ETH from one account to another
+    /// Transfers ETH from one account to another.
+    /// Returns the transaction hash.
     pub async fn transfer(
         &self,
         from: Address,
@@ -247,13 +263,15 @@ impl GolemBaseClient {
         Ok(receipt.transaction_hash)
     }
 
-    /// Funds an account with ETH
+    /// Funds an account with ETH.
+    /// Returns the transaction hash.
     pub async fn fund(&self, account: Address, value: BigDecimal) -> anyhow::Result<B256> {
         let account = self.account_get(account)?;
         let receipt = account.fund_account(value).await?;
         Ok(receipt.transaction_hash)
     }
 
+    /// Internal: synchronizes GolemBase accounts with the current chain ID.
     async fn sync_golem_base_accounts(&self, chain_id: u64) -> anyhow::Result<()> {
         let golem_accounts = self.list_golem_accounts().await?;
         let mut accounts = self.accounts.write().unwrap();
@@ -271,6 +289,7 @@ impl GolemBaseClient {
         Ok(())
     }
 
+    /// Internal: inserts an account if not already present.
     fn try_insert_account<F>(
         &self,
         accounts: &mut HashMap<Address, Account>,
@@ -296,7 +315,8 @@ impl GolemBaseClient {
         );
     }
 
-    /// Gets an account by its address
+    /// Gets an account by its address.
+    /// Returns an `Account` if found, or an error otherwise.
     pub fn account_get(&self, address: Address) -> anyhow::Result<Account> {
         let accounts = self.accounts.read().unwrap();
         accounts
@@ -305,12 +325,13 @@ impl GolemBaseClient {
             .ok_or_else(|| anyhow::anyhow!("Account {address} not found"))
     }
 
-    /// Internal function to list accounts from GolemBase
+    /// Internal: lists accounts from GolemBase.
     async fn list_golem_accounts(&self) -> anyhow::Result<Vec<Address>> {
         Ok(self.provider.get_accounts().await?)
     }
 
-    /// Creates an entry using the specified account
+    /// Creates an entry using the specified account.
+    /// Returns the entity ID of the created entry.
     pub async fn create_entry(&self, account: Address, entry: Create) -> anyhow::Result<Hash> {
         let account = self.account_get(account)?;
         let tx = GolemBaseTransaction {
@@ -350,11 +371,12 @@ impl GolemBaseClient {
         Ok(entity_id)
     }
 
-    /// Removes entries from GolemBase
+    /// Removes entries from GolemBase.
+    /// Deletes the specified entries owned by the given account.
     ///
-    /// # Arguments:
-    /// * `account` - The account address that owns the entries
-    /// * `entry_ids` - The IDs of the entries to remove
+    /// # Arguments
+    /// * `account` - The account address that owns the entries.
+    /// * `entry_ids` - The IDs of the entries to remove.
     pub async fn remove_entries(
         &self,
         account: Address,
@@ -391,14 +413,15 @@ impl GolemBaseClient {
         Ok(())
     }
 
-    /// Retrieves an entry's payload from Golem Base by its ID
+    /// Retrieves an entry's payload from GolemBase by its ID.
+    /// Returns the entry data as a `String`.
     pub async fn cat(&self, id: Hash) -> anyhow::Result<String> {
         let bytes = self.get_storage_value::<Bytes>(id).await?;
         Ok(String::from_utf8(bytes.to_vec()).map_err(|e| Error::UnexpectedError(e.to_string()))?)
     }
 
-    /// Checks if the node is synced by comparing the latest block timestamp with current time
-    /// Returns true if the node is synced (latest block is less than 5 minutes old)
+    /// Checks if the node is synced by comparing the latest block timestamp with current time.
+    /// Returns `true` if the node is synced (latest block is less than 5 minutes old).
     pub async fn is_synced(&self) -> anyhow::Result<bool> {
         let syncing = self.provider.syncing().await?;
         match syncing {
@@ -416,11 +439,12 @@ impl GolemBaseClient {
         }
     }
 
-    /// Updates an entry using the specified account
+    /// Updates an entry using the specified account.
+    /// Sends an update transaction for the given entry.
     ///
-    /// # Arguments:
-    /// * `account` - The account address that owns the entry
-    /// * `update` - The update operation containing new data and annotations
+    /// # Arguments
+    /// * `account` - The account address that owns the entry.
+    /// * `update` - The update operation containing new data and annotations.
     pub async fn update_entry(&self, account: Address, update: Update) -> anyhow::Result<()> {
         let entity_key = update.entity_key;
         let account = self.account_get(account)?;
@@ -449,7 +473,8 @@ impl GolemBaseClient {
         Ok(())
     }
 
-    /// Gets the current block number
+    /// Gets the current block number from the chain.
+    /// Returns the latest block number as a `u64`.
     pub async fn get_current_block_number(&self) -> anyhow::Result<u64> {
         let latest_block = self
             .provider
@@ -459,14 +484,14 @@ impl GolemBaseClient {
         Ok(latest_block.header.number)
     }
 
-    /// Creates a new WebSocket client for event subscriptions
+    /// Creates a new WebSocket client for event subscriptions using the default RPC URL.
     pub async fn events_client(&self) -> anyhow::Result<EventsClient> {
         let mut ws_url = self.rpc_url.clone();
         ws_url.set_scheme("ws").unwrap();
         EventsClient::new(ws_url).await
     }
 
-    /// Creates a new WebSocket client for event subscriptions with a custom WebSocket URL
+    /// Creates a new WebSocket client for event subscriptions with a custom WebSocket URL.
     pub async fn events_client_with_url(&self, ws_url: Url) -> anyhow::Result<EventsClient> {
         EventsClient::new(ws_url).await
     }

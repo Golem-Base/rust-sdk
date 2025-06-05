@@ -1,3 +1,12 @@
+# Composite GitHub Action for setting up the test environment.
+#
+# - Starts a `gb-op-geth` container for Ethereum-compatible RPC.
+# - Checks out the `gb-op-geth` repo and sets up Go.
+# - Creates and funds a test account.
+# - Reads the `./rust-toolchain` version and install it.
+#
+# To use, reference this action in your workflow with `uses:`.
+
 runs:
   using: "composite"
   steps:
@@ -28,7 +37,6 @@ runs:
       shell: bash
 
     - name: Set `env.rust_stable`
-      id: rust_toolchain
       run: echo "RUST_STABLE=$(cat ./rust-toolchain)" >> $GITHUB_ENV
       shell: bash
 
