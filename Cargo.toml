@@ -3,7 +3,7 @@ name = "golem-base-sdk"
 version = "0.1.0"
 edition = "2021"
 description = "A Rust SDK for interacting with GolemBase."
-license = "MIT"
+license = "GPLv3"
 
 [workspace]
 members = ["api", "cli", "demo", "test-utils"]
