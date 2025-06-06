@@ -133,6 +133,12 @@ impl GolemBaseClient {
 
     /// Creates and sends a raw transaction to the GolemBase storage contract.
     /// Encodes the transaction payload and sends it to the contract address.
+    ///
+    /// NOTE: Nonce management is tricky!
+    /// - This implementation always tries to fetch the latest on-chain nonce before sending a transaction,
+    ///   and only falls back to the locally cached base_nonce if the sync fails.
+    /// - Only the number of in-flight transactions is tracked locally.
+    /// - For robust production use, consider also handling stuck transactions (e.g., gas bumping/EIP-1559).
     pub async fn create_raw_transaction(
         &self,
         payload: GolemBaseTransaction,
@@ -143,13 +149,14 @@ impl GolemBaseClient {
         log::debug!("buffer: {:?}", buffer);
         let nonce = {
             let mut nm = self.nonce_manager.lock().await;
-            if nm.in_flight == 0 {
-                let wallet_address = self.wallet.address();
-                nm.base_nonce = self
-                    .provider
-                    .get_transaction_count(wallet_address)
-                    .await
-                    .map_err(|e| Error::TransactionSendError(e.to_string()))?;
+            let wallet_address = self.wallet.address();
+            match self.provider.get_transaction_count(wallet_address).await {
+                Ok(on_chain_nonce) => {
+                    nm.base_nonce = on_chain_nonce;
+                }
+                Err(e) => {
+                    log::warn!("Failed to fetch on-chain nonce: {}", e);
+                }
             }
             nm.next_nonce().await
         };
