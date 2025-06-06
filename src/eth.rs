@@ -6,7 +6,6 @@ use crate::GolemBaseClient;
 
 use alloy::primitives::{address, Address, TxKind};
 use alloy::providers::Provider;
-use alloy::providers::ProviderBuilder;
 use alloy::rpc::types::{Log, TransactionReceipt, TransactionRequest};
 use alloy_rlp::Encodable;
 use displaydoc::Display;
@@ -148,6 +147,10 @@ impl GolemBaseClient {
         payload.encode(&mut buffer);
         log::debug!("buffer: {:?}", buffer);
         let nonce = {
+            // This is sadly needed because `self.provider.get_transaction_count(self.wallet.address()).pending()`
+            // doesn't give the right number...
+            //
+            //      Error: server returned an error response: error code -32000: replacement transaction underpriced
             let mut nm = self.nonce_manager.lock().await;
             let wallet_address = self.wallet.address();
             match self.provider.get_transaction_count(wallet_address).await {
@@ -173,11 +176,8 @@ impl GolemBaseClient {
             ..Default::default()
         };
         log::debug!("transaction: {:?}", tx);
-        let provider = ProviderBuilder::new()
-            .wallet(self.wallet.clone())
-            .connect_http(self.rpc_url.clone());
-        log::debug!("provider: {:?}", provider);
-        let pending_tx = provider
+        let pending_tx = self
+            .provider
             .send_transaction(tx)
             .await
             .map_err(|e| Error::TransactionSendError(e.to_string()))?;
