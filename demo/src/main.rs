@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let signer = PrivateKeySigner::from_bytes(&private_key)
         .map_err(|e| format!("Failed to parse private key: {}", e))?;
-    let url = Url::parse("https://test5.holesky.golem-base.io/rpc").unwrap();
+    let url = Url::parse("https://kaolin.holesky.golem-base.io/rpc").unwrap();
     let client = GolemBaseClient::builder()
         .wallet(signer)
         .rpc_url(url)
