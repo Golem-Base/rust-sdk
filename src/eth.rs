@@ -4,6 +4,7 @@ use crate::entity::{
 };
 use crate::GolemBaseClient;
 
+use alloy::network::TransactionBuilder;
 use alloy::primitives::{address, Address, TxKind};
 use alloy::providers::Provider;
 use alloy::rpc::types::{Log, TransactionReceipt, TransactionRequest};
@@ -163,7 +164,7 @@ impl GolemBaseClient {
             }
             nm.next_nonce().await
         };
-        let tx = TransactionRequest {
+        let tx_base = TransactionRequest {
             to: Some(TxKind::Call(STORAGE_ADDRESS)),
             input: buffer.into(),
             chain_id: Some(
@@ -175,7 +176,18 @@ impl GolemBaseClient {
             nonce: Some(nonce),
             ..Default::default()
         };
-        log::debug!("transaction: {:?}", tx);
+        log::debug!("transaction: {:?}", tx_base);
+        let estimated_gas = self
+            .provider
+            .estimate_gas(tx_base.clone())
+            .await
+            .map_err(|e| Error::TransactionSendError(format!("Failed to estimate gas: {}", e)))?;
+        let tx = tx_base.with_gas_limit(estimated_gas).with_gas_price(
+            self.provider
+                .get_gas_price()
+                .await
+                .map_err(|e| Error::TransactionSendError(e.to_string()))?,
+        );
         let pending_tx = self
             .provider
             .send_transaction(tx)
