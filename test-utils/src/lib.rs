@@ -5,7 +5,7 @@ use bigdecimal::BigDecimal;
 use golem_base_sdk::client::GolemBaseClient;
 
 /// Default URL for GolemBase node in tests
-pub const GOLEM_BASE_URL: &str = "http://localhost:8545";
+pub const GOLEM_BASE_URL: &str = "https://test5.holesky.golem-base.io/rpc";
 
 /// Default TTL value for test entities
 pub const TEST_TTL: u64 = 30;
