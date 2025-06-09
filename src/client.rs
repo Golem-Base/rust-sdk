@@ -7,7 +7,7 @@ use alloy::eips::BlockNumberOrTag;
 use alloy::primitives::{Address, B256};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder};
 use alloy::rpc::client::ClientRef;
-use alloy::rpc::types::SyncStatus;
+use alloy::rpc::types::{SyncStatus, TransactionReceipt};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::http::reqwest::Url;
 use bigdecimal::BigDecimal;
@@ -517,6 +517,12 @@ impl GolemBaseClient {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Failed to get latest block"))?;
         Ok(latest_block.header.number)
+    }
+
+    /// Waits for a arbitrary (not created by this client) transaction to be mined and returns
+    /// its receipt. Handles retries for transaction indexing error.
+    pub async fn wait_for_transaction(&self, tx_hash: Hash) -> anyhow::Result<TransactionReceipt> {
+        crate::account::get_receipt(&self.provider, tx_hash).await
     }
 
     /// Creates a new WebSocket client for event subscriptions using the default RPC URL.

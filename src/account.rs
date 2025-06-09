@@ -125,26 +125,7 @@ impl TransactionQueue {
     /// Gets a transaction receipt with retries for "transaction indexing is in progress" errors.
     /// Waits until the transaction is indexed and the receipt is available, or returns an error.
     async fn get_receipt_with_retry(&self, tx_hash: Hash) -> anyhow::Result<TransactionReceipt> {
-        loop {
-            match self.provider.get_transaction_receipt(tx_hash).await {
-                Ok(opt_receipt) => match opt_receipt {
-                    Some(receipt) => return Ok(receipt),
-                    _ => {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                        continue;
-                    }
-                },
-                Err(e) => {
-                    if e.to_string()
-                        .contains("transaction indexing is in progress")
-                    {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                        continue;
-                    }
-                    return Err(anyhow!("Failed to get transaction receipt: {}", e));
-                }
-            }
-        }
+        get_receipt(&self.provider, tx_hash).await
     }
 
     /// Processes a single transaction:
@@ -345,5 +326,33 @@ impl Account {
     /// Returns the balance as a U256 value.
     pub async fn get_balance(&self) -> anyhow::Result<U256> {
         Ok(self.provider.get_balance(self.address()).await?)
+    }
+}
+
+/// Gets a transaction receipt with retries for "transaction indexing is in progress" errors.
+/// Waits until the transaction is indexed and the receipt is available, or returns an error.
+pub async fn get_receipt(
+    provider: &DynProvider,
+    tx_hash: Hash,
+) -> anyhow::Result<TransactionReceipt> {
+    loop {
+        match provider.get_transaction_receipt(tx_hash).await {
+            Ok(opt_receipt) => match opt_receipt {
+                Some(receipt) => return Ok(receipt),
+                _ => {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    continue;
+                }
+            },
+            Err(e) => {
+                if e.to_string()
+                    .contains("transaction indexing is in progress")
+                {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    continue;
+                }
+                return Err(anyhow!("Failed to get transaction receipt: {}", e));
+            }
+        }
     }
 }
