@@ -1,10 +1,10 @@
 use anyhow::Result;
 use bigdecimal::BigDecimal;
-use golem_base_test_utils::{init_logger, GOLEM_BASE_URL};
+use golem_base_test_utils::{GOLEM_BASE_URL, init_logger};
 use serial_test::serial;
 use std::fs;
 
-use golem_base_sdk::{client::GolemBaseClient, signers::InMemorySigner, PrivateKeySigner, Url};
+use golem_base_sdk::{PrivateKeySigner, Url, client::GolemBaseClient, signers::InMemorySigner};
 
 const TEST_PRIVATE_KEY_FILE: &str = "test_private.key";
 

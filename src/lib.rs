@@ -24,9 +24,9 @@
 //! - Advanced users can construct and submit raw Ethereum transactions directly using the types and helpers re-exported from `Alloy`.
 
 /// Re-export commonly used types from `alloy`.
-pub use alloy::primitives::{keccak256, Address};
-pub use alloy::signers::local::PrivateKeySigner;
+pub use alloy::primitives::{Address, keccak256};
 pub use alloy::signers::Signature;
+pub use alloy::signers::local::PrivateKeySigner;
 pub use alloy::transports::http::reqwest::Url;
 
 pub use client::GolemBaseClient;

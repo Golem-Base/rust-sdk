@@ -1,4 +1,4 @@
-use alloy::primitives::{keccak256, Address};
+use alloy::primitives::{Address, keccak256};
 use anyhow::Result;
 use clap::Parser;
 use std::fs;

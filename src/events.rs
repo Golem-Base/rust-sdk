@@ -1,8 +1,8 @@
 use alloy::eips::BlockNumberOrTag;
-use alloy::primitives::{keccak256, B256};
+use alloy::primitives::{B256, keccak256};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder, WsConnect};
-use alloy::rpc::types::eth::Filter;
 use alloy::rpc::types::Log;
+use alloy::rpc::types::eth::Filter;
 use alloy::transports::http::reqwest::Url;
 use anyhow::Result;
 use futures::{Stream, StreamExt};

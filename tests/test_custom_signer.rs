@@ -1,4 +1,4 @@
-use alloy::primitives::{keccak256, Address};
+use alloy::primitives::{Address, keccak256};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::signers::{Signature, SignerSync};
 use anyhow::Result;
@@ -8,8 +8,8 @@ use serial_test::serial;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use golem_base_sdk::{client::GolemBaseClient, entity::Create, signers::TransactionSigner, Url};
-use golem_base_test_utils::{init_logger, GOLEM_BASE_URL, TEST_TTL};
+use golem_base_sdk::{Url, client::GolemBaseClient, entity::Create, signers::TransactionSigner};
+use golem_base_test_utils::{GOLEM_BASE_URL, TEST_TTL, init_logger};
 
 /// A custom signer that uses tokio::task::spawn_local for signing
 struct LocalTaskSigner {

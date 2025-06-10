@@ -1,8 +1,8 @@
 use anyhow::Result;
 use serial_test::serial;
 
-use golem_base_sdk::{client::GolemBaseClient, entity::Create, Url};
-use golem_base_test_utils::{cleanup_entities, create_test_account, init_logger, GOLEM_BASE_URL};
+use golem_base_sdk::{Url, client::GolemBaseClient, entity::Create};
+use golem_base_test_utils::{GOLEM_BASE_URL, cleanup_entities, create_test_account, init_logger};
 
 #[tokio::test]
 #[serial]

@@ -1,11 +1,11 @@
+use crate::GolemBaseClient;
 use crate::entity::Hash;
 use crate::entity::{
     Create, DeleteResult, EntityResult, Extend, ExtendResult, GolemBaseTransaction, Update,
 };
-use crate::GolemBaseClient;
 
 use alloy::network::TransactionBuilder;
-use alloy::primitives::{address, Address, TxKind};
+use alloy::primitives::{Address, TxKind, address};
 use alloy::providers::Provider;
 use alloy::rpc::types::{Log, TransactionReceipt, TransactionRequest};
 use alloy_rlp::Encodable;
