@@ -50,6 +50,7 @@ jobs:
           destination_dir: ${{ github.head_ref }}
 
       - name: Comment PR with docs URL
+        if: github.event_name == 'pull_request'
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
