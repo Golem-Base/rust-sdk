@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS"],"fn":["golem_base_storage_entity_btl_extended"],"struct":["Account","TransactionChannel"]};
+window.SIDEBAR_ITEMS = {"constant":["GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS"],"fn":["get_receipt","golem_base_storage_entity_btl_extended"],"struct":["Account","TransactionChannel"]};

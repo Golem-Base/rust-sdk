@@ -531,7 +531,13 @@
 <a href="#530" id="530">530</a>
 <a href="#531" id="531">531</a>
 <a href="#532" id="532">532</a>
-<a href="#533" id="533">533</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashMap;
+<a href="#533" id="533">533</a>
+<a href="#534" id="534">534</a>
+<a href="#535" id="535">535</a>
+<a href="#536" id="536">536</a>
+<a href="#537" id="537">537</a>
+<a href="#538" id="538">538</a>
+<a href="#539" id="539">539</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashMap;
 <span class="kw">use </span>std::path::PathBuf;
 <span class="kw">use </span>std::sync::{Arc, RwLock};
 <span class="kw">use </span>std::time::{Duration, Instant};
@@ -540,7 +546,7 @@
 <span class="kw">use </span>alloy::primitives::{Address, B256};
 <span class="kw">use </span>alloy::providers::{DynProvider, Provider, ProviderBuilder};
 <span class="kw">use </span>alloy::rpc::client::ClientRef;
-<span class="kw">use </span>alloy::rpc::types::SyncStatus;
+<span class="kw">use </span>alloy::rpc::types::{SyncStatus, TransactionReceipt};
 <span class="kw">use </span>alloy::signers::local::PrivateKeySigner;
 <span class="kw">use </span>alloy::transports::http::reqwest::Url;
 <span class="kw">use </span>bigdecimal::BigDecimal;
@@ -1051,6 +1057,12 @@
             </span>.ok_or_else(|| <span class="macro">anyhow::anyhow!</span>(<span class="string">"Failed to get latest block"</span>))<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(latest_block.header.number)
     }
+
+    <span class="doccomment">/// Waits for a arbitrary (not created by this client) transaction to be mined and returns
+    /// its receipt. Handles retries for transaction indexing error.
+    </span><span class="kw">pub async fn </span>wait_for_transaction(<span class="kw-2">&amp;</span><span class="self">self</span>, tx_hash: Hash) -&gt; anyhow::Result&lt;TransactionReceipt&gt; {
+        <span class="kw">crate</span>::account::get_receipt(<span class="kw-2">&amp;</span><span class="self">self</span>.provider, tx_hash).<span class="kw">await
+    </span>}
 
     <span class="doccomment">/// Creates a new WebSocket client for event subscriptions using the default RPC URL.
     </span><span class="kw">pub async fn </span>events_client(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;EventsClient&gt; {

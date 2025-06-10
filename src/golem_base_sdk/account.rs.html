@@ -347,7 +347,16 @@
 <a href="#346" id="346">346</a>
 <a href="#347" id="347">347</a>
 <a href="#348" id="348">348</a>
-<a href="#349" id="349">349</a></pre></div><pre class="rust"><code><span class="kw">use </span>alloy::consensus::{
+<a href="#349" id="349">349</a>
+<a href="#350" id="350">350</a>
+<a href="#351" id="351">351</a>
+<a href="#352" id="352">352</a>
+<a href="#353" id="353">353</a>
+<a href="#354" id="354">354</a>
+<a href="#355" id="355">355</a>
+<a href="#356" id="356">356</a>
+<a href="#357" id="357">357</a>
+<a href="#358" id="358">358</a></pre></div><pre class="rust"><code><span class="kw">use </span>alloy::consensus::{
     EthereumTxEnvelope, EthereumTypedTransaction, SignableTransaction, Signed, TxEip4844,
     TxEip4844Variant,
 };
@@ -474,27 +483,8 @@
     <span class="doccomment">/// Gets a transaction receipt with retries for "transaction indexing is in progress" errors.
     /// Waits until the transaction is indexed and the receipt is available, or returns an error.
     </span><span class="kw">async fn </span>get_receipt_with_retry(<span class="kw-2">&amp;</span><span class="self">self</span>, tx_hash: Hash) -&gt; anyhow::Result&lt;TransactionReceipt&gt; {
-        <span class="kw">loop </span>{
-            <span class="kw">match </span><span class="self">self</span>.provider.get_transaction_receipt(tx_hash).<span class="kw">await </span>{
-                <span class="prelude-val">Ok</span>(opt_receipt) =&gt; <span class="kw">match </span>opt_receipt {
-                    <span class="prelude-val">Some</span>(receipt) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(receipt),
-                    <span class="kw">_ </span>=&gt; {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">100</span>)).<span class="kw">await</span>;
-                        <span class="kw">continue</span>;
-                    }
-                },
-                <span class="prelude-val">Err</span>(e) =&gt; {
-                    <span class="kw">if </span>e.to_string()
-                        .contains(<span class="string">"transaction indexing is in progress"</span>)
-                    {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">100</span>)).<span class="kw">await</span>;
-                        <span class="kw">continue</span>;
-                    }
-                    <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">"Failed to get transaction receipt: {}"</span>, e));
-                }
-            }
-        }
-    }
+        get_receipt(<span class="kw-2">&amp;</span><span class="self">self</span>.provider, tx_hash).<span class="kw">await
+    </span>}
 
     <span class="doccomment">/// Processes a single transaction:
     /// - Gets the current nonce for the sender.
@@ -694,6 +684,34 @@
     /// Returns the balance as a U256 value.
     </span><span class="kw">pub async fn </span>get_balance(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;U256&gt; {
         <span class="prelude-val">Ok</span>(<span class="self">self</span>.provider.get_balance(<span class="self">self</span>.address()).<span class="kw">await</span><span class="question-mark">?</span>)
+    }
+}
+
+<span class="doccomment">/// Gets a transaction receipt with retries for "transaction indexing is in progress" errors.
+/// Waits until the transaction is indexed and the receipt is available, or returns an error.
+</span><span class="kw">pub async fn </span>get_receipt(
+    provider: <span class="kw-2">&amp;</span>DynProvider,
+    tx_hash: Hash,
+) -&gt; anyhow::Result&lt;TransactionReceipt&gt; {
+    <span class="kw">loop </span>{
+        <span class="kw">match </span>provider.get_transaction_receipt(tx_hash).<span class="kw">await </span>{
+            <span class="prelude-val">Ok</span>(opt_receipt) =&gt; <span class="kw">match </span>opt_receipt {
+                <span class="prelude-val">Some</span>(receipt) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(receipt),
+                <span class="kw">_ </span>=&gt; {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">100</span>)).<span class="kw">await</span>;
+                    <span class="kw">continue</span>;
+                }
+            },
+            <span class="prelude-val">Err</span>(e) =&gt; {
+                <span class="kw">if </span>e.to_string()
+                    .contains(<span class="string">"transaction indexing is in progress"</span>)
+                {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">100</span>)).<span class="kw">await</span>;
+                    <span class="kw">continue</span>;
+                }
+                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">"Failed to get transaction receipt: {}"</span>, e));
+            }
+        }
     }
 }
 </code></pre></div></section></main></body></html>
