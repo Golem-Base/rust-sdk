@@ -215,7 +215,14 @@
 <a href="#214" id="214">214</a>
 <a href="#215" id="215">215</a>
 <a href="#216" id="216">216</a>
-<a href="#217" id="217">217</a></pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::entity::Hash;
+<a href="#217" id="217">217</a>
+<a href="#218" id="218">218</a>
+<a href="#219" id="219">219</a>
+<a href="#220" id="220">220</a>
+<a href="#221" id="221">221</a>
+<a href="#222" id="222">222</a>
+<a href="#223" id="223">223</a>
+<a href="#224" id="224">224</a></pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::entity::Hash;
 <span class="kw">use </span><span class="kw">crate</span>::entity::{
     Create, DeleteResult, EntityResult, Extend, ExtendResult, GolemBaseTransaction, Update,
 };
@@ -223,7 +230,6 @@
 
 <span class="kw">use </span>alloy::primitives::{address, Address, TxKind};
 <span class="kw">use </span>alloy::providers::Provider;
-<span class="kw">use </span>alloy::providers::ProviderBuilder;
 <span class="kw">use </span>alloy::rpc::types::{Log, TransactionReceipt, TransactionRequest};
 <span class="kw">use </span>alloy_rlp::Encodable;
 <span class="kw">use </span>displaydoc::Display;
@@ -350,6 +356,12 @@
 
     <span class="doccomment">/// Creates and sends a raw transaction to the GolemBase storage contract.
     /// Encodes the transaction payload and sends it to the contract address.
+    ///
+    /// NOTE: Nonce management is tricky!
+    /// - This implementation always tries to fetch the latest on-chain nonce before sending a transaction,
+    ///   and only falls back to the locally cached base_nonce if the sync fails.
+    /// - Only the number of in-flight transactions is tracked locally.
+    /// - For robust production use, consider also handling stuck transactions (e.g., gas bumping/EIP-1559).
     </span><span class="kw">pub async fn </span>create_raw_transaction(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         payload: GolemBaseTransaction,
@@ -359,14 +371,19 @@
         payload.encode(<span class="kw-2">&amp;mut </span>buffer);
         <span class="macro">log::debug!</span>(<span class="string">"buffer: {:?}"</span>, buffer);
         <span class="kw">let </span>nonce = {
-            <span class="kw">let </span><span class="kw-2">mut </span>nm = <span class="self">self</span>.nonce_manager.lock().<span class="kw">await</span>;
-            <span class="kw">if </span>nm.in_flight == <span class="number">0 </span>{
-                <span class="kw">let </span>wallet_address = <span class="self">self</span>.wallet.address();
-                nm.base_nonce = <span class="self">self
-                    </span>.provider
-                    .get_transaction_count(wallet_address)
-                    .<span class="kw">await
-                    </span>.map_err(|e| Error::TransactionSendError(e.to_string()))<span class="question-mark">?</span>;
+            <span class="comment">// This is sadly needed because `self.provider.get_transaction_count(self.wallet.address()).pending()`
+            // doesn't give the right number...
+            //
+            //      Error: server returned an error response: error code -32000: replacement transaction underpriced
+            </span><span class="kw">let </span><span class="kw-2">mut </span>nm = <span class="self">self</span>.nonce_manager.lock().<span class="kw">await</span>;
+            <span class="kw">let </span>wallet_address = <span class="self">self</span>.wallet.address();
+            <span class="kw">match </span><span class="self">self</span>.provider.get_transaction_count(wallet_address).<span class="kw">await </span>{
+                <span class="prelude-val">Ok</span>(on_chain_nonce) =&gt; {
+                    nm.base_nonce = on_chain_nonce;
+                }
+                <span class="prelude-val">Err</span>(e) =&gt; {
+                    <span class="macro">log::warn!</span>(<span class="string">"Failed to fetch on-chain nonce: {}"</span>, e);
+                }
             }
             nm.next_nonce().<span class="kw">await
         </span>};
@@ -383,11 +400,8 @@
             ..Default::default()
         };
         <span class="macro">log::debug!</span>(<span class="string">"transaction: {:?}"</span>, tx);
-        <span class="kw">let </span>provider = ProviderBuilder::new()
-            .wallet(<span class="self">self</span>.wallet.clone())
-            .connect_http(<span class="self">self</span>.rpc_url.clone());
-        <span class="macro">log::debug!</span>(<span class="string">"provider: {:?}"</span>, provider);
-        <span class="kw">let </span>pending_tx = provider
+        <span class="kw">let </span>pending_tx = <span class="self">self
+            </span>.provider
             .send_transaction(tx)
             .<span class="kw">await
             </span>.map_err(|e| Error::TransactionSendError(e.to_string()))<span class="question-mark">?</span>;
