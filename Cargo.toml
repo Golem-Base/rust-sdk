@@ -1,6 +1,6 @@
 [package]
 name = "golem-base-sdk"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2024"
 description = "A Rust SDK for interacting with GolemBase."
 license = "GPLv3"
