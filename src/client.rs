@@ -161,12 +161,23 @@ impl GolemBaseClient {
 
     /// Creates a new client with the given endpoint.
     /// Initializes with a random wallet.
+    ///
+    /// # Deprecated
+    /// This constructor does **not** set up the Alloy provider with a wallet.
+    /// Use [`GolemBaseClient::builder`] if you want the provider to be configured with a wallet for signing transactions.
+    #[deprecated(
+        note = "This constructor does NOT set up the Alloy provider with a wallet. Use `GolemBaseClient::builder` instead."
+    )]
     pub fn new(rpc_url: Url) -> anyhow::Result<Self> {
         Self::new_uninitialized(rpc_url)
     }
 
     /// Creates a new client without initializing it.
     /// Useful for advanced scenarios or custom initialization.
+    ///
+    /// # Note
+    /// This constructor does **not** set up the Alloy provider with a wallet.
+    /// Use [`GolemBaseClient::builder`] if you want the provider to be configured with a wallet for signing transactions.
     pub fn new_uninitialized(rpc_url: Url) -> anyhow::Result<Self> {
         let wallet = PrivateKeySigner::random();
         let provider = ProviderBuilder::new()

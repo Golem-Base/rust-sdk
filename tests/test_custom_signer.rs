@@ -54,7 +54,7 @@ impl TransactionSigner for LocalTaskSigner {
 #[serial]
 async fn test_custom_signer_with_spawn_local() -> Result<()> {
     init_logger(true);
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    let client = GolemBaseClient::new_uninitialized(Url::parse(GOLEM_BASE_URL)?)?;
 
     // Create a custom signer
     let inner_signer = PrivateKeySigner::random();

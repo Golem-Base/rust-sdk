@@ -12,7 +12,7 @@ const TEST_PRIVATE_KEY_FILE: &str = "test_private.key";
 #[serial]
 async fn test_account_creation_and_funding() -> Result<()> {
     init_logger(false);
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    let client = GolemBaseClient::new_uninitialized(Url::parse(GOLEM_BASE_URL)?)?;
 
     // Create new account
     let account = client.account_generate("test123").await?;
@@ -40,14 +40,14 @@ async fn test_account_creation_and_funding() -> Result<()> {
 #[serial]
 async fn test_account_loading_by_address() -> Result<()> {
     init_logger(false);
-    let client1 = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    let client1 = GolemBaseClient::new_uninitialized(Url::parse(GOLEM_BASE_URL)?)?;
 
     // Create new account with first client
     let account = client1.account_generate("test123").await?;
     log::info!("Created new account: {account}");
 
     // Create new client and load account by address
-    let client2 = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    let client2 = GolemBaseClient::new_uninitialized(Url::parse(GOLEM_BASE_URL)?)?;
     let loaded_account = client2.account_load(account, "test123").await?;
     log::info!("Loaded account by address: {loaded_account}");
 
@@ -60,7 +60,7 @@ async fn test_account_loading_by_address() -> Result<()> {
 #[serial]
 async fn test_account_loading_from_private_key() -> Result<()> {
     init_logger(false);
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    let client = GolemBaseClient::new_uninitialized(Url::parse(GOLEM_BASE_URL)?)?;
 
     // Generate a new private key
     let signer = PrivateKeySigner::random();
@@ -92,7 +92,7 @@ async fn test_account_loading_from_private_key() -> Result<()> {
 #[serial]
 async fn test_fund_transfer() -> Result<()> {
     init_logger(false);
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    let client = GolemBaseClient::new_uninitialized(Url::parse(GOLEM_BASE_URL)?)?;
 
     // Create two accounts
     let account1 = client.account_generate("test123").await?;

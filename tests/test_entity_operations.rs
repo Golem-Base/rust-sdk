@@ -18,7 +18,7 @@ use golem_base_test_utils::{GOLEM_BASE_URL, create_test_account, init_logger};
 async fn test_create_and_retrieve_entry() -> Result<()> {
     init_logger(false);
 
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    let client = GolemBaseClient::new_uninitialized(Url::parse(GOLEM_BASE_URL)?)?;
     let account = create_test_account(&client).await?;
 
     let start_block = client.get_current_block_number().await?;
@@ -54,7 +54,7 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
 async fn test_entity_operations() -> Result<()> {
     init_logger(false);
 
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    let client = GolemBaseClient::new_uninitialized(Url::parse(GOLEM_BASE_URL)?)?;
     let account = create_test_account(&client).await?;
 
     // Create first entity
