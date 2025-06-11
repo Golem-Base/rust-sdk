@@ -168,6 +168,7 @@ impl GolemBaseClient {
     /// Creates a new client without initializing it.
     /// Useful for advanced scenarios or custom initialization.
     pub fn new_uninitialized(rpc_url: Url) -> anyhow::Result<Self> {
+        let wallet = PrivateKeySigner::random();
         let provider = ProviderBuilder::new()
             .connect_http(rpc_url.clone())
             .erased();
@@ -180,7 +181,7 @@ impl GolemBaseClient {
         Ok(Self {
             ro_client,
             accounts: Arc::new(RwLock::new(HashMap::new())),
-            wallet: PrivateKeySigner::random(),
+            wallet,
             tx_config: Arc::new(TransactionConfig::default()),
             nonce_manager: Arc::new(Mutex::new(NonceManager {
                 base_nonce: 0,
