@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["STORAGE_ADDRESS"],"enum":["Error"],"struct":["GolemBaseStorageEntityBTLExtended","GolemBaseStorageEntityCreated","GolemBaseStorageEntityDeleted","GolemBaseStorageEntityUpdated"]};
