@@ -33,18 +33,6 @@ sol! {
         uint256 oldExpirationBlock,
         uint256 newExpirationBlock
     );
-
-    // Typo, legacy
-    event GolemBaseStorageEntityBTLExptended(
-        uint256 indexed entityKey,
-        uint256 expirationBlock
-    );
-
-    // Legacy
-    event GolemBaseStorageEntityTTLExptended(
-        uint256 indexed entityKey,
-        uint256 expirationBlock
-    );
 }
 
 /// Represents errors that can occur in the GolemBase ETH client.
