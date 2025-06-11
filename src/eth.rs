@@ -6,7 +6,6 @@ use crate::GolemBaseClient;
 
 use alloy::primitives::{address, Address, TxKind};
 use alloy::providers::Provider;
-use alloy::providers::ProviderBuilder;
 use alloy::rpc::types::{Log, TransactionReceipt, TransactionRequest};
 use alloy_rlp::Encodable;
 use displaydoc::Display;
@@ -133,6 +132,12 @@ impl GolemBaseClient {
 
     /// Creates and sends a raw transaction to the GolemBase storage contract.
     /// Encodes the transaction payload and sends it to the contract address.
+    ///
+    /// NOTE: Nonce management is tricky!
+    /// - This implementation always tries to fetch the latest on-chain nonce before sending a transaction,
+    ///   and only falls back to the locally cached base_nonce if the sync fails.
+    /// - Only the number of in-flight transactions is tracked locally.
+    /// - For robust production use, consider also handling stuck transactions (e.g., gas bumping/EIP-1559).
     pub async fn create_raw_transaction(
         &self,
         payload: GolemBaseTransaction,
@@ -142,14 +147,19 @@ impl GolemBaseClient {
         payload.encode(&mut buffer);
         log::debug!("buffer: {:?}", buffer);
         let nonce = {
+            // This is sadly needed because `self.provider.get_transaction_count(self.wallet.address()).pending()`
+            // doesn't give the right number...
+            //
+            //      Error: server returned an error response: error code -32000: replacement transaction underpriced
             let mut nm = self.nonce_manager.lock().await;
-            if nm.in_flight == 0 {
-                let wallet_address = self.wallet.address();
-                nm.base_nonce = self
-                    .provider
-                    .get_transaction_count(wallet_address)
-                    .await
-                    .map_err(|e| Error::TransactionSendError(e.to_string()))?;
+            let wallet_address = self.wallet.address();
+            match self.provider.get_transaction_count(wallet_address).await {
+                Ok(on_chain_nonce) => {
+                    nm.base_nonce = on_chain_nonce;
+                }
+                Err(e) => {
+                    log::warn!("Failed to fetch on-chain nonce: {}", e);
+                }
             }
             nm.next_nonce().await
         };
@@ -166,11 +176,8 @@ impl GolemBaseClient {
             ..Default::default()
         };
         log::debug!("transaction: {:?}", tx);
-        let provider = ProviderBuilder::new()
-            .wallet(self.wallet.clone())
-            .connect_http(self.rpc_url.clone());
-        log::debug!("provider: {:?}", provider);
-        let pending_tx = provider
+        let pending_tx = self
+            .provider
             .send_transaction(tx)
             .await
             .map_err(|e| Error::TransactionSendError(e.to_string()))?;

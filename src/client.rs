@@ -94,6 +94,7 @@ impl GolemBaseClient {
     #[builder]
     pub fn builder(wallet: PrivateKeySigner, rpc_url: Url) -> Self {
         let provider = ProviderBuilder::new()
+            .wallet(wallet.clone())
             .connect_http(rpc_url.clone())
             .erased();
 
