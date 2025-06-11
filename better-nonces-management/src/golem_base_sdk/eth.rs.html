@@ -222,20 +222,14 @@
 <a href="#221" id="221">221</a>
 <a href="#222" id="222">222</a>
 <a href="#223" id="223">223</a>
-<a href="#224" id="224">224</a>
-<a href="#225" id="225">225</a>
-<a href="#226" id="226">226</a>
-<a href="#227" id="227">227</a>
-<a href="#228" id="228">228</a>
-<a href="#229" id="229">229</a>
-<a href="#230" id="230">230</a></pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::entity::Hash;
+<a href="#224" id="224">224</a></pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::entity::Hash;
 <span class="kw">use </span><span class="kw">crate</span>::entity::{
     Create, DeleteResult, EntityResult, Extend, ExtendResult, GolemBaseTransaction, Update,
 };
 <span class="kw">use </span><span class="kw">crate</span>::GolemBaseClient;
 
 <span class="kw">use </span>alloy::primitives::{address, Address, TxKind};
-<span class="kw">use </span>alloy::providers::{Provider, ProviderBuilder};
+<span class="kw">use </span>alloy::providers::Provider;
 <span class="kw">use </span>alloy::rpc::types::{Log, TransactionReceipt, TransactionRequest};
 <span class="kw">use </span>alloy_rlp::Encodable;
 <span class="kw">use </span>displaydoc::Display;
@@ -376,21 +370,14 @@
         <span class="kw">let </span><span class="kw-2">mut </span>buffer = Vec::new();
         payload.encode(<span class="kw-2">&amp;mut </span>buffer);
         <span class="macro">log::debug!</span>(<span class="string">"buffer: {:?}"</span>, buffer);
-        <span class="comment">// `self.provider` is a `DynProvider` that have been erased, so I need to recreate one here...
-        //
-        //      Error: TransactionSendError("server returned an error response: error code -32000: unknown account")
-        </span><span class="kw">let </span>provider = ProviderBuilder::new()
-            .wallet(<span class="self">self</span>.wallet.clone())
-            .connect_http(<span class="self">self</span>.rpc_url.clone());
-        <span class="macro">log::debug!</span>(<span class="string">"provider: {:?}"</span>, provider);
         <span class="kw">let </span>nonce = {
-            <span class="comment">// This is sadly needed because `provider.get_transaction_count(self.wallet.address()).pending()`
+            <span class="comment">// This is sadly needed because `self.provider.get_transaction_count(self.wallet.address()).pending()`
             // doesn't give the right number...
             //
             //      Error: server returned an error response: error code -32000: replacement transaction underpriced
             </span><span class="kw">let </span><span class="kw-2">mut </span>nm = <span class="self">self</span>.nonce_manager.lock().<span class="kw">await</span>;
             <span class="kw">let </span>wallet_address = <span class="self">self</span>.wallet.address();
-            <span class="kw">match </span>provider.get_transaction_count(wallet_address).<span class="kw">await </span>{
+            <span class="kw">match </span><span class="self">self</span>.provider.get_transaction_count(wallet_address).<span class="kw">await </span>{
                 <span class="prelude-val">Ok</span>(on_chain_nonce) =&gt; {
                     nm.base_nonce = on_chain_nonce;
                 }
@@ -404,7 +391,7 @@
             to: <span class="prelude-val">Some</span>(TxKind::Call(STORAGE_ADDRESS)),
             input: buffer.into(),
             chain_id: <span class="prelude-val">Some</span>(
-                provider
+                <span class="self">self</span>.provider
                     .get_chain_id()
                     .<span class="kw">await
                     </span>.map_err(|e| Error::TransactionSendError(e.to_string()))<span class="question-mark">?</span>,
@@ -413,7 +400,8 @@
             ..Default::default()
         };
         <span class="macro">log::debug!</span>(<span class="string">"transaction: {:?}"</span>, tx);
-        <span class="kw">let </span>pending_tx = provider
+        <span class="kw">let </span>pending_tx = <span class="self">self
+            </span>.provider
             .send_transaction(tx)
             .<span class="kw">await
             </span>.map_err(|e| Error::TransactionSendError(e.to_string()))<span class="question-mark">?</span>;
