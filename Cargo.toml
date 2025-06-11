@@ -1,7 +1,7 @@
 [package]
 name = "golem-base-sdk"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "A Rust SDK for interacting with GolemBase."
 license = "GPLv3"
 
@@ -14,6 +14,7 @@ alloy = { version = "0.15", features = ["full", "json-rpc"] }
 alloy-json-rpc = "0.15"
 alloy-rlp = "0.3"
 alloy-signer-local = { version = "0.15", features = ["keystore"] }
+alloy-sol-types = "1.1"
 anyhow = "1.0"
 async-trait = "0.1"
 base64 = "0.22"

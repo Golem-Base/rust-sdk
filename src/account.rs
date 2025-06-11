@@ -4,12 +4,12 @@ use alloy::consensus::{
 };
 use alloy::hex;
 use alloy::network::TransactionBuilder;
-use alloy::primitives::{address, keccak256, Address, B256, U256};
+use alloy::primitives::{Address, B256, U256, address, keccak256};
 use alloy::providers::{DynProvider, Provider};
-use alloy::rpc::types::eth::TransactionRequest;
 use alloy::rpc::types::TransactionReceipt;
+use alloy::rpc::types::eth::TransactionRequest;
 use alloy_rlp::{Decodable, Encodable};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use bigdecimal::BigDecimal;
 use std::sync::Arc;
 use tokio::runtime::Builder;

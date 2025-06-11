@@ -1,9 +1,9 @@
-use alloy::primitives::{keccak256, Address};
+use alloy::primitives::{Address, keccak256};
 use alloy::providers::DynProvider;
 use alloy::signers::k256::ecdsa::{SigningKey, VerifyingKey};
 use alloy::signers::local::{LocalSignerError, PrivateKeySigner};
 use alloy::signers::{Signature, SignerSync};
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use rand::thread_rng;
 use std::fs;

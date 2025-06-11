@@ -8,7 +8,7 @@ use url::Url;
 use golem_base_sdk::entity::{Create, Update};
 use golem_base_sdk::events::Event;
 use golem_base_test_utils::{
-    cleanup_entities, create_test_account, init_logger, GOLEM_BASE_URL, TEST_TTL,
+    GOLEM_BASE_URL, TEST_TTL, cleanup_entities, create_test_account, init_logger,
 };
 
 #[tokio::test]

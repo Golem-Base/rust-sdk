@@ -3,7 +3,7 @@ use alloy::providers::Provider;
 use alloy::rpc::json_rpc::{RpcRecv, RpcSend};
 use alloy_json_rpc::RpcError;
 use anyhow::anyhow;
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use bytes::Bytes;
 use displaydoc::Display;
 use serde::{Deserialize, Serialize};

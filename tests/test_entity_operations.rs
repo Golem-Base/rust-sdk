@@ -1,5 +1,5 @@
 use alloy::primitives::B256;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use dirs::config_dir;
 use serial_test::serial;
 use std::fs;
@@ -7,11 +7,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
 
 use golem_base_sdk::{
+    PrivateKeySigner,
     client::GolemBaseClient,
     entity::{Create, Update},
-    PrivateKeySigner,
 };
-use golem_base_test_utils::{create_test_account, init_logger, GOLEM_BASE_URL};
+use golem_base_test_utils::{GOLEM_BASE_URL, create_test_account, init_logger};
 
 #[tokio::test]
 #[serial]

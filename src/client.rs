@@ -18,7 +18,7 @@ use tokio::sync::Mutex;
 
 use crate::account::Account;
 use crate::entity::{Create, GolemBaseTransaction, Hash, Update};
-use crate::events::{golem_base_storage_entity_created, EventsClient};
+use crate::events::{EventsClient, golem_base_storage_entity_created};
 use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner, TransactionSigner};
 use crate::utils::wei_to_eth;

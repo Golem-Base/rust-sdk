@@ -1,15 +1,39 @@
+use crate::GolemBaseClient;
 use crate::entity::Hash;
 use crate::entity::{
     Create, DeleteResult, EntityResult, Extend, ExtendResult, GolemBaseTransaction, Update,
 };
-use crate::GolemBaseClient;
 
-use alloy::primitives::{address, Address, TxKind};
+use alloy::network::TransactionBuilder;
+use alloy::primitives::{Address, TxKind, address};
 use alloy::providers::Provider;
-use alloy::rpc::types::{Log, TransactionReceipt, TransactionRequest};
+use alloy::rpc::types::{TransactionReceipt, TransactionRequest};
 use alloy_rlp::Encodable;
+use alloy_sol_types::{SolEvent, sol};
 use displaydoc::Display;
 use thiserror::Error;
+
+sol! {
+    event GolemBaseStorageEntityCreated(
+        uint256 indexed entityKey,
+        uint256 expirationBlock
+    );
+
+    event GolemBaseStorageEntityUpdated(
+        uint256 indexed entityKey,
+        uint256 expirationBlock
+    );
+
+    event GolemBaseStorageEntityDeleted(
+        uint256 indexed entityKey
+    );
+
+    event GolemBaseStorageEntityBTLExtended(
+        uint256 indexed entityKey,
+        uint256 oldExpirationBlock,
+        uint256 newExpirationBlock
+    );
+}
 
 /// Represents errors that can occur in the GolemBase ETH client.
 /// Used for wrapping transaction, receipt, and log decoding errors.
@@ -41,17 +65,22 @@ impl GolemBaseClient {
                 extensions: vec![],
             })
             .await?;
-        self.process_receipt(receipt, |log| {
-            if log.topics().len() < 2 {
-                return None;
+        let mut results = Vec::new();
+        for log in receipt
+            .logs()
+            .iter()
+            .filter(|log| log.address() == STORAGE_ADDRESS)
+        {
+            // Convert alloy::rpc::types::Log to alloy::primitives::Log
+            let primitive_log: alloy::primitives::Log = log.clone().into();
+            if let Ok(event) = GolemBaseStorageEntityCreated::decode_log(&primitive_log) {
+                results.push(EntityResult {
+                    entity_key: event.entityKey.to_be_bytes().into(), // or your preferred conversion
+                    expiration_block: event.expirationBlock.try_into().unwrap_or_default(), // U256 -> u64
+                });
             }
-            let expiration_block = Self::parse_expiration_block(log.data().data.as_ref());
-            Some(EntityResult {
-                entity_key: log.topics()[1],
-                expiration_block,
-            })
-        })
-        .await
+        }
+        Ok(results)
     }
 
     /// Updates one or more entities in GolemBase and returns their results.
@@ -65,17 +94,21 @@ impl GolemBaseClient {
                 extensions: vec![],
             })
             .await?;
-        self.process_receipt(receipt, |log| {
-            if log.topics().len() < 2 {
-                return None;
+        let mut results = Vec::new();
+        for log in receipt
+            .logs()
+            .iter()
+            .filter(|log| log.address() == STORAGE_ADDRESS)
+        {
+            let primitive_log: alloy::primitives::Log = log.clone().into();
+            if let Ok(event) = GolemBaseStorageEntityUpdated::decode_log(&primitive_log) {
+                results.push(EntityResult {
+                    entity_key: event.entityKey.to_be_bytes().into(),
+                    expiration_block: event.expirationBlock.try_into().unwrap_or_default(),
+                });
             }
-            let expiration_block = Self::parse_expiration_block(log.data().data.as_ref());
-            Some(EntityResult {
-                entity_key: log.topics()[1],
-                expiration_block,
-            })
-        })
-        .await
+        }
+        Ok(results)
     }
 
     /// Deletes one or more entities in GolemBase and returns their results.
@@ -89,15 +122,20 @@ impl GolemBaseClient {
                 extensions: vec![],
             })
             .await?;
-        self.process_receipt(receipt, |log| {
-            if log.topics().len() < 2 {
-                return None;
+        let mut results = Vec::new();
+        for log in receipt
+            .logs()
+            .iter()
+            .filter(|log| log.address() == STORAGE_ADDRESS)
+        {
+            let primitive_log: alloy::primitives::Log = log.clone().into();
+            if let Ok(event) = GolemBaseStorageEntityDeleted::decode_log(&primitive_log) {
+                results.push(DeleteResult {
+                    entity_key: event.entityKey.to_be_bytes().into(),
+                });
             }
-            Some(DeleteResult {
-                entity_key: log.topics()[1],
-            })
-        })
-        .await
+        }
+        Ok(results)
     }
 
     /// Extends the BTL (block time to live) of one or more entities and returns their results.
@@ -114,20 +152,22 @@ impl GolemBaseClient {
                 extensions,
             })
             .await?;
-        self.process_receipt(receipt, |log| {
-            let data = log.data().data.as_ref();
-            if log.topics().len() < 2 {
-                return None;
+        let mut results = Vec::new();
+        for log in receipt
+            .logs()
+            .iter()
+            .filter(|log| log.address() == STORAGE_ADDRESS)
+        {
+            let primitive_log: alloy::primitives::Log = log.clone().into();
+            if let Ok(event) = GolemBaseStorageEntityBTLExtended::decode_log(&primitive_log) {
+                results.push(ExtendResult {
+                    entity_key: event.entityKey.to_be_bytes().into(),
+                    old_expiration_block: event.oldExpirationBlock.try_into().unwrap_or_default(),
+                    new_expiration_block: event.newExpirationBlock.try_into().unwrap_or_default(),
+                });
             }
-            let old_expiration_block = Self::parse_expiration_block(&data[..8]);
-            let new_expiration_block = Self::parse_expiration_block(&data[8..]);
-            Some(ExtendResult {
-                entity_key: log.topics()[1],
-                old_expiration_block,
-                new_expiration_block,
-            })
-        })
-        .await
+        }
+        Ok(results)
     }
 
     /// Creates and sends a raw transaction to the GolemBase storage contract.
@@ -163,7 +203,7 @@ impl GolemBaseClient {
             }
             nm.next_nonce().await
         };
-        let tx = TransactionRequest {
+        let tx_base = TransactionRequest {
             to: Some(TxKind::Call(STORAGE_ADDRESS)),
             input: buffer.into(),
             chain_id: Some(
@@ -175,7 +215,18 @@ impl GolemBaseClient {
             nonce: Some(nonce),
             ..Default::default()
         };
-        log::debug!("transaction: {:?}", tx);
+        log::debug!("transaction: {:?}", tx_base);
+        let estimated_gas = self
+            .provider
+            .estimate_gas(tx_base.clone())
+            .await
+            .map_err(|e| Error::TransactionSendError(format!("Failed to estimate gas: {}", e)))?;
+        let tx = tx_base.with_gas_limit(estimated_gas).with_gas_price(
+            self.provider
+                .get_gas_price()
+                .await
+                .map_err(|e| Error::TransactionSendError(e.to_string()))?,
+        );
         let pending_tx = self
             .provider
             .send_transaction(tx)
@@ -192,33 +243,5 @@ impl GolemBaseClient {
             nm.complete().await;
         }
         Ok(receipt)
-    }
-
-    /// Processes a transaction receipt and maps logs into the desired result type.
-    /// Filters logs for the storage contract and applies the provided mapping function.
-    async fn process_receipt<T, F>(
-        &self,
-        receipt: TransactionReceipt,
-        log_mapper: F,
-    ) -> Result<Vec<T>, Error>
-    where
-        F: Fn(&Log) -> Option<T>,
-    {
-        let results: Vec<T> = receipt
-            .logs()
-            .iter()
-            .filter(|log| log.address() == STORAGE_ADDRESS)
-            .filter_map(log_mapper)
-            .collect();
-        Ok(results)
-    }
-
-    /// Parses a single `u64` value from log data, padding the beginning with zeros if needed.
-    /// Used to extract expiration block numbers from log data fields.
-    fn parse_expiration_block(data: &[u8]) -> u64 {
-        let mut padded_data = [0u8; 8];
-        let start = 8_usize.saturating_sub(data.len());
-        padded_data[start..].copy_from_slice(&data[..data.len().min(8)]);
-        u64::from_be_bytes(padded_data)
     }
 }
