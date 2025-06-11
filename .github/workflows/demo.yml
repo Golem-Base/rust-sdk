@@ -26,6 +26,32 @@ jobs:
       - name: Run Rust yagna interaction example
         run: cargo run --example yagna_interaction
 
+      - name: Build API binary
+        run: cargo build --bin golem-base-sdk-api
+        working-directory: ./api
+
+      - name: Start API server
+        run: ./target/debug/golem-base-sdk-api &
+        working-directory: ./api
+
+      - name: Wait for API server to be ready
+        run: |
+          for i in {1..10}; do
+            if curl -s http://127.0.0.1:8080/entities/foobar; then
+              break
+            fi
+            sleep 1
+          done
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Run API integration test
+        run: .github/workflows/test_api.sh
+        env:
+          ACCOUNT_ADDRESS: ${{ env.ACCOUNT_ADDRESS }}
+
   run-tests-and-docs:
     runs-on: ubuntu-latest
     steps:
