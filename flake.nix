@@ -17,17 +17,28 @@
   };
 
   # Flake outputs: build and dev environments for each system
-  outputs = { self, nixpkgs, crane, rust-overlay, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      nixpkgs,
+      crane,
+      rust-overlay,
+      flake-utils,
+      ...
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
+
         # Import nixpkgs with Rust overlay
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
-        inherit (pkgs) lib;
 
         # Rust toolchain and build dependencies
         rustToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain;
-        nativeBuildInputs = with pkgs; [ rustToolchain pkg-config ];
+        nativeBuildInputs = with pkgs; [
+          rustToolchain
+          pkg-config
+        ];
         buildInputs = with pkgs; [ openssl ];
 
         # Prepare source and build args using crane
@@ -36,18 +47,23 @@
         commonArgs = {
           inherit src nativeBuildInputs buildInputs;
           strictDeps = true;
+          # The tests don't work in the nix sandbox
           doCheck = false;
         };
 
         # Build Rust dependencies and crate
         cargoArtifacts = craneLib.buildDepsOnly commonArgs;
-        my-crate = craneLib.buildPackage (commonArgs // { inherit cargoArtifacts; });
+        rustSdk = craneLib.buildPackage (commonArgs // { inherit cargoArtifacts; });
 
-      in {
+      in
+      {
         # Expose built crate and devShell
-        packages = { default = my-crate; };
+        packages = {
+          default = rustSdk;
+        };
 
-        devShells.default = with pkgs;
+        devShells.default =
+          with pkgs;
           mkShell {
             inherit nativeBuildInputs;
             buildInputs = buildInputs ++ [ pre-commit ];
@@ -55,5 +71,6 @@
               export PATH=${rustToolchain}/bin:$PATH
             '';
           };
-      });
+      }
+    );
 }
