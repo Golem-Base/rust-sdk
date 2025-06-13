@@ -65,12 +65,9 @@ impl GolemBaseClient {
                 extensions: vec![],
             })
             .await?;
-        let mut results = Vec::new();
-        for log in receipt
-            .logs()
-            .iter()
-            .filter(|log| log.address() == STORAGE_ADDRESS)
-        {
+        let logs = receipt.logs();
+        let mut results = Vec::with_capacity(logs.len());
+        for log in logs.iter().filter(|log| log.address() == STORAGE_ADDRESS) {
             // Convert alloy::rpc::types::Log to alloy::primitives::Log
             let primitive_log: alloy::primitives::Log = log.clone().into();
             if let Ok(event) = GolemBaseStorageEntityCreated::decode_log(&primitive_log) {
@@ -94,12 +91,9 @@ impl GolemBaseClient {
                 extensions: vec![],
             })
             .await?;
-        let mut results = Vec::new();
-        for log in receipt
-            .logs()
-            .iter()
-            .filter(|log| log.address() == STORAGE_ADDRESS)
-        {
+        let logs = receipt.logs();
+        let mut results = Vec::with_capacity(logs.len());
+        for log in logs.iter().filter(|log| log.address() == STORAGE_ADDRESS) {
             let primitive_log: alloy::primitives::Log = log.clone().into();
             if let Ok(event) = GolemBaseStorageEntityUpdated::decode_log(&primitive_log) {
                 results.push(EntityResult {
@@ -122,12 +116,9 @@ impl GolemBaseClient {
                 extensions: vec![],
             })
             .await?;
-        let mut results = Vec::new();
-        for log in receipt
-            .logs()
-            .iter()
-            .filter(|log| log.address() == STORAGE_ADDRESS)
-        {
+        let logs = receipt.logs();
+        let mut results = Vec::with_capacity(logs.len());
+        for log in logs.iter().filter(|log| log.address() == STORAGE_ADDRESS) {
             let primitive_log: alloy::primitives::Log = log.clone().into();
             if let Ok(event) = GolemBaseStorageEntityDeleted::decode_log(&primitive_log) {
                 results.push(DeleteResult {
@@ -152,12 +143,9 @@ impl GolemBaseClient {
                 extensions,
             })
             .await?;
-        let mut results = Vec::new();
-        for log in receipt
-            .logs()
-            .iter()
-            .filter(|log| log.address() == STORAGE_ADDRESS)
-        {
+        let logs = receipt.logs();
+        let mut results = Vec::with_capacity(logs.len());
+        for log in logs.iter().filter(|log| log.address() == STORAGE_ADDRESS) {
             let primitive_log: alloy::primitives::Log = log.clone().into();
             if let Ok(event) = GolemBaseStorageEntityBTLExtended::decode_log(&primitive_log) {
                 results.push(ExtendResult {

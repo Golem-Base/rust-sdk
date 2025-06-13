@@ -36,7 +36,7 @@ pub async fn get_entities(
         .await
         .ok();
     if let Some(rows) = rows {
-        let mut entities = Vec::new();
+        let mut entities = Vec::with_capacity(rows.len());
         for row in rows {
             let _id: String = row.get("id");
             let data: String = row.get("data");
