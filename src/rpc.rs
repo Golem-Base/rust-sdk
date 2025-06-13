@@ -11,7 +11,7 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use thiserror::Error;
 
-use crate::{GolemBaseClient, Hash, NumericAnnotation, StringAnnotation};
+use crate::{GolemBaseRoClient, Hash, NumericAnnotation, StringAnnotation};
 
 /// Represents errors that can occur in the GolemBase RPC module.
 /// Used to wrap and describe errors from RPC requests, decoding, or deserialization.
@@ -76,7 +76,7 @@ impl SearchResult {
     }
 }
 
-impl GolemBaseClient {
+impl GolemBaseRoClient {
     /// Makes a JSON-RPC call to the GolemBase endpoint.
     /// Handles serialization, deserialization, and error mapping for RPC requests.
     pub(crate) async fn rpc_call<S: RpcSend, R: RpcRecv>(

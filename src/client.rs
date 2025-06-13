@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -74,19 +75,51 @@ impl Default for TransactionConfig {
 /// A client for interacting with the GolemBase system.
 /// Provides methods for account management, entity operations, balance queries, and event subscriptions.
 #[derive(Clone)]
-pub struct GolemBaseClient {
+pub struct GolemBaseRoClient {
     /// The underlying provider for making RPC calls.
     pub(crate) provider: DynProvider,
-    /// Registered accounts mapped by address.
-    pub(crate) accounts: Arc<RwLock<HashMap<Address, Account>>>,
     /// The URL of the GolemBase endpoint.
     pub(crate) rpc_url: Url,
+}
+
+#[bon]
+impl GolemBaseRoClient {
+    /// Creates a new builder for `GolemBaseClient` with the given wallet and RPC URL.
+    /// Initializes the provider and sets up default configuration.
+    #[builder]
+    pub fn builder(rpc_url: Url, provider: Option<DynProvider>) -> Self {
+        let provider = provider.unwrap_or_else(|| {
+            ProviderBuilder::new()
+                .connect_http(rpc_url.clone())
+                .erased()
+        });
+
+        Self { provider, rpc_url }
+    }
+}
+
+/// A client for interacting with the GolemBase system.
+/// Provides methods for account management, entity operations, balance queries, and event subscriptions.
+#[derive(Clone)]
+pub struct GolemBaseClient {
+    /// The underlying GolemBaseRoClient
+    pub(crate) ro_client: GolemBaseRoClient,
+    /// Registered accounts mapped by address.
+    pub(crate) accounts: Arc<RwLock<HashMap<Address, Account>>>,
     /// The Ethereum address of the client owner.
     pub(crate) wallet: PrivateKeySigner,
     /// Transaction configuration.
     pub(crate) tx_config: Arc<TransactionConfig>,
     /// Nonce manager for tracking transaction nonces.
     pub(crate) nonce_manager: Arc<Mutex<NonceManager>>,
+}
+
+impl Deref for GolemBaseClient {
+    type Target = GolemBaseRoClient;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ro_client
+    }
 }
 
 #[bon]
@@ -100,10 +133,14 @@ impl GolemBaseClient {
             .connect_http(rpc_url.clone())
             .erased();
 
+        let ro_client = GolemBaseRoClient::builder()
+            .rpc_url(rpc_url)
+            .provider(provider)
+            .build();
+
         Self {
-            provider,
+            ro_client,
             accounts: Arc::new(RwLock::new(HashMap::new())),
-            rpc_url,
             wallet,
             tx_config: Arc::new(TransactionConfig::default()),
             nonce_manager: Arc::new(Mutex::new(NonceManager {
@@ -136,10 +173,14 @@ impl GolemBaseClient {
             .connect_http(endpoint.clone())
             .erased();
 
+        let ro_client = GolemBaseRoClient::builder()
+            .rpc_url(endpoint)
+            .provider(provider)
+            .build();
+
         Ok(Self {
-            provider,
+            ro_client,
             accounts: Arc::new(RwLock::new(HashMap::new())),
-            rpc_url: endpoint,
             wallet: PrivateKeySigner::random(),
             tx_config: Arc::new(TransactionConfig::default()),
             nonce_manager: Arc::new(Mutex::new(NonceManager {

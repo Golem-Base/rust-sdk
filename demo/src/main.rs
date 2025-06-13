@@ -1,10 +1,12 @@
 use dirs::config_dir;
 use golem_base_sdk::entity::{Create, EntityResult, Update};
-use golem_base_sdk::{Address, Annotation, GolemBaseClient, Hash, PrivateKeySigner, Url};
+use golem_base_sdk::{
+    Address, Annotation, GolemBaseClient, GolemBaseRoClient, Hash, PrivateKeySigner, Url,
+};
 use log::info;
 use std::fs;
 
-async fn log_num_of_entities_owned(client: &GolemBaseClient, owner_address: Address) {
+async fn log_num_of_entities_owned(client: &GolemBaseRoClient, owner_address: Address) {
     let n = client
         .get_entities_of_owner(owner_address)
         .await
