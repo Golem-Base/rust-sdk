@@ -10,6 +10,7 @@ use alloy::rpc::client::ClientRef;
 use alloy::rpc::types::{SyncStatus, TransactionReceipt};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::http::reqwest::Url;
+use alloy_sol_types::SolEvent;
 use bigdecimal::BigDecimal;
 use bon::bon;
 use bytes::Bytes;
@@ -18,7 +19,8 @@ use tokio::sync::Mutex;
 
 use crate::account::Account;
 use crate::entity::{Create, GolemBaseTransaction, Hash, Update};
-use crate::events::{EventsClient, golem_base_storage_entity_created};
+use crate::eth::GolemBaseStorageEntityCreated;
+use crate::events::EventsClient;
 use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner, TransactionSigner};
 use crate::utils::wei_to_eth;
@@ -369,9 +371,27 @@ impl GolemBaseClient {
     /// Creates an entry using the specified account.
     /// Returns the entity ID of the created entry.
     pub async fn create_entry(&self, account: Address, entry: Create) -> anyhow::Result<Hash> {
+        match self.create_entries(account, vec![entry]).await?[..] {
+            [hash] => Ok(hash),
+            [] => {
+                anyhow::bail!("No GolemBaseStorageEntityCreated event found in log topics")
+            }
+            _ => {
+                anyhow::bail!("Expected to only find a single entity, this should never happen")
+            }
+        }
+    }
+
+    /// Creates entries using the specified account.
+    /// Returns the entity IDs of the created entries.
+    pub async fn create_entries(
+        &self,
+        account: Address,
+        entries: Vec<Create>,
+    ) -> anyhow::Result<Vec<Hash>> {
         let account = self.account_get(account)?;
         let tx = GolemBaseTransaction {
-            creates: vec![entry],
+            creates: entries,
             updates: vec![],
             deletes: vec![],
             extensions: vec![],
@@ -387,24 +407,16 @@ impl GolemBaseClient {
             ));
         }
 
-        // Parse logs to get entity ID
-        let entity_id = receipt
-            .logs()
-            .iter()
-            .inspect(|log| log::trace!("Log: {:?}", log))
-            .find_map(|log| {
-                if log.topics().len() >= 2 && log.topics()[0] == golem_base_storage_entity_created()
-                {
-                    // Second topic is the entity ID
-                    Some(log.topics()[1])
-                } else {
-                    None
-                }
-            })
-            .ok_or_else(|| anyhow::anyhow!("No entity ID found in transaction logs"))?;
-
-        log::debug!("Created entity with ID: 0x{:x}", entity_id);
-        Ok(entity_id)
+        let logs = receipt.logs();
+        let mut results = Vec::with_capacity(logs.len());
+        for log in logs.iter() {
+            // Convert alloy::rpc::types::Log to alloy::primitives::Log
+            let primitive_log: alloy::primitives::Log = log.clone().into();
+            if let Ok(event) = GolemBaseStorageEntityCreated::decode_log(&primitive_log) {
+                results.push(event.entityKey.to_be_bytes().into());
+            }
+        }
+        Ok(results)
     }
 
     /// Removes entries from GolemBase.
