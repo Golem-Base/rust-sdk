@@ -1,6 +1,6 @@
 use dirs::config_dir;
-use golem_base_sdk::entity::{Create, EntityResult, Update};
 use futures::StreamExt;
+use golem_base_sdk::entity::{Create, EntityResult, Extend, Update};
 use golem_base_sdk::events::EventsClient;
 use golem_base_sdk::{
     Address, Annotation, GolemBaseClient, GolemBaseRoClient, Hash, PrivateKeySigner, Url,
@@ -93,6 +93,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     let metadata = client.get_entity_metadata(third_entity_key).await?;
     info!("... after the update: {:?}", metadata);
+
+    info!("Extending the third entity...");
+    let metadata = client.get_entity_metadata(third_entity_key).await?;
+    info!("... before the extension: {:?}", metadata);
+    client
+        .extend_entities(vec![Extend {
+            entity_key: third_entity_key,
+            number_of_blocks: 60,
+        }])
+        .await?;
+    let metadata = client.get_entity_metadata(third_entity_key).await?;
+    info!("... after the extension: {:?}", metadata);
 
     info!("Deleting remaining entities...");
     let remaining_entities = client
