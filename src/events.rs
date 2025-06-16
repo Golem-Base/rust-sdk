@@ -1,9 +1,9 @@
 use alloy::eips::BlockNumberOrTag;
-use alloy::primitives::{B256, keccak256};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder, WsConnect};
 use alloy::rpc::types::Log;
 use alloy::rpc::types::eth::Filter;
 use alloy::transports::http::reqwest::Url;
+use alloy_sol_types::{SolEvent, SolEventInterface};
 use anyhow::Result;
 use futures::{Stream, StreamExt};
 use std::convert::TryFrom;
@@ -11,30 +11,7 @@ use std::pin::Pin;
 
 use crate::account::GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS;
 use crate::entity::Hash;
-
-/// Returns the event signature hash for entity creation logs.
-/// Used to identify `GolemBaseStorageEntityCreated` events in the blockchain logs.
-pub fn golem_base_storage_entity_created() -> B256 {
-    keccak256(b"GolemBaseStorageEntityCreated(uint256,uint256)")
-}
-
-/// Returns the event signature hash for entity deletion logs.
-/// Used to identify `GolemBaseStorageEntityDeleted` events in the blockchain logs.
-pub fn golem_base_storage_entity_deleted() -> B256 {
-    keccak256(b"GolemBaseStorageEntityDeleted(uint256)")
-}
-
-/// Returns the event signature hash for entity update logs.
-/// Used to identify `GolemBaseStorageEntityUpdated` events in the blockchain logs.
-pub fn golem_base_storage_entity_updated() -> B256 {
-    keccak256(b"GolemBaseStorageEntityUpdated(uint256,uint256)")
-}
-
-/// Returns the event signature hash for TTL extension logs.
-/// Used to identify `GolemBaseStorageEntityTTLExptended` events in the blockchain logs.
-pub fn golem_base_storage_entity_ttl_extended() -> B256 {
-    keccak256(b"GolemBaseStorageEntityTTLExptended(uint256,uint256)")
-}
+use crate::eth::GolemBaseABI;
 
 /// Represents a GolemBase event parsed from the blockchain log.
 /// Used to distinguish between entity creation, update, and removal events.
@@ -45,6 +22,8 @@ pub enum Event {
     EntityCreated {
         /// The ID of the created entity
         entity_id: Hash,
+        /// The expiration block of the entity
+        expiration_block: u64,
         /// The block number where the event occurred
         block_number: u64,
         /// The transaction hash that triggered the event
@@ -55,6 +34,8 @@ pub enum Event {
     EntityUpdated {
         /// The ID of the updated entity
         entity_id: Hash,
+        /// The expiration block of the entity
+        expiration_block: u64,
         /// The block number where the event occurred
         block_number: u64,
         /// The transaction hash that triggered the event
@@ -65,6 +46,20 @@ pub enum Event {
     EntityRemoved {
         /// The ID of the removed entity
         entity_id: Hash,
+        /// The block number where the event occurred
+        block_number: u64,
+        /// The transaction hash that triggered the event
+        transaction_hash: Hash,
+    },
+    /// Entity was extended.
+    /// Contains the entity ID, block number, and transaction hash.
+    EntityExtended {
+        /// The ID of the removed entity
+        entity_id: Hash,
+        /// The old expiration block
+        old_expiration_block: u64,
+        /// The new expiration block
+        new_expiration_block: u64,
         /// The block number where the event occurred
         block_number: u64,
         /// The transaction hash that triggered the event
@@ -84,31 +79,40 @@ impl TryFrom<Log> for Event {
         let transaction_hash = log
             .transaction_hash
             .ok_or_else(|| anyhow::anyhow!("Missing transaction hash"))?;
-
-        if log.topics().len() < 2 {
-            return Err(anyhow::anyhow!("Missing entity ID in event"));
-        }
-
-        let entity_id = Hash::from(log.topics()[1]);
-        let transaction_hash = Hash::from(transaction_hash);
-
-        match log.topics()[0] {
-            topic if topic == golem_base_storage_entity_created() => Ok(Event::EntityCreated {
-                entity_id,
-                block_number,
-                transaction_hash,
-            }),
-            topic if topic == golem_base_storage_entity_updated() => Ok(Event::EntityUpdated {
-                entity_id,
-                block_number,
-                transaction_hash,
-            }),
-            topic if topic == golem_base_storage_entity_deleted() => Ok(Event::EntityRemoved {
-                entity_id,
-                block_number,
-                transaction_hash,
-            }),
-            _ => Err(anyhow::anyhow!("Unknown event topic")),
+        let parsed = GolemBaseABI::GolemBaseABIEvents::decode_log(&log.into())?;
+        match parsed.data {
+            GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityCreated(data) => {
+                Ok(Event::EntityCreated {
+                    entity_id: data.entityKey.into(),
+                    expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
+                    block_number,
+                    transaction_hash,
+                })
+            }
+            GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityUpdated(data) => {
+                Ok(Event::EntityUpdated {
+                    entity_id: data.entityKey.into(),
+                    expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
+                    block_number,
+                    transaction_hash,
+                })
+            }
+            GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityDeleted(data) => {
+                Ok(Event::EntityRemoved {
+                    entity_id: data.entityKey.into(),
+                    block_number,
+                    transaction_hash,
+                })
+            }
+            GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityBTLExtended(data) => {
+                Ok(Event::EntityExtended {
+                    entity_id: data.entityKey.into(),
+                    old_expiration_block: data.oldExpirationBlock.try_into().unwrap_or_default(),
+                    new_expiration_block: data.newExpirationBlock.try_into().unwrap_or_default(),
+                    block_number,
+                    transaction_hash,
+                })
+            }
         }
     }
 }
@@ -161,10 +165,11 @@ impl EventsClient {
         Filter::new()
             .address(GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS)
             .from_block(block)
-            .event_signature(vec![
-                golem_base_storage_entity_created(),
-                golem_base_storage_entity_updated(),
-                golem_base_storage_entity_deleted(),
+            .events(vec![
+                GolemBaseABI::GolemBaseStorageEntityCreated::SIGNATURE,
+                GolemBaseABI::GolemBaseStorageEntityUpdated::SIGNATURE,
+                GolemBaseABI::GolemBaseStorageEntityDeleted::SIGNATURE,
+                GolemBaseABI::GolemBaseStorageEntityBTLExtended::SIGNATURE,
             ])
     }
 

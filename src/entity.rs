@@ -144,6 +144,14 @@ pub struct DeleteResult {
     pub entity_key: Hash,
 }
 
+#[derive(Debug, Default)]
+pub struct TransactionResult {
+    pub creates: Vec<EntityResult>,
+    pub updates: Vec<EntityResult>,
+    pub deletes: Vec<DeleteResult>,
+    pub extensions: Vec<ExtendResult>,
+}
+
 impl Create {
     /// Creates a new `Create` operation with empty annotations.
     /// Accepts a payload as bytes and a BTL value.

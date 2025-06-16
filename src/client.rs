@@ -20,7 +20,7 @@ use tokio::sync::Mutex;
 
 use crate::account::Account;
 use crate::entity::{Create, GolemBaseTransaction, Hash, Update};
-use crate::eth::GolemBaseStorageEntityCreated;
+use crate::eth::GolemBaseABI;
 use crate::events::EventsClient;
 use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner, TransactionSigner};
@@ -162,19 +162,19 @@ impl GolemBaseClient {
 
     /// Creates a new client with the given endpoint.
     /// Initializes with a random wallet.
-    pub fn new(endpoint: Url) -> anyhow::Result<Self> {
-        Self::new_uninitialized(endpoint)
+    pub fn new(rpc_url: Url) -> anyhow::Result<Self> {
+        Self::new_uninitialized(rpc_url)
     }
 
     /// Creates a new client without initializing it.
     /// Useful for advanced scenarios or custom initialization.
-    pub fn new_uninitialized(endpoint: Url) -> anyhow::Result<Self> {
+    pub fn new_uninitialized(rpc_url: Url) -> anyhow::Result<Self> {
         let provider = ProviderBuilder::new()
-            .connect_http(endpoint.clone())
+            .connect_http(rpc_url.clone())
             .erased();
 
         let ro_client = GolemBaseRoClient::builder()
-            .rpc_url(endpoint)
+            .rpc_url(rpc_url)
             .provider(provider)
             .build();
 
@@ -453,7 +453,9 @@ impl GolemBaseClient {
         for log in logs.iter() {
             // Convert alloy::rpc::types::Log to alloy::primitives::Log
             let primitive_log: alloy::primitives::Log = log.clone().into();
-            if let Ok(event) = GolemBaseStorageEntityCreated::decode_log(&primitive_log) {
+            if let Ok(event) =
+                GolemBaseABI::GolemBaseStorageEntityCreated::decode_log(&primitive_log)
+            {
                 results.push(event.entityKey.to_be_bytes().into());
             }
         }
