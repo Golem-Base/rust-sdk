@@ -1,5 +1,7 @@
 use dirs::config_dir;
 use golem_base_sdk::entity::{Create, EntityResult, Update};
+use futures::StreamExt;
+use golem_base_sdk::events::EventsClient;
 use golem_base_sdk::{
     Address, Annotation, GolemBaseClient, GolemBaseRoClient, Hash, PrivateKeySigner, Url,
 };
@@ -36,6 +38,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let owner_address = client.get_owner_address();
     info!("Owner address: {}", owner_address);
     log_num_of_entities_owned(&client, owner_address).await;
+
+    tokio::spawn(async move {
+        let events_client = EventsClient::new(Url::parse("ws://localhost:8545").unwrap())
+            .await
+            .unwrap();
+        let mut event_stream = events_client.events_stream().await.unwrap();
+        while let Some(event) = (event_stream).next().await {
+            info!("Got event: {:?}", event)
+        }
+    });
 
     info!("Creating entities...");
     let creates = vec![
