@@ -23,7 +23,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut private_key_path = config_dir().ok_or("Failed to get config directory")?;
     private_key_path.push("golembase/private.key");
-    let private_key_bytes = fs::read(&private_key_path)?;
+    let private_key_bytes = fs::read(&private_key_path).map_err(|e| {
+        format!(
+            "Failed to read private key at {}: {}",
+            private_key_path.display(),
+            e
+        )
+    })?;
     let private_key = Hash::from_slice(&private_key_bytes);
 
     let signer = PrivateKeySigner::from_bytes(&private_key)
