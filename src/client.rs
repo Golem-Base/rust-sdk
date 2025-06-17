@@ -11,7 +11,6 @@ use alloy::rpc::client::ClientRef;
 use alloy::rpc::types::{SyncStatus, TransactionReceipt};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::http::reqwest::Url;
-use alloy_sol_types::SolEvent;
 use bigdecimal::BigDecimal;
 use bon::bon;
 use bytes::Bytes;
@@ -19,8 +18,8 @@ use log;
 use tokio::sync::Mutex;
 
 use crate::account::Account;
-use crate::entity::{Create, GolemBaseTransaction, Hash, Update};
-use crate::eth::GolemBaseABI;
+use crate::entity::{Create, Extend, GolemBaseTransaction, Hash, TransactionResult, Update};
+use crate::eth;
 use crate::events::EventsClient;
 use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner, TransactionSigner};
@@ -409,6 +408,48 @@ impl GolemBaseClient {
         Ok(self.provider.get_accounts().await?)
     }
 
+    pub async fn send_transaction_from(
+        &self,
+        account: Address,
+        creates: Vec<Create>,
+        updates: Vec<Update>,
+        deletes: Vec<Hash>,
+        extensions: Vec<Extend>,
+    ) -> anyhow::Result<TransactionResult> {
+        let account = self.account_get(account)?;
+        let tx = GolemBaseTransaction {
+            creates,
+            updates,
+            deletes,
+            extensions,
+        };
+
+        log::debug!("Sending storage transaction from {}", account.address());
+
+        let receipt = account.send_db_transaction(tx).await?;
+
+        receipt
+            .try_into()
+            .map_err(|e: eth::Error| anyhow::anyhow!("Failed to convert tx receipt: {}", e))
+    }
+
+    /// Creates entries using the specified account.
+    /// Returns the entity IDs of the created entries.
+    pub async fn create_entries(
+        &self,
+        account: Address,
+        entries: Vec<Create>,
+    ) -> anyhow::Result<Vec<Hash>> {
+        let tx_result = self
+            .send_transaction_from(account, entries, vec![], vec![], vec![])
+            .await?;
+        Ok(tx_result
+            .creates
+            .iter()
+            .map(|create| create.entity_key)
+            .collect())
+    }
+
     /// Creates an entry using the specified account.
     /// Returns the entity ID of the created entry.
     pub async fn create_entry(&self, account: Address, entry: Create) -> anyhow::Result<Hash> {
@@ -421,45 +462,6 @@ impl GolemBaseClient {
                 anyhow::bail!("Expected to only find a single entity, this should never happen")
             }
         }
-    }
-
-    /// Creates entries using the specified account.
-    /// Returns the entity IDs of the created entries.
-    pub async fn create_entries(
-        &self,
-        account: Address,
-        entries: Vec<Create>,
-    ) -> anyhow::Result<Vec<Hash>> {
-        let account = self.account_get(account)?;
-        let tx = GolemBaseTransaction {
-            creates: entries,
-            updates: vec![],
-            deletes: vec![],
-            extensions: vec![],
-        };
-
-        log::debug!("Sending storage transaction from {}", account.address());
-
-        let receipt = account.send_db_transaction(tx).await?;
-        if !receipt.status() {
-            return Err(anyhow::anyhow!(
-                "Transaction {} failed despite being mined.",
-                receipt.transaction_hash
-            ));
-        }
-
-        let logs = receipt.logs();
-        let mut results = Vec::with_capacity(logs.len());
-        for log in logs.iter() {
-            // Convert alloy::rpc::types::Log to alloy::primitives::Log
-            let primitive_log: alloy::primitives::Log = log.clone().into();
-            if let Ok(event) =
-                GolemBaseABI::GolemBaseStorageEntityCreated::decode_log(&primitive_log)
-            {
-                results.push(event.entityKey.to_be_bytes().into());
-            }
-        }
-        Ok(results)
     }
 
     /// Removes entries from GolemBase.
@@ -476,31 +478,8 @@ impl GolemBaseClient {
         if entry_ids.is_empty() {
             return Ok(());
         }
-
-        let account = self.account_get(account)?;
-        let entry_count = entry_ids.len();
-        let tx = GolemBaseTransaction {
-            creates: vec![],
-            updates: vec![],
-            deletes: entry_ids,
-            extensions: vec![],
-        };
-
-        log::debug!(
-            "Sending delete transaction from {} for {} entries",
-            account.address(),
-            entry_count
-        );
-
-        let receipt = account.send_db_transaction(tx).await?;
-        if !receipt.status() {
-            return Err(anyhow::anyhow!(
-                "Transaction {} failed despite being mined.",
-                receipt.transaction_hash
-            ));
-        }
-
-        log::debug!("Successfully removed {} entries", entry_count);
+        self.send_transaction_from(account, vec![], vec![], entry_ids, vec![])
+            .await?;
         Ok(())
     }
 
@@ -530,6 +509,21 @@ impl GolemBaseClient {
         }
     }
 
+    pub async fn update_entries(
+        &self,
+        account: Address,
+        updates: Vec<Update>,
+    ) -> anyhow::Result<Vec<Hash>> {
+        let tx_result = self
+            .send_transaction_from(account, vec![], updates, vec![], vec![])
+            .await?;
+        Ok(tx_result
+            .updates
+            .iter()
+            .map(|update| update.entity_key)
+            .collect())
+    }
+
     /// Updates an entry using the specified account.
     /// Sends an update transaction for the given entry.
     ///
@@ -537,31 +531,15 @@ impl GolemBaseClient {
     /// * `account` - The account address that owns the entry.
     /// * `update` - The update operation containing new data and annotations.
     pub async fn update_entry(&self, account: Address, update: Update) -> anyhow::Result<()> {
-        let entity_key = update.entity_key;
-        let account = self.account_get(account)?;
-        let tx = GolemBaseTransaction {
-            creates: vec![],
-            updates: vec![update],
-            deletes: vec![],
-            extensions: vec![],
-        };
-
-        log::debug!(
-            "Sending update transaction from {} for entry 0x{:x}",
-            account.address(),
-            entity_key
-        );
-
-        let receipt = account.send_db_transaction(tx).await?;
-        if !receipt.status() {
-            return Err(anyhow::anyhow!(
-                "Transaction {} failed despite being mined.",
-                receipt.transaction_hash
-            ));
+        match self.update_entries(account, vec![update]).await?[..] {
+            [_] => Ok(()),
+            [] => {
+                anyhow::bail!("No GolemBaseStorageEntityUpdated event found in log topics")
+            }
+            _ => {
+                anyhow::bail!("Expected to only find a single entity, this should never happen")
+            }
         }
-
-        log::debug!("Successfully updated entry with ID: 0x{:x}", entity_key);
-        Ok(())
     }
 
     /// Gets the current block number from the chain.

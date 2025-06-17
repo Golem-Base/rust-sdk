@@ -10,7 +10,7 @@ use alloy::primitives::{Address, TxKind, address};
 use alloy::providers::Provider;
 use alloy::rpc::types::{TransactionReceipt, TransactionRequest};
 use alloy_rlp::Encodable;
-use alloy_sol_types::{SolEventInterface, sol};
+use alloy_sol_types::sol;
 use displaydoc::Display;
 use thiserror::Error;
 
@@ -73,51 +73,7 @@ impl GolemBaseClient {
             })
             .await?;
 
-        let mut txres = TransactionResult::default();
-        receipt.logs().iter().cloned().try_for_each(|log| {
-            let log: alloy::primitives::Log = log.into();
-            let parsed = GolemBaseABI::GolemBaseABIEvents::decode_log(&log).map_err(|e| {
-                Error::TransactionReceiptError(format!("Error decoding event log: {}", e))
-            })?;
-            match parsed.data {
-                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityCreated(data) => {
-                    txres.creates.push(EntityResult {
-                        entity_key: data.entityKey.into(),
-                        expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
-                    });
-                    Ok(())
-                }
-                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityUpdated(data) => {
-                    txres.updates.push(EntityResult {
-                        entity_key: data.entityKey.into(),
-                        expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
-                    });
-                    Ok(())
-                }
-                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityDeleted(data) => {
-                    txres.deletes.push(DeleteResult {
-                        entity_key: data.entityKey.into(),
-                    });
-                    Ok(())
-                }
-                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityBTLExtended(data) => {
-                    txres.extensions.push(ExtendResult {
-                        entity_key: data.entityKey.into(),
-                        old_expiration_block: data
-                            .oldExpirationBlock
-                            .try_into()
-                            .unwrap_or_default(),
-                        new_expiration_block: data
-                            .newExpirationBlock
-                            .try_into()
-                            .unwrap_or_default(),
-                    });
-                    Ok(())
-                }
-            }
-        })?;
-
-        Ok(txres)
+        receipt.try_into()
     }
 
     /// Creates one or more new entities in GolemBase and returns their results.

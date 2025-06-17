@@ -4,7 +4,7 @@ use alloy::consensus::{
 };
 use alloy::hex;
 use alloy::network::TransactionBuilder;
-use alloy::primitives::{Address, B256, U256, address, keccak256};
+use alloy::primitives::{Address, U256, address};
 use alloy::providers::{DynProvider, Provider};
 use alloy::rpc::types::TransactionReceipt;
 use alloy::rpc::types::eth::TransactionRequest;
@@ -59,12 +59,6 @@ struct TransactionQueue {
     sender: mpsc::Sender<QueueMessage>,
     signer: Arc<Box<dyn TransactionSigner>>,
     provider: DynProvider,
-}
-
-/// Event signature for extending BTL (block time to live) of an entity.
-/// Used to identify `GolemBaseStorageEntityBTLExtended` events in logs.
-pub fn golem_base_storage_entity_btl_extended() -> B256 {
-    keccak256(b"GolemBaseStorageEntityBTLExtended(uint256,uint256)")
 }
 
 impl TransactionQueue {
