@@ -9,9 +9,8 @@ use futures::{Stream, StreamExt};
 use std::convert::TryFrom;
 use std::pin::Pin;
 
-use crate::account::GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS;
 use crate::entity::Hash;
-use crate::eth::GolemBaseABI;
+use crate::eth::{self, GolemBaseABI};
 
 /// Represents a GolemBase event parsed from the blockchain log.
 /// Used to distinguish between entity creation, update, and removal events.
@@ -163,7 +162,7 @@ impl EventsClient {
     /// Creates a filter for GolemBase events, specifying the contract address and event signatures.
     fn create_event_filter(&self, block: BlockNumberOrTag) -> Filter {
         Filter::new()
-            .address(GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS)
+            .address(eth::STORAGE_ADDRESS)
             .from_block(block)
             .events(vec![
                 GolemBaseABI::GolemBaseStorageEntityCreated::SIGNATURE,
