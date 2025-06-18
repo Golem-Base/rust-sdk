@@ -1,37 +1,36 @@
-use alloy::primitives::Address;
+use alloy::primitives::B256;
 use anyhow::Result;
-use bigdecimal::BigDecimal;
-
-use golem_base_sdk::client::GolemBaseClient;
+use dirs::config_dir;
+use golem_base_sdk::{GolemBaseClient, PrivateKeySigner};
+use std::fs;
+use url::Url;
 
 /// Default URL for GolemBase node in tests
 pub const GOLEM_BASE_URL: &str = "http://localhost:8545";
+pub const GOLEM_BASE_WS_URL: &str = "ws://localhost:8545";
 
 /// Default TTL value for test entities
 pub const TEST_TTL: u64 = 30;
 
-/// Initializes the logger for tests
-pub fn init_logger(should_init: bool) {
-    if should_init {
-        let _ = env_logger::try_init();
-    }
-}
+pub fn get_client() -> Result<GolemBaseClient> {
+    let mut private_key_path =
+        config_dir().ok_or_else(|| anyhow::anyhow!("Failed to get config directory"))?;
+    private_key_path.push("golembase/private.key");
+    let private_key_bytes = fs::read(&private_key_path).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to read private key at {}: {}",
+            private_key_path.display(),
+            e
+        )
+    })?;
+    let private_key = B256::from_slice(&private_key_bytes);
 
-/// Removes all existing entities from the GolemBase node
-pub async fn cleanup_entities(client: &GolemBaseClient, account: Address) -> Result<()> {
-    let all_entity_keys = client.get_all_entity_keys().await?;
-    log::info!("Removing all existing entities: {:?}", all_entity_keys);
-    if !all_entity_keys.is_empty() {
-        client.remove_entries(account, all_entity_keys).await?;
-    }
-    Ok(())
-}
-
-/// Creates a new test account with initial funding
-pub async fn create_test_account(client: &GolemBaseClient) -> Result<Address> {
-    let account = client.account_generate("test123").await?;
-    let fund_tx = client.fund(account, BigDecimal::from(1)).await?;
-
-    log::info!("Account {account} funded with transaction: {fund_tx}");
-    Ok(account)
+    let signer = PrivateKeySigner::from_bytes(&private_key)
+        .map_err(|e| anyhow::anyhow!("Failed to parse private key: {}", e))?;
+    let url = Url::parse(GOLEM_BASE_URL)?;
+    let client = GolemBaseClient::builder()
+        .wallet(signer)
+        .rpc_url(url)
+        .build();
+    Ok(client)
 }

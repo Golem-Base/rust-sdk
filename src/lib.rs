@@ -44,10 +44,6 @@ pub mod rpc;
 /// Exposes the main client interface for interacting with the GolemBase network.
 pub mod client;
 
-/// Module for account management.
-/// Includes types and helpers for user accounts and key handling.
-pub mod account;
-
 /// Module for GolemBase entities and data types.
 /// Defines core types such as annotations, hashes, and entity representations.
 pub mod entity;
@@ -55,10 +51,6 @@ pub mod entity;
 /// Module for event handling.
 /// Contains types and utilities for working with GolemBase events.
 pub mod events;
-
-/// Module for custom signers.
-/// Provides abstractions and implementations for signing transactions and messages.
-pub mod signers;
 
 /// Module with utility functions.
 /// Includes helpers for encoding, decoding, and other common tasks.

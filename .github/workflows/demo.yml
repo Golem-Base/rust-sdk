@@ -23,9 +23,6 @@ jobs:
         run: cargo run
         working-directory: ./demo
 
-      - name: Run Rust yagna interaction example
-        run: cargo run --example yagna_interaction
-
   run-tests-and-docs:
     runs-on: ubuntu-latest
     steps:
