@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS"],"fn":["get_receipt"],"struct":["Account","TransactionChannel"]};
