@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -17,8 +18,9 @@ use log;
 use tokio::sync::Mutex;
 
 use crate::account::Account;
-use crate::entity::{Create, GolemBaseTransaction, Hash, Update};
-use crate::events::{EventsClient, golem_base_storage_entity_created};
+use crate::entity::{Create, Extend, GolemBaseTransaction, Hash, TransactionResult, Update};
+use crate::eth;
+use crate::events::EventsClient;
 use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner, TransactionSigner};
 use crate::utils::wei_to_eth;
@@ -72,19 +74,51 @@ impl Default for TransactionConfig {
 /// A client for interacting with the GolemBase system.
 /// Provides methods for account management, entity operations, balance queries, and event subscriptions.
 #[derive(Clone)]
-pub struct GolemBaseClient {
+pub struct GolemBaseRoClient {
     /// The underlying provider for making RPC calls.
     pub(crate) provider: DynProvider,
-    /// Registered accounts mapped by address.
-    pub(crate) accounts: Arc<RwLock<HashMap<Address, Account>>>,
     /// The URL of the GolemBase endpoint.
     pub(crate) rpc_url: Url,
+}
+
+#[bon]
+impl GolemBaseRoClient {
+    /// Creates a new builder for `GolemBaseClient` with the given wallet and RPC URL.
+    /// Initializes the provider and sets up default configuration.
+    #[builder]
+    pub fn builder(rpc_url: Url, provider: Option<DynProvider>) -> Self {
+        let provider = provider.unwrap_or_else(|| {
+            ProviderBuilder::new()
+                .connect_http(rpc_url.clone())
+                .erased()
+        });
+
+        Self { provider, rpc_url }
+    }
+}
+
+/// A client for interacting with the GolemBase system.
+/// Provides methods for account management, entity operations, balance queries, and event subscriptions.
+#[derive(Clone)]
+pub struct GolemBaseClient {
+    /// The underlying GolemBaseRoClient
+    pub(crate) ro_client: GolemBaseRoClient,
+    /// Registered accounts mapped by address.
+    pub(crate) accounts: Arc<RwLock<HashMap<Address, Account>>>,
     /// The Ethereum address of the client owner.
     pub(crate) wallet: PrivateKeySigner,
     /// Transaction configuration.
     pub(crate) tx_config: Arc<TransactionConfig>,
     /// Nonce manager for tracking transaction nonces.
     pub(crate) nonce_manager: Arc<Mutex<NonceManager>>,
+}
+
+impl Deref for GolemBaseClient {
+    type Target = GolemBaseRoClient;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ro_client
+    }
 }
 
 #[bon]
@@ -98,10 +132,14 @@ impl GolemBaseClient {
             .connect_http(rpc_url.clone())
             .erased();
 
+        let ro_client = GolemBaseRoClient::builder()
+            .rpc_url(rpc_url)
+            .provider(provider)
+            .build();
+
         Self {
-            provider,
+            ro_client,
             accounts: Arc::new(RwLock::new(HashMap::new())),
-            rpc_url,
             wallet,
             tx_config: Arc::new(TransactionConfig::default()),
             nonce_manager: Arc::new(Mutex::new(NonceManager {
@@ -123,21 +161,25 @@ impl GolemBaseClient {
 
     /// Creates a new client with the given endpoint.
     /// Initializes with a random wallet.
-    pub fn new(endpoint: Url) -> anyhow::Result<Self> {
-        Self::new_uninitialized(endpoint)
+    pub fn new(rpc_url: Url) -> anyhow::Result<Self> {
+        Self::new_uninitialized(rpc_url)
     }
 
     /// Creates a new client without initializing it.
     /// Useful for advanced scenarios or custom initialization.
-    pub fn new_uninitialized(endpoint: Url) -> anyhow::Result<Self> {
+    pub fn new_uninitialized(rpc_url: Url) -> anyhow::Result<Self> {
         let provider = ProviderBuilder::new()
-            .connect_http(endpoint.clone())
+            .connect_http(rpc_url.clone())
             .erased();
 
+        let ro_client = GolemBaseRoClient::builder()
+            .rpc_url(rpc_url)
+            .provider(provider)
+            .build();
+
         Ok(Self {
-            provider,
+            ro_client,
             accounts: Arc::new(RwLock::new(HashMap::new())),
-            rpc_url: endpoint,
             wallet: PrivateKeySigner::random(),
             tx_config: Arc::new(TransactionConfig::default()),
             nonce_manager: Arc::new(Mutex::new(NonceManager {
@@ -366,45 +408,60 @@ impl GolemBaseClient {
         Ok(self.provider.get_accounts().await?)
     }
 
-    /// Creates an entry using the specified account.
-    /// Returns the entity ID of the created entry.
-    pub async fn create_entry(&self, account: Address, entry: Create) -> anyhow::Result<Hash> {
+    pub async fn send_transaction_from(
+        &self,
+        account: Address,
+        creates: Vec<Create>,
+        updates: Vec<Update>,
+        deletes: Vec<Hash>,
+        extensions: Vec<Extend>,
+    ) -> anyhow::Result<TransactionResult> {
         let account = self.account_get(account)?;
         let tx = GolemBaseTransaction {
-            creates: vec![entry],
-            updates: vec![],
-            deletes: vec![],
-            extensions: vec![],
+            creates,
+            updates,
+            deletes,
+            extensions,
         };
 
         log::debug!("Sending storage transaction from {}", account.address());
 
         let receipt = account.send_db_transaction(tx).await?;
-        if !receipt.status() {
-            return Err(anyhow::anyhow!(
-                "Transaction {} failed despite being mined.",
-                receipt.transaction_hash
-            ));
-        }
 
-        // Parse logs to get entity ID
-        let entity_id = receipt
-            .logs()
+        receipt
+            .try_into()
+            .map_err(|e: eth::Error| anyhow::anyhow!("Failed to convert tx receipt: {}", e))
+    }
+
+    /// Creates entries using the specified account.
+    /// Returns the entity IDs of the created entries.
+    pub async fn create_entries(
+        &self,
+        account: Address,
+        entries: Vec<Create>,
+    ) -> anyhow::Result<Vec<Hash>> {
+        let tx_result = self
+            .send_transaction_from(account, entries, vec![], vec![], vec![])
+            .await?;
+        Ok(tx_result
+            .creates
             .iter()
-            .inspect(|log| log::trace!("Log: {:?}", log))
-            .find_map(|log| {
-                if log.topics().len() >= 2 && log.topics()[0] == golem_base_storage_entity_created()
-                {
-                    // Second topic is the entity ID
-                    Some(log.topics()[1])
-                } else {
-                    None
-                }
-            })
-            .ok_or_else(|| anyhow::anyhow!("No entity ID found in transaction logs"))?;
+            .map(|create| create.entity_key)
+            .collect())
+    }
 
-        log::debug!("Created entity with ID: 0x{:x}", entity_id);
-        Ok(entity_id)
+    /// Creates an entry using the specified account.
+    /// Returns the entity ID of the created entry.
+    pub async fn create_entry(&self, account: Address, entry: Create) -> anyhow::Result<Hash> {
+        match self.create_entries(account, vec![entry]).await?[..] {
+            [hash] => Ok(hash),
+            [] => {
+                anyhow::bail!("No GolemBaseStorageEntityCreated event found in log topics")
+            }
+            _ => {
+                anyhow::bail!("Expected to only find a single entity, this should never happen")
+            }
+        }
     }
 
     /// Removes entries from GolemBase.
@@ -421,31 +478,8 @@ impl GolemBaseClient {
         if entry_ids.is_empty() {
             return Ok(());
         }
-
-        let account = self.account_get(account)?;
-        let entry_count = entry_ids.len();
-        let tx = GolemBaseTransaction {
-            creates: vec![],
-            updates: vec![],
-            deletes: entry_ids,
-            extensions: vec![],
-        };
-
-        log::debug!(
-            "Sending delete transaction from {} for {} entries",
-            account.address(),
-            entry_count
-        );
-
-        let receipt = account.send_db_transaction(tx).await?;
-        if !receipt.status() {
-            return Err(anyhow::anyhow!(
-                "Transaction {} failed despite being mined.",
-                receipt.transaction_hash
-            ));
-        }
-
-        log::debug!("Successfully removed {} entries", entry_count);
+        self.send_transaction_from(account, vec![], vec![], entry_ids, vec![])
+            .await?;
         Ok(())
     }
 
@@ -475,6 +509,21 @@ impl GolemBaseClient {
         }
     }
 
+    pub async fn update_entries(
+        &self,
+        account: Address,
+        updates: Vec<Update>,
+    ) -> anyhow::Result<Vec<Hash>> {
+        let tx_result = self
+            .send_transaction_from(account, vec![], updates, vec![], vec![])
+            .await?;
+        Ok(tx_result
+            .updates
+            .iter()
+            .map(|update| update.entity_key)
+            .collect())
+    }
+
     /// Updates an entry using the specified account.
     /// Sends an update transaction for the given entry.
     ///
@@ -482,31 +531,15 @@ impl GolemBaseClient {
     /// * `account` - The account address that owns the entry.
     /// * `update` - The update operation containing new data and annotations.
     pub async fn update_entry(&self, account: Address, update: Update) -> anyhow::Result<()> {
-        let entity_key = update.entity_key;
-        let account = self.account_get(account)?;
-        let tx = GolemBaseTransaction {
-            creates: vec![],
-            updates: vec![update],
-            deletes: vec![],
-            extensions: vec![],
-        };
-
-        log::debug!(
-            "Sending update transaction from {} for entry 0x{:x}",
-            account.address(),
-            entity_key
-        );
-
-        let receipt = account.send_db_transaction(tx).await?;
-        if !receipt.status() {
-            return Err(anyhow::anyhow!(
-                "Transaction {} failed despite being mined.",
-                receipt.transaction_hash
-            ));
+        match self.update_entries(account, vec![update]).await?[..] {
+            [_] => Ok(()),
+            [] => {
+                anyhow::bail!("No GolemBaseStorageEntityUpdated event found in log topics")
+            }
+            _ => {
+                anyhow::bail!("Expected to only find a single entity, this should never happen")
+            }
         }
-
-        log::debug!("Successfully updated entry with ID: 0x{:x}", entity_key);
-        Ok(())
     }
 
     /// Gets the current block number from the chain.

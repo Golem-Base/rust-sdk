@@ -152,7 +152,7 @@ async fn test_concurrent_entity_creation_batch() -> Result<()> {
     let task1 = tokio::spawn({
         let client = client.clone();
         async move {
-            let mut creates = Vec::new();
+            let mut creates = Vec::with_capacity(ENTITIES_PER_TASK);
             for i in 0..ENTITIES_PER_TASK {
                 let payload = format!("task1_entity_{}", i).into_bytes();
                 let entry = Create::new(payload, 300)
@@ -168,7 +168,7 @@ async fn test_concurrent_entity_creation_batch() -> Result<()> {
     let task2 = tokio::spawn({
         let client = client.clone();
         async move {
-            let mut creates = Vec::new();
+            let mut creates = Vec::with_capacity(ENTITIES_PER_TASK);
             for i in 0..ENTITIES_PER_TASK {
                 let payload = format!("task2_entity_{}", i).into_bytes();
                 let entry = Create::new(payload, 300)

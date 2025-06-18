@@ -1,8 +1,12 @@
 use alloy::primitives::B256;
+use alloy::rpc::types::TransactionReceipt;
 use alloy_rlp::{Encodable, RlpDecodable, RlpEncodable};
+use alloy_sol_types::SolEventInterface;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::convert::From;
+
+use crate::eth::{self, GolemBaseABI};
 
 /// A generic key-value pair structure for entity annotations.
 /// Used for both string and numeric metadata attached to entities.
@@ -142,6 +146,73 @@ pub struct ExtendResult {
 pub struct DeleteResult {
     /// The key of the entity that was deleted.
     pub entity_key: Hash,
+}
+
+#[derive(Debug, Default)]
+pub struct TransactionResult {
+    pub creates: Vec<EntityResult>,
+    pub updates: Vec<EntityResult>,
+    pub deletes: Vec<DeleteResult>,
+    pub extensions: Vec<ExtendResult>,
+}
+
+impl TryFrom<TransactionReceipt> for TransactionResult {
+    type Error = eth::Error;
+
+    fn try_from(receipt: TransactionReceipt) -> Result<Self, Self::Error> {
+        if !receipt.status() {
+            return Err(Self::Error::TransactionReceiptError(format!(
+                "Transaction {} failed: {:?}",
+                receipt.transaction_hash, receipt
+            )));
+        }
+
+        let mut txres = TransactionResult::default();
+        receipt.logs().iter().cloned().try_for_each(|log| {
+            let log: alloy::primitives::Log = log.into();
+            let parsed = GolemBaseABI::GolemBaseABIEvents::decode_log(&log).map_err(|e| {
+                Self::Error::TransactionReceiptError(format!("Error decoding event log: {}", e))
+            })?;
+            match parsed.data {
+                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityCreated(data) => {
+                    txres.creates.push(EntityResult {
+                        entity_key: data.entityKey.into(),
+                        expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
+                    });
+                    Ok(())
+                }
+                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityUpdated(data) => {
+                    txres.updates.push(EntityResult {
+                        entity_key: data.entityKey.into(),
+                        expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
+                    });
+                    Ok(())
+                }
+                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityDeleted(data) => {
+                    txres.deletes.push(DeleteResult {
+                        entity_key: data.entityKey.into(),
+                    });
+                    Ok(())
+                }
+                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityBTLExtended(data) => {
+                    txres.extensions.push(ExtendResult {
+                        entity_key: data.entityKey.into(),
+                        old_expiration_block: data
+                            .oldExpirationBlock
+                            .try_into()
+                            .unwrap_or_default(),
+                        new_expiration_block: data
+                            .newExpirationBlock
+                            .try_into()
+                            .unwrap_or_default(),
+                    });
+                    Ok(())
+                }
+            }
+        })?;
+
+        Ok(txres)
+    }
 }
 
 impl Create {

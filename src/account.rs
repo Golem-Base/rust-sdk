@@ -4,7 +4,7 @@ use alloy::consensus::{
 };
 use alloy::hex;
 use alloy::network::TransactionBuilder;
-use alloy::primitives::{Address, B256, U256, address, keccak256};
+use alloy::primitives::{Address, U256};
 use alloy::providers::{DynProvider, Provider};
 use alloy::rpc::types::TransactionReceipt;
 use alloy::rpc::types::eth::TransactionRequest;
@@ -18,13 +18,14 @@ use tokio::task::LocalSet;
 
 use crate::client::TransactionConfig;
 use crate::entity::{GolemBaseTransaction, Hash};
+use crate::eth;
 use crate::signers::TransactionSigner;
 use crate::utils::eth_to_wei;
 
 /// The address of the GolemBase storage processor contract.
 /// All storage-related transactions are sent to this contract address.
-pub const GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS: Address =
-    address!("0x0000000000000000000000000000000060138453");
+#[deprecated = "Use eth::STORAGE_ADDRESS instead"]
+pub const GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS: Address = eth::STORAGE_ADDRESS;
 
 /// Response type for queued transactions.
 /// Used internally for passing transaction results through channels.
@@ -59,12 +60,6 @@ struct TransactionQueue {
     sender: mpsc::Sender<QueueMessage>,
     signer: Arc<Box<dyn TransactionSigner>>,
     provider: DynProvider,
-}
-
-/// Event signature for extending BTL (block time to live) of an entity.
-/// Used to identify `GolemBaseStorageEntityBTLExtended` events in logs.
-pub fn golem_base_storage_entity_btl_extended() -> B256 {
-    keccak256(b"GolemBaseStorageEntityBTLExtended(uint256,uint256)")
 }
 
 impl TransactionQueue {
@@ -272,7 +267,7 @@ impl Account {
         tx.encode(&mut data);
 
         let tx = TransactionRequest::default()
-            .with_to(GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS)
+            .with_to(eth::STORAGE_ADDRESS)
             .with_gas_limit(self.tx_config.gas_limit)
             .with_max_priority_fee_per_gas(self.tx_config.max_priority_fee_per_gas)
             .with_max_fee_per_gas(self.tx_config.max_fee_per_gas)

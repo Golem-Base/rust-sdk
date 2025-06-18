@@ -29,7 +29,7 @@ pub use alloy::signers::Signature;
 pub use alloy::signers::local::PrivateKeySigner;
 pub use alloy::transports::http::reqwest::Url;
 
-pub use client::GolemBaseClient;
+pub use client::{GolemBaseClient, GolemBaseRoClient};
 pub use entity::{Annotation, Hash, NumericAnnotation, StringAnnotation};
 
 /// Module for Ethereum transaction-related functionality.
