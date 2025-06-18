@@ -27,12 +27,11 @@ jobs:
         run: cargo run --example yagna_interaction
 
       - name: Build API binary
-        run: cargo build --bin golem-base-sdk-api
+        run: cargo build
         working-directory: ./api
 
       - name: Start API server
         run: ./target/debug/golem-base-sdk-api &
-        working-directory: ./api
 
       - name: Wait for API server to be ready
         run: |
