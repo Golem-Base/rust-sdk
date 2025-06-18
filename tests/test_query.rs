@@ -1,19 +1,15 @@
 use anyhow::Result;
 use serial_test::serial;
 
-use golem_base_sdk::{PrivateKeySigner, Url, client::GolemBaseClient, entity::Create};
+use golem_base_sdk::{Url, client::GolemBaseClient, entity::Create};
 use golem_base_test_utils::{GOLEM_BASE_URL, cleanup_entities, create_test_account, init_logger};
 
 #[tokio::test]
 #[serial]
 async fn test_query_entities() -> Result<()> {
     init_logger(false);
-    let signer = PrivateKeySigner::random();
     let url = Url::parse(GOLEM_BASE_URL)?;
-    let client = GolemBaseClient::builder()
-        .wallet(signer)
-        .rpc_url(url)
-        .build();
+    let client = GolemBaseClient::new_uninitialized(url)?;
 
     // Create test account
     let account = create_test_account(&client).await?;
