@@ -17,7 +17,7 @@ use golem_base_test_utils::{
 async fn test_event_listening() -> Result<()> {
     init_logger(false);
 
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    let client = GolemBaseClient::new_uninitialized(Url::parse(GOLEM_BASE_URL)?)?;
     let account = create_test_account(&client).await?;
     cleanup_entities(&client, account).await?;
 
@@ -75,7 +75,7 @@ async fn test_event_listening() -> Result<()> {
 async fn test_event_listening_with_timeout() -> Result<()> {
     init_logger(false);
 
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    let client = GolemBaseClient::new_uninitialized(Url::parse(GOLEM_BASE_URL)?)?;
     let account = create_test_account(&client).await.unwrap();
     cleanup_entities(&client, account).await.unwrap();
 

@@ -3,9 +3,9 @@ use bigdecimal::BigDecimal;
 use clap::{Parser, Subcommand};
 use dirs::config_dir;
 use golem_base_sdk::{
+    Address,
     client::GolemBaseClient,
     signers::{InMemorySigner, TransactionSigner},
-    Address,
 };
 use std::fs;
 use url::Url;
@@ -223,7 +223,7 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
     let endpoint = Url::parse(&args.url)?;
-    let client = GolemBaseClient::new(endpoint)?;
+    let client = GolemBaseClient::new_uninitialized(endpoint)?;
 
     // Sync accounts first
     client.account_sync().await?;
