@@ -2,6 +2,7 @@ use alloy::primitives::B256;
 use alloy::rpc::types::TransactionReceipt;
 use alloy_rlp::{Encodable, RlpDecodable, RlpEncodable};
 use alloy_sol_types::SolEventInterface;
+use bon::bon;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::convert::From;
@@ -92,8 +93,18 @@ pub struct Extend {
 
 /// Type representing a transaction in GolemBase, including creates, updates, deletes, and extensions.
 /// Used as the main payload for submitting entity changes to the chain.
-#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
+#[derive(Debug, Clone)]
 pub struct GolemBaseTransaction {
+    pub encodable: EncodableGolemBaseTransaction,
+
+    pub gas_limit: Option<u64>,
+    pub max_priority_fee_per_gas: Option<u128>,
+    pub max_fee_per_gas: Option<u128>,
+}
+
+// A transaction that can be encoded in RLP
+#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
+pub struct EncodableGolemBaseTransaction {
     /// A list of entities to create.
     pub creates: Vec<Create>,
     /// A list of entities to update.
@@ -171,7 +182,7 @@ impl TryFrom<TransactionReceipt> for TransactionResult {
         receipt.logs().iter().cloned().try_for_each(|log| {
             let log: alloy::primitives::Log = log.into();
             let parsed = GolemBaseABI::GolemBaseABIEvents::decode_log(&log).map_err(|e| {
-                Self::Error::TransactionReceiptError(format!("Error decoding event log: {}", e))
+                Self::Error::UnexpectedLogDataError(format!("Error decoding event log: {}", e))
             })?;
             match parsed.data {
                 GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityCreated(data) => {
@@ -314,12 +325,38 @@ impl Extend {
     }
 }
 
+#[bon]
+impl GolemBaseTransaction {
+    #[builder]
+    pub fn builder(
+        creates: Option<Vec<Create>>,
+        updates: Option<Vec<Update>>,
+        deletes: Option<Vec<GolemBaseDelete>>,
+        extensions: Option<Vec<Extend>>,
+        gas_limit: Option<u64>,
+        max_priority_fee_per_gas: Option<u128>,
+        max_fee_per_gas: Option<u128>,
+    ) -> Self {
+        Self {
+            encodable: EncodableGolemBaseTransaction {
+                creates: creates.unwrap_or_default(),
+                updates: updates.unwrap_or_default(),
+                deletes: deletes.unwrap_or_default(),
+                extensions: extensions.unwrap_or_default(),
+            },
+            gas_limit,
+            max_priority_fee_per_gas,
+            max_fee_per_gas,
+        }
+    }
+}
+
 impl GolemBaseTransaction {
     /// Returns the RLP-encoded bytes of the transaction.
     /// Useful for submitting the transaction to the chain.
     pub fn encoded(&self) -> Vec<u8> {
         let mut encoded = Vec::new();
-        self.encode(&mut encoded);
+        self.encodable.encode(&mut encoded);
         encoded
     }
 }
@@ -333,7 +370,7 @@ mod tests {
 
     #[test]
     fn test_empty_transaction() {
-        let tx = GolemBaseTransaction::default();
+        let tx = GolemBaseTransaction::builder().build();
         assert_eq!(hex::encode(tx.encoded()), "c4c0c0c0c0");
     }
 
@@ -341,8 +378,9 @@ mod tests {
     fn test_create_without_annotations() {
         let create = Create::new(b"test payload".to_vec(), 1000);
 
-        let mut tx = GolemBaseTransaction::default();
-        tx.creates.push(create);
+        let tx = GolemBaseTransaction::builder()
+            .creates(vec![create])
+            .build();
 
         assert_eq!(
             hex::encode(tx.encoded()),
@@ -356,8 +394,9 @@ mod tests {
             .annotate_string("foo", "bar")
             .annotate_number("baz", 42);
 
-        let mut tx = GolemBaseTransaction::default();
-        tx.creates.push(create);
+        let tx = GolemBaseTransaction::builder()
+            .creates(vec![create])
+            .build();
 
         assert_eq!(
             hex::encode(tx.encoded()),
@@ -375,8 +414,9 @@ mod tests {
         .annotate_string("status", "active")
         .annotate_number("version", 2);
 
-        let mut tx = GolemBaseTransaction::default();
-        tx.updates.push(update);
+        let tx = GolemBaseTransaction::builder()
+            .updates(vec![update])
+            .build();
 
         assert_eq!(
             hex::encode(tx.encoded()),
@@ -386,8 +426,9 @@ mod tests {
 
     #[test]
     fn test_delete_operation() {
-        let mut tx = GolemBaseTransaction::default();
-        tx.deletes.push(B256::from_slice(&[2; 32]));
+        let tx = GolemBaseTransaction::builder()
+            .deletes(vec![B256::from_slice(&[2; 32])])
+            .build();
 
         assert_eq!(
             hex::encode(tx.encoded()),
@@ -397,11 +438,12 @@ mod tests {
 
     #[test]
     fn test_extend_btl() {
-        let mut tx = GolemBaseTransaction::default();
-        tx.extensions.push(Extend {
-            entity_key: B256::from_slice(&[3; 32]),
-            number_of_blocks: 500,
-        });
+        let tx = GolemBaseTransaction::builder()
+            .extensions(vec![Extend {
+                entity_key: B256::from_slice(&[3; 32]),
+                number_of_blocks: 500,
+            }])
+            .build();
 
         assert_eq!(
             hex::encode(tx.encoded()),
@@ -417,14 +459,15 @@ mod tests {
             b"updated payload".to_vec(),
             2000,
         );
-        let mut tx = GolemBaseTransaction::default();
-        tx.creates.push(create);
-        tx.updates.push(update);
-        tx.deletes.push(B256::from_slice(&[2; 32]));
-        tx.extensions.push(Extend {
-            entity_key: B256::from_slice(&[3; 32]),
-            number_of_blocks: 500,
-        });
+        let tx = GolemBaseTransaction::builder()
+            .creates(vec![create])
+            .updates(vec![update])
+            .deletes(vec![B256::from_slice(&[2; 32])])
+            .extensions(vec![Extend {
+                entity_key: B256::from_slice(&[3; 32]),
+                number_of_blocks: 500,
+            }])
+            .build();
 
         assert_eq!(
             hex::encode(tx.encoded()),
