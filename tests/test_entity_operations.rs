@@ -3,7 +3,7 @@ use bytes::Bytes;
 use serial_test::serial;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use golem_base_sdk::entity::{Create, Extend, GolemBaseTransaction, Update};
+use golem_base_sdk::entity::{Create, Update};
 use golem_base_test_utils::get_client;
 
 #[tokio::test]

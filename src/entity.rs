@@ -303,6 +303,17 @@ impl Update {
     }
 }
 
+impl Extend {
+    /// Creates a new `Update` operation with empty annotations.
+    /// Accepts an entity key, payload as bytes, and a BTL value.
+    pub fn new(entity_key: B256, number_of_blocks: u64) -> Self {
+        Self {
+            entity_key,
+            number_of_blocks,
+        }
+    }
+}
+
 impl GolemBaseTransaction {
     /// Returns the RLP-encoded bytes of the transaction.
     /// Useful for submitting the transaction to the chain.
