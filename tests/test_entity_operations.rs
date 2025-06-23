@@ -1,9 +1,10 @@
+use alloy::primitives::FixedBytes;
 use anyhow::Result;
 use bytes::Bytes;
 use serial_test::serial;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use golem_base_sdk::entity::{Create, Update};
+use golem_base_sdk::entity::{Create, Extend, GolemBaseTransaction, Update};
 use golem_base_test_utils::get_client;
 
 #[tokio::test]
@@ -217,5 +218,30 @@ async fn test_concurrent_entity_creation_batch() -> Result<()> {
         "Successfully verified {} concurrent batch entity creations",
         ENTITIES_PER_TASK * 2
     );
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_failed_tx_explicit_gas() -> Result<()> {
+    let client = get_client()?;
+
+    let start_block = client.get_current_block_number().await?;
+    log::info!("Starting at block: {start_block}");
+
+    let create_tx = GolemBaseTransaction::builder()
+        .extensions(vec![Extend::new(FixedBytes::with_last_byte(1), 1000)])
+        .gas_limit(235200)
+        .build();
+
+    let tx_results = client.send_transaction(create_tx).await;
+
+    assert!(
+        tx_results
+            .unwrap_err()
+            .to_string()
+            .contains("Error during tx execution: ")
+    );
+
     Ok(())
 }
