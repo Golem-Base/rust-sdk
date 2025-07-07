@@ -31,7 +31,8 @@ runs:
 
     - name: Create and fund an account
       run: |
-        go run ./cmd/golembase account create
+        ADDR=$(go run ./cmd/golembase account create | grep 'Address:' | awk '{print $2}')
+        echo "ACCOUNT_ADDRESS=$ADDR" >> $GITHUB_ENV
         go run ./cmd/golembase account fund
       working-directory: ./gb-op-geth
       shell: bash
