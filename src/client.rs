@@ -115,6 +115,11 @@ impl GolemBaseClient {
         self.provider.client()
     }
 
+    /// Gets the underlying RPC client (provider) used for blockchain interactions.
+    pub fn get_rpc_client(&self) -> DynProvider {
+        self.provider.clone()
+    }
+
     /// Gets the Ethereum address of the client owner.
     pub fn get_owner_address(&self) -> Address {
         self.wallet.address()
