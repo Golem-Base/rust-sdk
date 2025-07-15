@@ -340,6 +340,7 @@ pub async fn get_receipt(
             Ok(opt_receipt) => match opt_receipt {
                 Some(receipt) => return Ok(receipt),
                 _ => {
+                    log::debug!("Getting receipt returned None for transaction: {tx_hash}");
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     continue;
                 }
@@ -348,6 +349,9 @@ pub async fn get_receipt(
                 if e.to_string()
                     .contains("transaction indexing is in progress")
                 {
+                    log::debug!(
+                        "Ignoring `indexing is in progress` error for transaction: {tx_hash}"
+                    );
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     continue;
                 }
