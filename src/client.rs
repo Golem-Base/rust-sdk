@@ -527,7 +527,9 @@ impl GolemBaseClient {
     /// Waits for a arbitrary (not created by this client) transaction to be mined and returns
     /// its receipt. Handles retries for transaction indexing error.
     pub async fn wait_for_transaction(&self, tx_hash: Hash) -> anyhow::Result<TransactionReceipt> {
-        crate::account::get_receipt(&self.provider, tx_hash).await
+        crate::account::get_receipt(&self.provider, tx_hash, None)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Transaction receipt not found for hash: {}", tx_hash))
     }
 
     /// Creates a new WebSocket client for event subscriptions using the default RPC URL.

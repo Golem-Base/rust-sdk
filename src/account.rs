@@ -12,6 +12,7 @@ use alloy_rlp::{Decodable, Encodable};
 use anyhow::{anyhow, Result};
 use bigdecimal::BigDecimal;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::runtime::Builder;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::LocalSet;
@@ -123,9 +124,12 @@ impl TransactionQueue {
     }
 
     /// Gets a transaction receipt with retries for "transaction indexing is in progress" errors.
-    /// Waits until the transaction is indexed and the receipt is available, or returns an error.
-    async fn get_receipt_with_retry(&self, tx_hash: Hash) -> anyhow::Result<TransactionReceipt> {
-        get_receipt(&self.provider, tx_hash).await
+    /// Waits until the transaction is indexed and the receipt is available, or returns None if timeout.
+    async fn get_receipt_with_retry(
+        &self,
+        tx_hash: Hash,
+    ) -> anyhow::Result<Option<TransactionReceipt>> {
+        get_receipt(&self.provider, tx_hash, Some(Duration::from_secs(8))).await
     }
 
     /// Processes a single transaction:
@@ -151,18 +155,53 @@ impl TransactionQueue {
         let signed = self.sign_transaction(request).await?;
         let encoded = self.encode_transaction(&signed)?;
 
-        // Send the transaction and register it for tracking.
-        let pending = self
-            .provider
-            .send_raw_transaction(&encoded)
-            .await
-            .map_err(|e| anyhow!("Failed to send transaction: {}", e))?
-            .register()
-            .await
-            .map_err(|e| anyhow!("Failed to register transaction: {}", e))?;
+        let max_retries = 3;
+        let mut attempt = 0;
 
-        let tx_hash = *pending.tx_hash();
-        self.get_receipt_with_retry(tx_hash).await
+        loop {
+            // Send the transaction and register it for tracking.
+            let pending = self
+                .provider
+                .send_raw_transaction(&encoded)
+                .await
+                .map_err(|e| anyhow!("Failed to send transaction: {}", e))?
+                .register()
+                .await
+                .map_err(|e| anyhow!("Failed to register transaction: {}", e))?;
+
+            let tx_hash = *pending.tx_hash();
+            attempt += 1;
+
+            log::debug!(
+                "Transaction attempt {} sent with hash: {}",
+                attempt,
+                tx_hash
+            );
+
+            if let Some(receipt) = self.get_receipt_with_retry(tx_hash).await? {
+                log::info!(
+                    "Transaction succeeded on attempt {} with hash: {}",
+                    attempt,
+                    tx_hash
+                );
+                return Ok(receipt);
+            }
+
+            if attempt >= max_retries {
+                return Err(anyhow!(
+                    "Transaction failed after {} attempts, last hash: {}",
+                    max_retries,
+                    tx_hash
+                ));
+            }
+
+            log::warn!(
+                "Transaction attempt {} timed out (hash: {}), retrying...",
+                attempt,
+                tx_hash
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
 
     /// Spawns a worker task to process queued transactions in the background.
@@ -319,7 +358,8 @@ impl Account {
             .map_err(|e| anyhow!("Failed to send transaction: {}", e))?;
         self.transaction_queue
             .get_receipt_with_retry(*pending.tx_hash())
-            .await
+            .await?
+            .ok_or_else(|| anyhow!("Transaction receipt not found for funding transaction"))
     }
 
     /// Gets the account's ETH balance from the provider.
@@ -331,14 +371,25 @@ impl Account {
 
 /// Gets a transaction receipt with retries for "transaction indexing is in progress" errors.
 /// Waits until the transaction is indexed and the receipt is available, or returns an error.
+/// If a timeout is provided and no receipt is received within that time, returns None.
 pub async fn get_receipt(
     provider: &DynProvider,
     tx_hash: Hash,
-) -> anyhow::Result<TransactionReceipt> {
+    timeout_duration: Option<Duration>,
+) -> anyhow::Result<Option<TransactionReceipt>> {
+    let start_time = std::time::Instant::now();
+
     loop {
+        // Check if we've exceeded the timeout
+        if let Some(duration) = timeout_duration {
+            if start_time.elapsed() >= duration {
+                return Ok(None);
+            }
+        }
+
         match provider.get_transaction_receipt(tx_hash).await {
             Ok(opt_receipt) => match opt_receipt {
-                Some(receipt) => return Ok(receipt),
+                Some(receipt) => return Ok(Some(receipt)),
                 _ => {
                     log::debug!("Getting receipt returned None for transaction: {tx_hash}");
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
