@@ -379,6 +379,11 @@ pub async fn get_receipt(
 ) -> anyhow::Result<Option<TransactionReceipt>> {
     let start_time = std::time::Instant::now();
 
+    if let None = provider.get_transaction_by_hash(tx_hash).await? {
+        log::debug!("Transaction {tx_hash} wasn't send to seqencer properly. Caller should retry.");
+        return Ok(None);
+    }
+
     loop {
         // Check if we've exceeded the timeout
         if let Some(duration) = timeout_duration {
