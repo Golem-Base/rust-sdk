@@ -60,6 +60,7 @@ struct TransactionQueue {
     sender: mpsc::Sender<QueueMessage>,
     signer: Arc<Box<dyn TransactionSigner>>,
     provider: DynProvider,
+    tx_config: Arc<TransactionConfig>,
 }
 
 /// Event signature for extending BTL (block time to live) of an entity.
@@ -71,12 +72,17 @@ pub fn golem_base_storage_entity_btl_extended() -> B256 {
 impl TransactionQueue {
     /// Creates a new transaction queue and spawns a worker task to process transactions.
     /// The worker signs, sends, and tracks receipts for all queued transactions.
-    fn new(provider: DynProvider, signer: Arc<Box<dyn TransactionSigner>>) -> Arc<Self> {
+    fn new(
+        provider: DynProvider,
+        signer: Arc<Box<dyn TransactionSigner>>,
+        tx_config: Arc<TransactionConfig>,
+    ) -> Arc<Self> {
         let (tx, rx) = mpsc::channel(32);
         let queue = Arc::new(Self {
             sender: tx,
             signer,
             provider,
+            tx_config,
         });
         Self::spawn_worker(rx, queue.clone());
         queue
@@ -129,7 +135,8 @@ impl TransactionQueue {
         &self,
         tx_hash: Hash,
     ) -> anyhow::Result<Option<TransactionReceipt>> {
-        get_receipt(&self.provider, tx_hash, Some(Duration::from_secs(60))).await
+        let timeout = self.tx_config.transaction_receipt_timeout.clone();
+        get_receipt(&self.provider, tx_hash, Some(timeout)).await
     }
 
     /// Processes a single transaction:
@@ -155,7 +162,7 @@ impl TransactionQueue {
         let signed = self.sign_transaction(request).await?;
         let encoded = self.encode_transaction(&signed)?;
 
-        let max_retries = 3;
+        let max_retries = self.tx_config.max_retries;
         let mut attempt = 0;
 
         loop {
@@ -275,7 +282,8 @@ impl Account {
         tx_config: Arc<TransactionConfig>,
     ) -> Self {
         let signer = Arc::new(signer);
-        let transaction_queue = TransactionQueue::new(provider.clone(), signer.clone());
+        let transaction_queue =
+            TransactionQueue::new(provider.clone(), signer.clone(), tx_config.clone());
         Self {
             signer,
             provider,

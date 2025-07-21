@@ -57,6 +57,10 @@ pub struct TransactionConfig {
     pub max_priority_fee_per_gas: u128,
     /// Maximum fee per gas (in wei).
     pub max_fee_per_gas: u128,
+    /// Timeout for waiting for transaction receipts.
+    pub transaction_receipt_timeout: Duration,
+    /// Maximum number of retries for transaction receipt polling.
+    pub max_retries: u32,
 }
 
 impl Default for TransactionConfig {
@@ -65,6 +69,8 @@ impl Default for TransactionConfig {
             gas_limit: 1_000_000,
             max_priority_fee_per_gas: 1,
             max_fee_per_gas: 2_000_000,
+            transaction_receipt_timeout: Duration::from_secs(60),
+            max_retries: 3,
         }
     }
 }
@@ -149,6 +155,11 @@ impl GolemBaseClient {
                 in_flight: 0,
             })),
         })
+    }
+
+    pub fn override_config(mut self, tx_config: TransactionConfig) -> Self {
+        self.tx_config = Arc::new(tx_config);
+        self
     }
 
     /// Gets the chain ID from the provider.
