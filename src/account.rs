@@ -129,7 +129,7 @@ impl TransactionQueue {
         &self,
         tx_hash: Hash,
     ) -> anyhow::Result<Option<TransactionReceipt>> {
-        get_receipt(&self.provider, tx_hash, Some(Duration::from_secs(20))).await
+        get_receipt(&self.provider, tx_hash, Some(Duration::from_secs(60))).await
     }
 
     /// Processes a single transaction:
