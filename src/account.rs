@@ -400,19 +400,22 @@ pub async fn get_receipt(
             }
         }
 
+        // Must be checked before getting the receipt, to avoid race conditions.
+        let tx = provider.get_transaction_by_hash(tx_hash).await?;
+
         match provider.get_transaction_receipt(tx_hash).await {
             Ok(opt_receipt) => match opt_receipt {
                 Some(receipt) => return Ok(Some(receipt)),
                 _ => {
                     log::debug!("Getting receipt returned None for transaction: {tx_hash}");
 
-                    if let Some(tx) = provider.get_transaction_by_hash(tx_hash).await? {
+                    if let Some(tx) = tx {
                         if tx.block_hash.is_some() {
                             log::debug!(
-                                "Transaction {tx_hash} was already included in a block {:?} ({:?}).",
-                                tx.block_number,
-                                tx.block_hash.map(|b| hex::encode(b))
-                            );
+                            "Transaction {tx_hash} was already included in a block {:?} ({:?}).",
+                            tx.block_number,
+                            tx.block_hash.map(|b| hex::encode(b))
+                        );
                             bail!("Transaction {tx_hash} was already included in a block, but we are not able to get the receipt.");
                         }
                     }
