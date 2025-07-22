@@ -9,7 +9,7 @@ use alloy::providers::{DynProvider, Provider};
 use alloy::rpc::types::eth::TransactionRequest;
 use alloy::rpc::types::TransactionReceipt;
 use alloy_rlp::{Decodable, Encodable};
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use bigdecimal::BigDecimal;
 use std::sync::Arc;
 use std::time::Duration;
@@ -405,6 +405,18 @@ pub async fn get_receipt(
                 Some(receipt) => return Ok(Some(receipt)),
                 _ => {
                     log::debug!("Getting receipt returned None for transaction: {tx_hash}");
+
+                    if let Some(tx) = provider.get_transaction_by_hash(tx_hash).await? {
+                        if tx.block_hash.is_some() {
+                            log::debug!(
+                                "Transaction {tx_hash} was already included in a block {:?} ({:?}).",
+                                tx.block_number,
+                                tx.block_hash.map(|b| hex::encode(b))
+                            );
+                            bail!("Transaction {tx_hash} was already included in a block, but we are not able to get the receipt.");
+                        }
+                    }
+
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     continue;
                 }
