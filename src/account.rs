@@ -158,14 +158,17 @@ impl TransactionQueue {
         // Update the request with the current nonce.
         let request = request.with_nonce(nonce);
 
-        // Sign and encode the transaction.
-        let signed = self.sign_transaction(request).await?;
-        let encoded = self.encode_transaction(&signed)?;
-
         let max_retries = self.tx_config.max_retries;
         let mut attempt = 0;
 
         loop {
+            // Sign and encode the transaction.
+            let _request = request.clone().with_max_priority_fee_per_gas(
+                self.tx_config.max_priority_fee_per_gas + attempt as u128,
+            );
+            let signed = self.sign_transaction(_request).await?;
+            let encoded = self.encode_transaction(&signed)?;
+
             // Send the transaction and register it for tracking.
             let pending = self
                 .provider
