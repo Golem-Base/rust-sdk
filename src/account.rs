@@ -159,12 +159,13 @@ impl TransactionQueue {
         let request = request.with_nonce(nonce);
 
         let max_retries = self.tx_config.max_retries;
-        let mut attempt = 0;
+        let mut attempt: u32 = 0;
 
         loop {
             // Sign and encode the transaction.
+            const MIN_PRICE_BUMP: u128 = 10;
             let _request = request.clone().with_max_priority_fee_per_gas(
-                self.tx_config.max_priority_fee_per_gas + attempt as u128,
+                self.tx_config.max_priority_fee_per_gas + MIN_PRICE_BUMP * attempt as u128,
             );
             let signed = self.sign_transaction(_request).await?;
             let encoded = self.encode_transaction(&signed)?;
