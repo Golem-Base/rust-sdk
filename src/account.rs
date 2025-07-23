@@ -148,8 +148,8 @@ impl TransactionQueue {
         let fee_cap = request
             .max_fee_per_gas
             .unwrap_or(self.tx_config.max_fee_per_gas);
-        let bumped_tip = tip + (tip * bump_percent) / 100;
-        let bumped_fee_cap = fee_cap + (fee_cap * bump_percent) / 100;
+        let bumped_tip = tip + (tip * bump_percent).div_ceil(100);
+        let bumped_fee_cap = fee_cap + (fee_cap * bump_percent).div_ceil(100);
         request
             .clone()
             .with_max_priority_fee_per_gas(bumped_tip)
