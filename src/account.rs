@@ -139,6 +139,23 @@ impl TransactionQueue {
         get_receipt(&self.provider, tx_hash, Some(timeout)).await
     }
 
+    /// Returns a new TransactionRequest with bumped tip and fee cap by a percentage for replacement transactions.
+    fn bump_fees(&self, request: &TransactionRequest, attempt: u32) -> TransactionRequest {
+        let bump_percent = self.tx_config.price_bump_percent * attempt as u128;
+        let tip = request
+            .max_priority_fee_per_gas
+            .unwrap_or(self.tx_config.max_priority_fee_per_gas);
+        let fee_cap = request
+            .max_fee_per_gas
+            .unwrap_or(self.tx_config.max_fee_per_gas);
+        let bumped_tip = tip + (tip * bump_percent) / 100;
+        let bumped_fee_cap = fee_cap + (fee_cap * bump_percent) / 100;
+        request
+            .clone()
+            .with_max_priority_fee_per_gas(bumped_tip)
+            .with_max_fee_per_gas(bumped_fee_cap)
+    }
+
     /// Processes a single transaction:
     /// - Gets the current nonce for the sender.
     /// - Signs and encodes the transaction.
@@ -162,11 +179,16 @@ impl TransactionQueue {
         let mut attempt: u32 = 0;
 
         loop {
+            let _request = match attempt > 0 {
+                false => request.clone(),
+                // Bump both tip and fee cap by configured percent per attempt.
+                // Otherwise we will either get rejected due to sending exacly the same transaction
+                // (`already known` error) or we will get `replacement transaction underpriced` error
+                // if we don't bump gas prices enough.
+                true => self.bump_fees(&request, attempt),
+            };
+
             // Sign and encode the transaction.
-            const MIN_PRICE_BUMP: u128 = 10;
-            let _request = request.clone().with_max_priority_fee_per_gas(
-                self.tx_config.max_priority_fee_per_gas + MIN_PRICE_BUMP * attempt as u128,
-            );
             let signed = self.sign_transaction(_request).await?;
             let encoded = self.encode_transaction(&signed)?;
 
