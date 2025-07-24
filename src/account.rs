@@ -450,16 +450,20 @@ pub async fn get_receipt(
                     continue;
                 }
             },
-            Err(e) => {
+            Err(e)
                 if e.to_string()
-                    .contains("transaction indexing is in progress")
-                {
-                    log::debug!(
-                        "Ignoring `indexing is in progress` error for transaction: {tx_hash}"
-                    );
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                    continue;
-                }
+                    .contains("transaction indexing is in progress") =>
+            {
+                log::debug!("Ignoring `indexing is in progress` error for transaction: {tx_hash}");
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                continue;
+            }
+            Err(e) if e.to_string().contains("error sending request") => {
+                log::debug!("Ignoring `error sending request` for transaction: {tx_hash}. This error can be due to RPC load blanacing switch");
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                continue;
+            }
+            Err(e) => {
                 return Err(anyhow!("Failed to get transaction receipt: {}", e));
             }
         }
