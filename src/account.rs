@@ -156,6 +156,61 @@ impl TransactionQueue {
             .with_max_fee_per_gas(bumped_fee_cap)
     }
 
+    /// Lists transactions for the given address for nonces starting from (current_nonce - count) up to (current_nonce - 1).
+    /// This is useful for debugging when a transaction fails to understand the state of previous transactions.
+    async fn list_previous_transactions(
+        &self,
+        address: Address,
+        current_nonce: u64,
+        count: u32,
+    ) -> anyhow::Result<()> {
+        if count == 0 {
+            return Ok(());
+        }
+
+        let start_nonce = current_nonce.saturating_sub(count as u64);
+        log::warn!(
+            "Listing transactions for address {address} from nonce {start_nonce} to {}",
+            current_nonce - 1
+        );
+
+        // Query transactions by sender and nonce for each nonce in the range
+        for nonce in start_nonce..current_nonce {
+            match self
+                .provider
+                .get_transaction_by_sender_nonce(address, nonce)
+                .await
+            {
+                Ok(Some(tx)) => {
+                    log::warn!(
+                        "Nonce {nonce}: Hash={}, Block={:?}, Status={:?}",
+                        tx.inner.hash(),
+                        tx.block_number,
+                        tx.block_hash.map(|b| hex::encode(b))
+                    );
+                }
+                Ok(None) => {
+                    log::warn!("Nonce {nonce}: Transaction not found (None returned)");
+                }
+                Err(e) => {
+                    log::warn!("Nonce {nonce}: Error getting transaction: {e}");
+                }
+            }
+        }
+
+        // Also log the current transaction count for reference
+        match self.provider.get_transaction_count(address).await {
+            Ok(tx_count) => {
+                log::warn!("Current transaction count (nonce) for address {address}: {tx_count}");
+            }
+            Err(e) => {
+                log::warn!("Failed to get transaction count for address {address}: {e}");
+            }
+        }
+
+        Ok(())
+    }
+
     /// Processes a single transaction:
     /// - Gets the current nonce for the sender.
     /// - Signs and encodes the transaction.
@@ -205,11 +260,7 @@ impl TransactionQueue {
             let tx_hash = *pending.tx_hash();
             attempt += 1;
 
-            log::debug!(
-                "Transaction attempt {} sent with hash: {}",
-                attempt,
-                tx_hash
-            );
+            log::debug!("Transaction attempt {attempt} sent with hash: {tx_hash}");
 
             if let Some(receipt) = self.get_receipt_with_retry(tx_hash).await? {
                 log::info!("Transaction succeeded on attempt {attempt} with hash: {tx_hash}");
@@ -217,12 +268,22 @@ impl TransactionQueue {
             }
 
             if attempt >= max_retries {
+                // List previous transactions for debugging when we fail
+                if let Err(e) = self.list_previous_transactions(from, nonce, 5).await {
+                    log::warn!("Failed to list previous transactions: {}", e);
+                }
                 return Err(anyhow!(
                     "Transaction failed after {max_retries} attempts, last hash: {tx_hash}"
                 ));
             }
 
             log::warn!("Transaction attempt {attempt} timed out (hash: {tx_hash}), retrying...",);
+
+            // List previous transactions for debugging when we timeout
+            if let Err(e) = self.list_previous_transactions(from, nonce, 3).await {
+                log::warn!("Failed to list previous transactions: {}", e);
+            }
+
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }

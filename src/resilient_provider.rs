@@ -171,6 +171,20 @@ where
         })
         .await
     }
+
+    /// Gets a transaction by sender address and nonce with retry logic.
+    pub async fn get_transaction_by_sender_nonce(
+        &self,
+        sender: Address,
+        nonce: u64,
+    ) -> Result<Option<N::TransactionResponse>> {
+        self.retry("get_transaction_by_sender_nonce", || async {
+            self.provider
+                .get_transaction_by_sender_nonce(sender, nonce)
+                .await
+        })
+        .await
+    }
 }
 
 impl<N> From<DynProvider<N>> for ResilientProvider<N>
