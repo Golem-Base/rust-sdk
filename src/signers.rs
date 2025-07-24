@@ -1,5 +1,4 @@
 use alloy::primitives::{keccak256, Address};
-use alloy::providers::DynProvider;
 use alloy::signers::k256::ecdsa::{SigningKey, VerifyingKey};
 use alloy::signers::local::{LocalSignerError, PrivateKeySigner};
 use alloy::signers::{Signature, SignerSync};
@@ -9,6 +8,7 @@ use rand::thread_rng;
 use std::fs;
 use std::path::PathBuf;
 
+use crate::resilient_provider::ResilientProvider;
 use crate::Hash;
 
 /// Trait for signing transactions with different backends.
@@ -165,14 +165,14 @@ pub struct GolemBaseSigner {
     /// The address of the account as an `Address`.
     address: Address,
     /// The provider for signing, typically a remote node.
-    provider: DynProvider,
+    provider: ResilientProvider,
     /// The chain ID for signing transactions.
     chain_id: u64,
 }
 
 impl GolemBaseSigner {
     /// Creates a new `GolemBaseSigner` with the given address, provider, and chain ID.
-    pub fn new(address: Address, provider: DynProvider, chain_id: u64) -> Self {
+    pub fn new(address: Address, provider: ResilientProvider, chain_id: u64) -> Self {
         Self {
             address,
             provider,

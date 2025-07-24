@@ -87,6 +87,7 @@ impl GolemBaseClient {
         let method = method.into();
         log::debug!("RPC Call - Method: {}, Params: {:?}", method, params);
         self.provider
+            .inner()
             .client()
             .request(method.clone(), params)
             .await

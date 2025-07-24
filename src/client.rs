@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use alloy::eips::BlockNumberOrTag;
 use alloy::primitives::{Address, B256};
-use alloy::providers::{DynProvider, Provider, ProviderBuilder};
+use alloy::providers::{Provider, ProviderBuilder};
 use alloy::rpc::client::ClientRef;
 use alloy::rpc::types::{SyncStatus, TransactionReceipt};
 use alloy::signers::local::PrivateKeySigner;
@@ -19,6 +19,7 @@ use tokio::sync::Mutex;
 use crate::account::Account;
 use crate::entity::{Create, GolemBaseTransaction, Hash, Update};
 use crate::events::{golem_base_storage_entity_created, EventsClient};
+use crate::resilient_provider::ResilientProvider;
 use crate::rpc::Error;
 use crate::signers::{GolemBaseSigner, InMemorySigner, TransactionSigner};
 use crate::utils::wei_to_eth;
@@ -83,7 +84,7 @@ impl Default for TransactionConfig {
 #[derive(Clone)]
 pub struct GolemBaseClient {
     /// The underlying provider for making RPC calls.
-    pub(crate) provider: DynProvider,
+    pub(crate) provider: ResilientProvider,
     /// Registered accounts mapped by address.
     pub(crate) accounts: Arc<RwLock<HashMap<Address, Account>>>,
     /// The URL of the GolemBase endpoint.
@@ -107,7 +108,7 @@ impl GolemBaseClient {
             .erased();
 
         Self {
-            provider,
+            provider: ResilientProvider::from(provider),
             accounts: Arc::new(RwLock::new(HashMap::new())),
             rpc_url,
             wallet,
@@ -121,11 +122,11 @@ impl GolemBaseClient {
 
     /// Gets the underlying Reqwest client used for HTTP requests.
     pub fn get_reqwest_client(&self) -> ClientRef<'_> {
-        self.provider.client()
+        self.provider.inner().client()
     }
 
     /// Gets the underlying RPC client (provider) used for blockchain interactions.
-    pub fn get_rpc_client(&self) -> DynProvider {
+    pub fn get_rpc_client(&self) -> ResilientProvider {
         self.provider.clone()
     }
 
@@ -148,7 +149,7 @@ impl GolemBaseClient {
             .erased();
 
         Ok(Self {
-            provider,
+            provider: ResilientProvider::from(provider),
             accounts: Arc::new(RwLock::new(HashMap::new())),
             rpc_url: endpoint,
             wallet: PrivateKeySigner::random(),

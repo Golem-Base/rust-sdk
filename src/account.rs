@@ -5,7 +5,6 @@ use alloy::consensus::{
 use alloy::hex;
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{address, keccak256, Address, B256, U256};
-use alloy::providers::{DynProvider, Provider};
 use alloy::rpc::types::eth::TransactionRequest;
 use alloy::rpc::types::TransactionReceipt;
 use alloy_rlp::{Decodable, Encodable};
@@ -19,6 +18,7 @@ use tokio::task::LocalSet;
 
 use crate::client::TransactionConfig;
 use crate::entity::{GolemBaseTransaction, Hash};
+use crate::resilient_provider::ResilientProvider;
 use crate::signers::TransactionSigner;
 use crate::utils::eth_to_wei;
 
@@ -59,7 +59,7 @@ struct QueueMessage {
 struct TransactionQueue {
     sender: mpsc::Sender<QueueMessage>,
     signer: Arc<Box<dyn TransactionSigner>>,
-    provider: DynProvider,
+    provider: ResilientProvider,
     tx_config: Arc<TransactionConfig>,
 }
 
@@ -73,7 +73,7 @@ impl TransactionQueue {
     /// Creates a new transaction queue and spawns a worker task to process transactions.
     /// The worker signs, sends, and tracks receipts for all queued transactions.
     fn new(
-        provider: DynProvider,
+        provider: ResilientProvider,
         signer: Arc<Box<dyn TransactionSigner>>,
         tx_config: Arc<TransactionConfig>,
     ) -> Arc<Self> {
@@ -276,8 +276,8 @@ impl TransactionQueue {
                         request,
                         response_tx,
                     } = msg;
-                    let fut = queue.process_transaction(request);
-                    let _ = response_tx.send(fut.await);
+                    let result = queue.process_transaction(request).await;
+                    let _ = response_tx.send(result);
                 }
             });
 
@@ -308,7 +308,7 @@ pub struct Account {
     /// The account's signer for signing transactions.
     pub signer: Arc<Box<dyn TransactionSigner>>,
     /// The provider for making RPC calls.
-    pub provider: DynProvider,
+    pub provider: ResilientProvider,
     /// The chain ID of the connected network.
     pub chain_id: u64,
     /// Transaction queue for managing transaction submissions.
@@ -322,7 +322,7 @@ impl Account {
     /// Initializes a transaction queue for managing transaction submissions.
     pub fn new(
         signer: Box<dyn TransactionSigner>,
-        provider: DynProvider,
+        provider: ResilientProvider,
         chain_id: u64,
         tx_config: Arc<TransactionConfig>,
     ) -> Self {
@@ -426,7 +426,7 @@ impl Account {
 /// Waits until the transaction is indexed and the receipt is available, or returns an error.
 /// If a timeout is provided and no receipt is received within that time, returns None.
 pub async fn get_receipt(
-    provider: &DynProvider,
+    provider: &ResilientProvider,
     tx_hash: Hash,
     timeout_duration: Option<Duration>,
 ) -> anyhow::Result<Option<TransactionReceipt>> {
@@ -452,7 +452,7 @@ pub async fn get_receipt(
             Ok(opt_receipt) => match opt_receipt {
                 Some(receipt) => return Ok(Some(receipt)),
                 _ => {
-                    log::debug!("Getting receipt returned None for transaction: {tx_hash}");
+                    log::trace!("Getting receipt returned None for transaction: {tx_hash}");
 
                     if let Some(tx) = tx {
                         if tx.block_hash.is_some() {

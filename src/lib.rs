@@ -63,3 +63,7 @@ pub mod signers;
 /// Module with utility functions.
 /// Includes helpers for encoding, decoding, and other common tasks.
 pub mod utils;
+
+/// Module for resilient provider functionality.
+/// Provides a wrapper around DynProvider that handles "error sending request" errors by retrying.
+pub mod resilient_provider;
