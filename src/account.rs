@@ -204,10 +204,9 @@ impl TransactionQueue {
                     .await
                     .map_err(|e| anyhow!("Failed to register transaction: {e}"))?,
                 Err(e) => {
+                    log::debug!("Sending transaction failed {e}");
                     if e.to_string().contains("error sending request") {
-                        log::debug!(
-                            "send_raw_transaction failed with 'error sending request', retrying..."
-                        );
+                        log::debug!("Retrying...");
                         continue;
                     } else {
                         return Err(e);
