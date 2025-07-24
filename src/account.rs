@@ -193,14 +193,27 @@ impl TransactionQueue {
             let encoded = self.encode_transaction(&signed)?;
 
             // Send the transaction and register it for tracking.
-            let pending = self
+            let pending = match self
                 .provider
                 .send_raw_transaction(&encoded)
                 .await
-                .map_err(|e| anyhow!("Failed to send transaction: {}", e))?
-                .register()
-                .await
-                .map_err(|e| anyhow!("Failed to register transaction: {}", e))?;
+                .map_err(|e| anyhow!("Failed to send transaction: {e}"))
+            {
+                Ok(pending) => pending
+                    .register()
+                    .await
+                    .map_err(|e| anyhow!("Failed to register transaction: {e}"))?,
+                Err(e) => {
+                    if e.to_string().contains("error sending request") {
+                        log::debug!(
+                            "send_raw_transaction failed with 'error sending request', retrying..."
+                        );
+                        continue;
+                    } else {
+                        return Err(e);
+                    }
+                }
+            };
 
             let tx_hash = *pending.tx_hash();
             attempt += 1;
