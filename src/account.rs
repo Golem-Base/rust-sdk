@@ -206,7 +206,9 @@ impl TransactionQueue {
                 Err(e) => {
                     log::debug!("Sending transaction failed {e}");
                     if e.to_string().contains("error sending request") {
-                        log::debug!("Retrying...");
+                        log::debug!(
+                            "Sending transaction failed with `error sending request`. Retrying..."
+                        );
                         continue;
                     } else {
                         return Err(e);
@@ -223,13 +225,18 @@ impl TransactionQueue {
                 tx_hash
             );
 
-            if let Some(receipt) = self.get_receipt_with_retry(tx_hash).await? {
-                log::info!(
-                    "Transaction succeeded on attempt {} with hash: {}",
-                    attempt,
-                    tx_hash
-                );
-                return Ok(receipt);
+            match self.get_receipt_with_retry(tx_hash).await {
+                Ok(Some(receipt)) => {
+                    log::info!("Transaction succeeded on attempt {attempt} with hash: {tx_hash}");
+                    return Ok(receipt);
+                }
+                Err(e) if e.to_string().contains("error sending request") => {
+                    log::debug!("Receipt fetch failed with `error sending request`. Retrying...");
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+                Err(e) => return Err(e),
+                _ => (),
             }
 
             if attempt >= max_retries {
