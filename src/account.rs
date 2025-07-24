@@ -193,28 +193,14 @@ impl TransactionQueue {
             let encoded = self.encode_transaction(&signed)?;
 
             // Send the transaction and register it for tracking.
-            let pending = match self
+            let pending = self
                 .provider
                 .send_raw_transaction(&encoded)
                 .await
-                .map_err(|e| anyhow!("Failed to send transaction: {e}"))
-            {
-                Ok(pending) => pending
-                    .register()
-                    .await
-                    .map_err(|e| anyhow!("Failed to register transaction: {e}"))?,
-                Err(e) => {
-                    log::debug!("Sending transaction failed {e}");
-                    if e.to_string().contains("error sending request") {
-                        log::debug!(
-                            "Sending transaction failed with `error sending request`. Retrying..."
-                        );
-                        continue;
-                    } else {
-                        return Err(e);
-                    }
-                }
-            };
+                .map_err(|e| anyhow!("Failed to send transaction: {e}"))?
+                .register()
+                .await
+                .map_err(|e| anyhow!("Failed to register transaction: {e}"))?;
 
             let tx_hash = *pending.tx_hash();
             attempt += 1;
@@ -225,33 +211,18 @@ impl TransactionQueue {
                 tx_hash
             );
 
-            match self.get_receipt_with_retry(tx_hash).await {
-                Ok(Some(receipt)) => {
-                    log::info!("Transaction succeeded on attempt {attempt} with hash: {tx_hash}");
-                    return Ok(receipt);
-                }
-                Err(e) if e.to_string().contains("error sending request") => {
-                    log::debug!("Receipt fetch failed with `error sending request`. Retrying...");
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                    continue;
-                }
-                Err(e) => return Err(e),
-                _ => (),
+            if let Some(receipt) = self.get_receipt_with_retry(tx_hash).await? {
+                log::info!("Transaction succeeded on attempt {attempt} with hash: {tx_hash}");
+                return Ok(receipt);
             }
 
             if attempt >= max_retries {
                 return Err(anyhow!(
-                    "Transaction failed after {} attempts, last hash: {}",
-                    max_retries,
-                    tx_hash
+                    "Transaction failed after {max_retries} attempts, last hash: {tx_hash}"
                 ));
             }
 
-            log::warn!(
-                "Transaction attempt {} timed out (hash: {}), retrying...",
-                attempt,
-                tx_hash
-            );
+            log::warn!("Transaction attempt {attempt} timed out (hash: {tx_hash}), retrying...",);
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }
@@ -477,11 +448,7 @@ pub async fn get_receipt(
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 continue;
             }
-            Err(e) if e.to_string().contains("error sending request") => {
-                log::debug!("Ignoring `error sending request` for transaction: {tx_hash}. This error can be due to RPC load blanacing switch");
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                continue;
-            }
+
             Err(e) => {
                 return Err(anyhow!("Failed to get transaction receipt: {}", e));
             }
