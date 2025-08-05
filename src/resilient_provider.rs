@@ -93,10 +93,13 @@ where
         .await
     }
 
-    /// Gets account information using the RPC get_account method with retry logic.
-    pub async fn get_account(&self, address: Address) -> Result<alloy::consensus::Account> {
-        self.retry("get_account", || async {
-            self.provider.get_account(address).await
+    /// Gets account information using the RPC get_accountInfo method with retry logic.
+    pub async fn get_account(
+        &self,
+        address: Address,
+    ) -> Result<alloy::rpc::types::eth::AccountInfo> {
+        self.retry("get_accountInfo", || async {
+            self.provider.get_account_info(address).await
         })
         .await
     }
