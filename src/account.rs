@@ -10,7 +10,7 @@ use alloy::rpc::types::TransactionReceipt;
 use alloy_rlp::{Decodable, Encodable};
 use anyhow::{anyhow, bail, Result};
 use bigdecimal::BigDecimal;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::runtime::Builder;
 use tokio::sync::{mpsc, oneshot};
@@ -21,6 +21,18 @@ use crate::entity::{GolemBaseTransaction, Hash};
 use crate::resilient_provider::ResilientProvider;
 use crate::signers::TransactionSigner;
 use crate::utils::eth_to_wei;
+
+/// Contains all three nonce values for an account
+#[derive(Debug, Clone, derive_more::Display)]
+#[display("Last tracked nonce: {last_used_nonce}, next pending nonce: {next_pending_nonce}, current account nonce: {account_nonce}")]
+pub struct NonceInfo {
+    /// Last nonce used by SDK code (saved during previous call to process_transaction)
+    pub last_used_nonce: u64,
+    /// Next nonce including pending transactions
+    pub next_pending_nonce: u64,
+    /// Current nonce value from blockchain (represents next nonce after last confirmed transaction)
+    pub account_nonce: u64,
+}
 
 /// The address of the GolemBase storage processor contract.
 /// All storage-related transactions are sent to this contract address.
@@ -61,6 +73,8 @@ struct TransactionQueue {
     signer: Arc<Box<dyn TransactionSigner>>,
     provider: ResilientProvider,
     tx_config: Arc<TransactionConfig>,
+    /// Last nonce used by SDK code (saved during previous call to process_transaction)
+    last_used_nonce: Mutex<u64>,
 }
 
 /// Event signature for extending BTL (block time to live) of an entity.
@@ -83,6 +97,7 @@ impl TransactionQueue {
             signer,
             provider,
             tx_config,
+            last_used_nonce: Mutex::new(0),
         });
         Self::spawn_worker(rx, queue.clone());
         queue
@@ -168,7 +183,7 @@ impl TransactionQueue {
             return Ok(());
         }
 
-        let start_nonce = current_nonce.saturating_sub(count as u64);
+        let start_nonce = current_nonce.checked_sub(count as u64).unwrap_or(0);
         log::warn!(
             "Listing transactions for address {address} from nonce {start_nonce} to {}",
             current_nonce - 1
@@ -221,13 +236,30 @@ impl TransactionQueue {
         let from = request
             .from
             .ok_or_else(|| anyhow!("Transaction request missing 'from' address"))?;
-        let nonce = self
-            .provider
-            .get_transaction_count(from)
-            .await
-            .map_err(|e| anyhow!("Failed to get nonce: {}", e))?;
 
-        // Update the request with the current nonce.
+        // We have 2 sources of nonces: our last used nonce and RPC.
+        // RPC returns nonce of last pending transaction and nonce associated with the account.
+        // Since we have no guarantee of sending requests to the same RPC, we can't trust fully
+        // that it have full knowledge the returned nonces. At the same time tools outside of our
+        // control can send transactions as well.
+        let nonce_info = self.get_nonces(from).await?;
+        let nonce = std::cmp::max(
+            nonce_info.next_pending_nonce,
+            nonce_info.last_used_nonce + 1,
+        );
+
+        let pending = nonce_info.next_pending_nonce as i64 - (nonce_info.account_nonce as i64 + 1);
+
+        log::info!("Nonce info: {nonce_info}");
+        if pending > 0 {
+            log::debug!("Still processing {pending} pending transactions");
+        }
+
+        if nonce_info.last_used_nonce + 1 != nonce_info.next_pending_nonce {
+            log::warn!("Last used nonce is not equal to next pending nonce. Probably transaction was sent externally.");
+        }
+
+        // Update the request with the next pending nonce.
         let request = request.with_nonce(nonce);
 
         let max_retries = self.tx_config.max_retries;
@@ -264,6 +296,8 @@ impl TransactionQueue {
 
             if let Some(receipt) = self.get_receipt_with_retry(tx_hash).await? {
                 log::info!("Transaction succeeded on attempt {attempt} with hash: {tx_hash}");
+
+                self.set_last_used_nonce(nonce);
                 return Ok(receipt);
             }
 
@@ -315,6 +349,34 @@ impl TransactionQueue {
 
             runtime.block_on(local);
         });
+    }
+
+    /// Gets all three nonce values for this account.
+    /// Returns a NonceInfo struct containing last_used_nonce, next_pending_nonce, and current_blockchain_nonce.
+    async fn get_nonces(&self, address: Address) -> Result<NonceInfo> {
+        // Get last used nonce from stored value
+        let last_used_nonce = *self.last_used_nonce.lock().unwrap();
+
+        // Get current blockchain nonce from get_account. This function includes only
+        // confirmed transactions.
+        let account_info = self.provider.get_account(address).await?;
+        let current_blockchain_nonce = account_info.nonce;
+
+        // Get next pending nonce from get_transaction_count. This function includes
+        // pending transactions as well.
+        let next_pending_nonce = self.provider.get_transaction_count(address).await?;
+
+        Ok(NonceInfo {
+            last_used_nonce,
+            next_pending_nonce,
+            account_nonce: current_blockchain_nonce,
+        })
+    }
+
+    /// Sets the last used nonce for this account.
+    fn set_last_used_nonce(&self, nonce: u64) {
+        let mut last_used = self.last_used_nonce.lock().unwrap();
+        *last_used = nonce;
     }
 
     /// Queues a transaction for processing and returns a channel to await the result.
