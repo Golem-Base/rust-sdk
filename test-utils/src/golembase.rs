@@ -23,7 +23,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            port: 8545,
+            port: 9545,
             timeout: Duration::from_secs(120), // Increased timeout for stability
             image: "quay.io/golemnetwork/gb-op-geth".to_string(),
             tag: "latest".to_string(),
