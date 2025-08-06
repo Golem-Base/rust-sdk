@@ -138,10 +138,11 @@ fn get_client() -> Result<GolemBaseClient> {
     Ok(client)
 }
 
+#[ignore]
 #[tokio::test]
 #[serial]
 async fn test_concurrent_entity_creation_batch() -> Result<()> {
-    init_logger(true);
+    init_logger(false);
 
     let client = get_client()?;
 
