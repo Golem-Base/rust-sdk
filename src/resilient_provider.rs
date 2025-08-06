@@ -93,13 +93,15 @@ where
         .await
     }
 
-    /// Gets account information using the RPC get_accountInfo method with retry logic.
-    pub async fn get_account(
-        &self,
-        address: Address,
-    ) -> Result<alloy::rpc::types::eth::AccountInfo> {
-        self.retry("get_accountInfo", || async {
-            self.provider.get_account_info(address).await
+    /// Gets account nonce using the RPC get_proof method with retry logic.
+    /// This returns the confirmed nonce (excluding pending transactions).
+    pub async fn get_nonce(&self, address: Address) -> Result<u64> {
+        let address_clone = address;
+        self.retry("get_proof", move || async move {
+            match self.provider.get_proof(address_clone, vec![]).await {
+                Ok(proof_response) => Ok(proof_response.nonce),
+                Err(e) => Err(anyhow!("Failed to get proof: {}", e)),
+            }
         })
         .await
     }

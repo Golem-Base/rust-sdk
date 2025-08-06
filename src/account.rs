@@ -357,10 +357,9 @@ impl TransactionQueue {
         // Get last used nonce from stored value
         let last_used_nonce = *self.last_used_nonce.lock().unwrap();
 
-        // Get current blockchain nonce from get_account. This function includes only
+        // Get current blockchain nonce from get_nonce. This function includes only
         // confirmed transactions.
-        let account_info = self.provider.get_account(address).await?;
-        let current_blockchain_nonce = account_info.nonce;
+        let current_blockchain_nonce = self.provider.get_nonce(address).await?;
 
         // Get next pending nonce from get_transaction_count. This function includes
         // pending transactions as well.
