@@ -4,6 +4,8 @@ use bigdecimal::BigDecimal;
 
 use golem_base_sdk::client::GolemBaseClient;
 
+pub mod golembase;
+
 /// Default URL for GolemBase node in tests
 pub const GOLEM_BASE_URL: &str = "http://localhost:8545";
 

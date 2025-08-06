@@ -1,10 +1,13 @@
 use anyhow::Result;
 use bigdecimal::BigDecimal;
-use golem_base_test_utils::{init_logger, GOLEM_BASE_URL};
+use golem_base_test_utils::{
+    golembase::{Config, GolemBaseContainer},
+    init_logger,
+};
 use serial_test::serial;
 use std::fs;
 
-use golem_base_sdk::{client::GolemBaseClient, signers::InMemorySigner, PrivateKeySigner, Url};
+use golem_base_sdk::{client::GolemBaseClient, signers::InMemorySigner, PrivateKeySigner};
 
 const TEST_PRIVATE_KEY_FILE: &str = "test_private.key";
 
@@ -12,7 +15,10 @@ const TEST_PRIVATE_KEY_FILE: &str = "test_private.key";
 #[serial]
 async fn test_account_creation_and_funding() -> Result<()> {
     init_logger(false);
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+
+    // Start GolemBase container
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client = GolemBaseClient::new(container.get_url()?)?;
 
     // Create new account
     let account = client.account_generate("test123").await?;
@@ -40,14 +46,17 @@ async fn test_account_creation_and_funding() -> Result<()> {
 #[serial]
 async fn test_account_loading_by_address() -> Result<()> {
     init_logger(false);
-    let client1 = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+
+    // Start GolemBase container
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client1 = GolemBaseClient::new(container.get_url()?)?;
 
     // Create new account with first client
     let account = client1.account_generate("test123").await?;
     log::info!("Created new account: {account}");
 
     // Create new client and load account by address
-    let client2 = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    let client2 = GolemBaseClient::new(container.get_url()?)?;
     let loaded_account = client2.account_load(account, "test123").await?;
     log::info!("Loaded account by address: {loaded_account}");
 
@@ -60,7 +69,10 @@ async fn test_account_loading_by_address() -> Result<()> {
 #[serial]
 async fn test_account_loading_from_private_key() -> Result<()> {
     init_logger(false);
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+
+    // Start GolemBase container
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client = GolemBaseClient::new(container.get_url()?)?;
 
     // Generate a new private key
     let signer = PrivateKeySigner::random();
@@ -92,7 +104,10 @@ async fn test_account_loading_from_private_key() -> Result<()> {
 #[serial]
 async fn test_fund_transfer() -> Result<()> {
     init_logger(false);
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+
+    // Start GolemBase container
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client = GolemBaseClient::new(container.get_url()?)?;
 
     // Create two accounts
     let account1 = client.account_generate("test123").await?;

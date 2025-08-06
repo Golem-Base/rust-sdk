@@ -3,12 +3,13 @@ use futures::StreamExt;
 use golem_base_sdk::GolemBaseClient;
 use serial_test::serial;
 use std::time::Duration;
-use url::Url;
 
 use golem_base_sdk::entity::{Create, Update};
 use golem_base_sdk::events::Event;
 use golem_base_test_utils::{
-    cleanup_entities, create_test_account, init_logger, GOLEM_BASE_URL, TEST_TTL,
+    cleanup_entities, create_test_account,
+    golembase::{Config, GolemBaseContainer},
+    init_logger, TEST_TTL,
 };
 
 #[tokio::test]
@@ -16,7 +17,9 @@ use golem_base_test_utils::{
 async fn test_event_listening() -> Result<()> {
     init_logger(false);
 
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    // Start GolemBase container
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client = GolemBaseClient::new(container.get_url()?)?;
     let account = create_test_account(&client).await?;
     cleanup_entities(&client, account).await?;
 
@@ -73,7 +76,9 @@ async fn test_event_listening() -> Result<()> {
 async fn test_event_listening_with_timeout() -> Result<()> {
     init_logger(false);
 
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    // Start GolemBase container
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client = GolemBaseClient::new(container.get_url()?)?;
     let account = create_test_account(&client).await.unwrap();
     cleanup_entities(&client, account).await.unwrap();
 

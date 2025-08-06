@@ -1,14 +1,21 @@
 use anyhow::Result;
 use serial_test::serial;
 
-use golem_base_sdk::{client::GolemBaseClient, entity::Create, Url};
-use golem_base_test_utils::{cleanup_entities, create_test_account, init_logger, GOLEM_BASE_URL};
+use golem_base_sdk::{client::GolemBaseClient, entity::Create};
+use golem_base_test_utils::{
+    cleanup_entities, create_test_account,
+    golembase::{Config, GolemBaseContainer},
+    init_logger,
+};
 
 #[tokio::test]
 #[serial]
 async fn test_query_entities() -> Result<()> {
     init_logger(false);
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+
+    // Start GolemBase container
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client = GolemBaseClient::new(container.get_url()?)?;
 
     // Create test account
     let account = create_test_account(&client).await?;

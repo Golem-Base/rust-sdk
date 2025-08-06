@@ -4,21 +4,26 @@ use dirs::config_dir;
 use serial_test::serial;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
-use url::Url;
 
 use golem_base_sdk::{
     client::GolemBaseClient,
     entity::{Create, Update},
     PrivateKeySigner,
 };
-use golem_base_test_utils::{create_test_account, init_logger, GOLEM_BASE_URL};
+use golem_base_test_utils::{
+    create_test_account,
+    golembase::{Config, GolemBaseContainer},
+    init_logger,
+};
 
 #[tokio::test]
 #[serial]
 async fn test_create_and_retrieve_entry() -> Result<()> {
     init_logger(false);
 
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    // Start GolemBase container
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client = GolemBaseClient::new(container.get_url()?)?;
     let account = create_test_account(&client).await?;
 
     let start_block = client.get_current_block_number().await?;
@@ -54,7 +59,9 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
 async fn test_entity_operations() -> Result<()> {
     init_logger(false);
 
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    // Start GolemBase container
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client = GolemBaseClient::new(container.get_url()?)?;
     let account = create_test_account(&client).await?;
 
     // Create first entity
@@ -121,7 +128,7 @@ async fn test_entity_operations() -> Result<()> {
     Ok(())
 }
 
-fn get_client() -> Result<GolemBaseClient> {
+fn get_client(container: &GolemBaseContainer) -> Result<GolemBaseClient> {
     let mut private_key_path =
         config_dir().ok_or_else(|| anyhow!("Failed to get config directory"))?;
     private_key_path.push("golembase/private.key");
@@ -130,7 +137,9 @@ fn get_client() -> Result<GolemBaseClient> {
 
     let signer = PrivateKeySigner::from_bytes(&private_key)
         .map_err(|e| anyhow!("Failed to parse private key: {}", e))?;
-    let url = Url::parse(GOLEM_BASE_URL)?;
+
+    let url = container.get_url()?;
+
     let client = GolemBaseClient::builder()
         .wallet(signer)
         .rpc_url(url)
@@ -144,7 +153,9 @@ fn get_client() -> Result<GolemBaseClient> {
 async fn test_concurrent_entity_creation_batch() -> Result<()> {
     init_logger(false);
 
-    let client = get_client()?;
+    // Start GolemBase container
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client = get_client(&container)?;
 
     // Number of entities to create per task
     const ENTITIES_PER_TASK: usize = 15;
