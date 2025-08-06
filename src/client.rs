@@ -76,7 +76,7 @@ impl Default for TransactionConfig {
             max_fee_per_gas: 2_000_000,
             transaction_receipt_timeout: Duration::from_secs(60),
             max_retries: 3,
-            price_bump_percent: 10,
+            price_bump_percent: 100,
             required_confirmations: 0,
         }
     }
