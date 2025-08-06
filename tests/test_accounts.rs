@@ -91,7 +91,7 @@ async fn test_account_loading_from_private_key() -> Result<()> {
 #[tokio::test]
 #[serial]
 async fn test_fund_transfer() -> Result<()> {
-    init_logger(true);
+    init_logger(false);
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
 
     // Create two accounts

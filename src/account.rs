@@ -22,12 +22,19 @@ use crate::resilient_provider::ResilientProvider;
 use crate::signers::TransactionSigner;
 use crate::utils::eth_to_wei;
 
+/// Helper function to display an Option value
+fn display_option<T: std::fmt::Display>(opt: &Option<T>) -> String {
+    opt.as_ref()
+        .map(|n| n.to_string())
+        .unwrap_or_else(|| "None".to_string())
+}
+
 /// Contains all three nonce values for an account
 #[derive(Debug, Clone, derive_more::Display)]
-#[display("Last tracked nonce: {last_used_nonce}, next pending nonce: {next_pending_nonce}, current account nonce: {account_nonce}")]
+#[display("Last tracked nonce: {}, next pending nonce: {next_pending_nonce}, current account nonce: {account_nonce}", display_option(&last_used_nonce))]
 pub struct NonceInfo {
     /// Last nonce used by SDK code (saved during previous call to process_transaction)
-    pub last_used_nonce: u64,
+    pub last_used_nonce: Option<u64>,
     /// Next nonce including pending transactions
     pub next_pending_nonce: u64,
     /// Current nonce value from blockchain (represents next nonce after last confirmed transaction)
@@ -74,7 +81,7 @@ struct TransactionQueue {
     provider: ResilientProvider,
     tx_config: Arc<TransactionConfig>,
     /// Last nonce used by SDK code (saved during previous call to process_transaction)
-    last_used_nonce: Mutex<u64>,
+    last_used_nonce: Mutex<Option<u64>>,
 }
 
 /// Event signature for extending BTL (block time to live) of an entity.
@@ -97,7 +104,7 @@ impl TransactionQueue {
             signer,
             provider,
             tx_config,
-            last_used_nonce: Mutex::new(0),
+            last_used_nonce: Mutex::new(None),
         });
         Self::spawn_worker(rx, queue.clone());
         queue
@@ -194,10 +201,10 @@ impl TransactionQueue {
         // that it have full knowledge the returned nonces. At the same time tools outside of our
         // control can send transactions as well.
         let nonce_info = self.get_nonces(from).await?;
-        let nonce = std::cmp::max(
-            nonce_info.next_pending_nonce,
-            nonce_info.last_used_nonce + 1,
-        );
+        let nonce = match nonce_info.last_used_nonce {
+            Some(last_used) => std::cmp::max(nonce_info.next_pending_nonce, last_used + 1),
+            None => nonce_info.next_pending_nonce,
+        };
 
         log::info!("Nonce info: {nonce_info}");
 
@@ -206,8 +213,10 @@ impl TransactionQueue {
             log::debug!("Still processing {pending} pending transactions");
         }
 
-        if nonce_info.last_used_nonce + 1 != nonce_info.next_pending_nonce {
-            log::warn!("Last used nonce is not equal to next pending nonce. Probably transaction was sent externally.");
+        if let Some(last_used) = nonce_info.last_used_nonce {
+            if (last_used + 1) != nonce_info.next_pending_nonce {
+                log::warn!("Last used nonce is not equal to next pending nonce. Probably transaction was sent externally.");
+            }
         }
 
         // Update the request with the next pending nonce.
@@ -317,7 +326,7 @@ impl TransactionQueue {
     /// Sets the last used nonce for this account.
     fn set_last_used_nonce(&self, nonce: u64) {
         let mut last_used = self.last_used_nonce.lock().unwrap();
-        *last_used = nonce;
+        *last_used = Some(nonce);
     }
 
     /// Queues a transaction for processing and returns a channel to await the result.
