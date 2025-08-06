@@ -248,12 +248,12 @@ impl TransactionQueue {
             nonce_info.last_used_nonce + 1,
         );
 
-        let pending = nonce_info.next_pending_nonce as i64 - (nonce_info.account_nonce as i64 + 1);
-
         log::info!("Nonce info: {nonce_info}");
-        if pending > 0 {
-            log::debug!("Still processing {pending} pending transactions");
-        }
+
+        // let pending = nonce_info.next_pending_nonce as i64 - (nonce_info.account_nonce as i64 + 1);
+        // if pending > 0 {
+        //     log::debug!("Still processing {pending} pending transactions");
+        // }
 
         if nonce_info.last_used_nonce + 1 != nonce_info.next_pending_nonce {
             log::warn!("Last used nonce is not equal to next pending nonce. Probably transaction was sent externally.");
@@ -359,7 +359,8 @@ impl TransactionQueue {
 
         // Get current blockchain nonce from get_nonce. This function includes only
         // confirmed transactions.
-        let current_blockchain_nonce = self.provider.get_nonce(address).await?;
+        //let account_nonce = self.provider.get_nonce(address).await?;
+        let account_nonce = 0;
 
         // Get next pending nonce from get_transaction_count. This function includes
         // pending transactions as well.
@@ -368,7 +369,7 @@ impl TransactionQueue {
         Ok(NonceInfo {
             last_used_nonce,
             next_pending_nonce,
-            account_nonce: current_blockchain_nonce,
+            account_nonce,
         })
     }
 
