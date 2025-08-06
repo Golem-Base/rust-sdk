@@ -64,6 +64,8 @@ pub struct TransactionConfig {
     pub max_retries: u32,
     /// Percentage bump for replacement transactions (e.g. 10 for 10%).
     pub price_bump_percent: u128,
+    /// Number of confirmations to wait for when watching pending transactions.
+    pub required_confirmations: u64,
 }
 
 impl Default for TransactionConfig {
@@ -75,6 +77,7 @@ impl Default for TransactionConfig {
             transaction_receipt_timeout: Duration::from_secs(60),
             max_retries: 3,
             price_bump_percent: 10,
+            required_confirmations: 0,
         }
     }
 }
@@ -542,9 +545,14 @@ impl GolemBaseClient {
     /// Waits for a arbitrary (not created by this client) transaction to be mined and returns
     /// its receipt. Handles retries for transaction indexing error.
     pub async fn wait_for_transaction(&self, tx_hash: Hash) -> anyhow::Result<TransactionReceipt> {
-        crate::account::get_receipt(&self.provider, tx_hash, None)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Transaction receipt not found for hash: {}", tx_hash))
+        crate::account::get_receipt(
+            &self.provider,
+            tx_hash,
+            None,
+            self.tx_config.required_confirmations,
+        )
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Transaction receipt not found for hash: {}", tx_hash))
     }
 
     /// Creates a new WebSocket client for event subscriptions using the default RPC URL.

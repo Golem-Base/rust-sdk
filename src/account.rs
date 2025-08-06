@@ -151,7 +151,13 @@ impl TransactionQueue {
         tx_hash: Hash,
     ) -> anyhow::Result<Option<TransactionReceipt>> {
         let timeout = self.tx_config.transaction_receipt_timeout.clone();
-        get_receipt(&self.provider, tx_hash, Some(timeout)).await
+        get_receipt(
+            &self.provider,
+            tx_hash,
+            Some(timeout),
+            self.tx_config.required_confirmations,
+        )
+        .await
     }
 
     /// Returns a new TransactionRequest with bumped tip and fee cap by a percentage for replacement transactions.
@@ -523,6 +529,7 @@ pub async fn get_receipt(
     provider: &ResilientProvider,
     tx_hash: Hash,
     timeout_duration: Option<Duration>,
+    confirmations: u64,
 ) -> anyhow::Result<Option<TransactionReceipt>> {
     let start_time = std::time::Instant::now();
 
@@ -544,14 +551,24 @@ pub async fn get_receipt(
 
         match provider.get_transaction_receipt(tx_hash).await {
             Ok(opt_receipt) => match opt_receipt {
-                Some(receipt) => return Ok(Some(receipt)),
+                Some(receipt) => {
+                    log::info!(
+                        "Transaction {tx_hash} was included in a block {:?} ({:?}). Waiting for {confirmations} confirmations.",
+                        receipt.block_number,
+                        receipt.block_hash.map(|b| hex::encode(b))
+                    );
+                    provider
+                        .watch_for_confirmation(tx_hash, confirmations)
+                        .await?;
+                    return Ok(Some(receipt));
+                }
                 _ => {
                     log::trace!("Getting receipt returned None for transaction: {tx_hash}");
 
                     if let Some(tx) = tx {
                         if tx.block_hash.is_some() {
                             log::debug!(
-                            "Transaction {tx_hash} was already included in a block {:?} ({:?}).",
+                            "Transaction {tx_hash} was already included in a block {:?} ({:?}), but receipt is not available.",
                             tx.block_number,
                             tx.block_hash.map(|b| hex::encode(b))
                         );
