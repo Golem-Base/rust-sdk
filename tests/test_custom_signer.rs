@@ -53,7 +53,7 @@ impl TransactionSigner for LocalTaskSigner {
 #[tokio::test]
 #[serial]
 async fn test_custom_signer_with_spawn_local() -> Result<()> {
-    init_logger(true);
+    init_logger(false);
     let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
 
     // Create a custom signer
