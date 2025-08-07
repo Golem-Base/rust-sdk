@@ -1,8 +1,10 @@
-use alloy::primitives::Address;
+use alloy::eips::BlockNumberOrTag;
+use alloy::primitives::{Address, B256};
 use anyhow::Result;
 use bigdecimal::BigDecimal;
 
 use golem_base_sdk::client::GolemBaseClient;
+use golem_base_sdk::entity::Hash;
 
 pub mod golembase;
 
@@ -36,4 +38,31 @@ pub async fn create_test_account(client: &GolemBaseClient) -> Result<Address> {
 
     log::info!("Account {account} funded with transaction: {fund_tx}");
     Ok(account)
+}
+
+/// Finds the transaction that created an entry by searching backwards through blocks.
+/// Returns (transaction_hash, block_number) or None if not found.
+pub async fn find_entry_creation_transaction(
+    client: &GolemBaseClient,
+    entry_id: Hash,
+) -> Result<Option<(B256, u64)>> {
+    let current_block = client.get_current_block_number().await?;
+    for block_number in (1..=current_block).rev() {
+        let block = client
+            .get_rpc_client()
+            .get_block_by_number(BlockNumberOrTag::Number(block_number))
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Block {} not found", block_number))?;
+
+        for tx in block.transactions.hashes() {
+            if let Ok(Some(receipt)) = client.get_rpc_client().get_transaction_receipt(tx).await {
+                if let Ok(log_entry_id) = GolemBaseClient::extract_entity_id(receipt.logs()) {
+                    if log_entry_id == entry_id {
+                        return Ok(Some((tx, block_number)));
+                    }
+                }
+            }
+        }
+    }
+    Ok(None)
 }

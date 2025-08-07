@@ -1,6 +1,7 @@
 use alloy::primitives::B256;
 use anyhow::{anyhow, Result};
 use dirs::config_dir;
+use golem_base_test_utils::find_entry_creation_transaction;
 use serial_test::serial;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -26,9 +27,6 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
     let client = GolemBaseClient::new(container.get_url()?)?;
     let account = create_test_account(&client).await?;
 
-    let start_block = client.get_current_block_number().await?;
-    log::info!("Starting at block: {start_block}");
-
     let test_payload = b"test payload".to_vec();
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
@@ -38,6 +36,11 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
 
     let entry_id = client.create_entry(account, entry).await?;
     log::info!("Entry created with ID: 0x{entry_id:x}");
+
+    let (tx, start_block) = find_entry_creation_transaction(&client, entry_id)
+        .await?
+        .unwrap();
+    log::info!("Entry creation transaction: 0x{tx:x}");
 
     let entry_str = client.cat(entry_id).await?;
     log::info!("Retrieved entry 0x{entry_id:x}: {entry_str}");
@@ -50,7 +53,7 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
     assert_eq!(metadata.numeric_annotations[0].value, timestamp);
     assert_eq!(metadata.owner, account);
     // Entry should be created in start_block + 1.
-    assert_eq!(metadata.expires_at_block.unwrap(), start_block + 1001);
+    assert_eq!(metadata.expires_at_block.unwrap(), start_block + 1000);
     Ok(())
 }
 
