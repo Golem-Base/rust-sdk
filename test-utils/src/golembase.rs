@@ -3,6 +3,7 @@
 //! This module provides utilities for running GolemBase in containers for testing purposes.
 
 use std::time::Duration;
+use testcontainers::core::logs::LogFrame;
 use testcontainers::core::{ContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
@@ -92,6 +93,9 @@ impl GolemBaseContainer {
         let container_future = GenericImage::new(&config.image, &config.tag)
             .with_wait_for(WaitFor::message_on_stderr("HTTP server started"))
             .with_mapped_port(port, ContainerPort::Tcp(port))
+            .with_log_consumer(|line: &LogFrame| {
+                log::info!("[GolemBase]: {}", String::from_utf8_lossy(&line.bytes()))
+            })
             .with_cmd([
                 "--dev",
                 "--http",
