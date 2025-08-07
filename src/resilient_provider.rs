@@ -14,6 +14,8 @@ pub struct ResilientProviderConfig {
     pub max_retries: u32,
     /// Delay between retry attempts in milliseconds.
     pub retry_delay_ms: u64,
+    /// Timeout in seconds for "no backend is currently healthy" errors.
+    pub backend_health_timeout_secs: u64,
 }
 
 impl Default for ResilientProviderConfig {
@@ -21,6 +23,7 @@ impl Default for ResilientProviderConfig {
         Self {
             max_retries: 3,
             retry_delay_ms: 100,
+            backend_health_timeout_secs: 60,
         }
     }
 }
@@ -57,7 +60,7 @@ where
         &self.config
     }
 
-    /// Generic retry function that handles "error sending request" errors.
+    /// Generic retry function that handles "error sending request" errors and "no backend is currently healthy" errors.
     async fn retry<T, F, Fut, E>(&self, operation_name: &str, operation: F) -> anyhow::Result<T>
     where
         F: Fn() -> Fut,
@@ -65,9 +68,13 @@ where
         E: std::fmt::Display,
     {
         let mut attempts = 0;
+        let start_time = std::time::Instant::now();
+
         loop {
             match operation().await {
                 Ok(result) => return Ok(result),
+                // This error can be result of load balancer switching.
+                // It should be enough to retry a few times for the call to work.
                 Err(e) if e.to_string().contains("error sending request") => {
                     attempts += 1;
                     if attempts > self.config.max_retries {
@@ -80,6 +87,34 @@ where
                             "{operation_name} failed with 'error sending request' (attempt {attempts}/{}). Retrying...",
                             self.config.max_retries
                         );
+                    continue;
+                }
+                // Load balancer will be switching backends until it will find a healthy one.
+                // We need to retry and wait for some period of time.
+                Err(e)
+                    if e.to_string()
+                        .contains("no backend is currently healthy to serve traffic") =>
+                {
+                    let elapsed = start_time.elapsed();
+                    let timeout_duration =
+                        std::time::Duration::from_secs(self.config.backend_health_timeout_secs);
+
+                    if elapsed >= timeout_duration {
+                        return Err(anyhow!(
+                            "{operation_name} failed after {} seconds with 'no backend is currently healthy to serve traffic': {e}",
+                            self.config.backend_health_timeout_secs,
+                        ));
+                    }
+
+                    log::debug!(
+                        "{operation_name} failed with 'no backend is currently healthy to serve traffic' (elapsed: {:.1}s/{:.1}s). Retrying...",
+                        elapsed.as_secs_f64(),
+                        timeout_duration.as_secs_f64()
+                    );
+                    tokio::time::sleep(tokio::time::Duration::from_millis(
+                        self.config.retry_delay_ms,
+                    ))
+                    .await;
                     continue;
                 }
                 Err(e) => return Err(anyhow!("{e}")),
