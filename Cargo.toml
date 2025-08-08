@@ -6,7 +6,7 @@ description = "A Rust SDK for interacting with GolemBase."
 license = "GPLv3"
 
 [workspace]
-members = ["api", "cli", "demo", "test-utils"]
+members = ["api", "cli", "demo", "test-utils", "test-utils/golem-base-mock"]
 resolver = "2"
 
 [dependencies]
@@ -36,6 +36,7 @@ url = "2.4"
 [workspace.dependencies]
 golem-base-sdk = { path = "." }
 golem-base-test-utils = { path = "test-utils" }
+golem-base-mock = { path = "test-utils/golem-base-mock" }
 
 [dev-dependencies]
 clap = { version = "4.4", features = ["derive"] }
