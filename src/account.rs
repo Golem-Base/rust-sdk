@@ -22,12 +22,19 @@ use crate::resilient_provider::ResilientProvider;
 use crate::signers::TransactionSigner;
 use crate::utils::eth_to_wei;
 
+/// Helper function to display an Option value
+fn display_option<T: std::fmt::Display>(opt: &Option<T>) -> String {
+    opt.as_ref()
+        .map(|n| n.to_string())
+        .unwrap_or_else(|| "None".to_string())
+}
+
 /// Contains all three nonce values for an account
 #[derive(Debug, Clone, derive_more::Display)]
-#[display("Last tracked nonce: {last_used_nonce}, next pending nonce: {next_pending_nonce}, current account nonce: {account_nonce}")]
+#[display("Last tracked nonce: {}, next pending nonce: {next_pending_nonce}, current account nonce: {account_nonce}", display_option(&last_used_nonce))]
 pub struct NonceInfo {
     /// Last nonce used by SDK code (saved during previous call to process_transaction)
-    pub last_used_nonce: u64,
+    pub last_used_nonce: Option<u64>,
     /// Next nonce including pending transactions
     pub next_pending_nonce: u64,
     /// Current nonce value from blockchain (represents next nonce after last confirmed transaction)
@@ -74,7 +81,7 @@ struct TransactionQueue {
     provider: ResilientProvider,
     tx_config: Arc<TransactionConfig>,
     /// Last nonce used by SDK code (saved during previous call to process_transaction)
-    last_used_nonce: Mutex<u64>,
+    last_used_nonce: Mutex<Option<u64>>,
 }
 
 /// Event signature for extending BTL (block time to live) of an entity.
@@ -97,7 +104,7 @@ impl TransactionQueue {
             signer,
             provider,
             tx_config,
-            last_used_nonce: Mutex::new(0),
+            last_used_nonce: Mutex::new(None),
         });
         Self::spawn_worker(rx, queue.clone());
         queue
@@ -151,7 +158,13 @@ impl TransactionQueue {
         tx_hash: Hash,
     ) -> anyhow::Result<Option<TransactionReceipt>> {
         let timeout = self.tx_config.transaction_receipt_timeout.clone();
-        get_receipt(&self.provider, tx_hash, Some(timeout)).await
+        get_receipt(
+            &self.provider,
+            tx_hash,
+            Some(timeout),
+            self.tx_config.required_confirmations,
+        )
+        .await
     }
 
     /// Returns a new TransactionRequest with bumped tip and fee cap by a percentage for replacement transactions.
@@ -171,61 +184,6 @@ impl TransactionQueue {
             .with_max_fee_per_gas(bumped_fee_cap)
     }
 
-    /// Lists transactions for the given address for nonces starting from (current_nonce - count) up to (current_nonce - 1).
-    /// This is useful for debugging when a transaction fails to understand the state of previous transactions.
-    async fn list_previous_transactions(
-        &self,
-        address: Address,
-        current_nonce: u64,
-        count: u32,
-    ) -> anyhow::Result<()> {
-        if count == 0 {
-            return Ok(());
-        }
-
-        let start_nonce = current_nonce.checked_sub(count as u64).unwrap_or(0);
-        log::warn!(
-            "Listing transactions for address {address} from nonce {start_nonce} to {}",
-            current_nonce - 1
-        );
-
-        // Query transactions by sender and nonce for each nonce in the range
-        for nonce in start_nonce..current_nonce {
-            match self
-                .provider
-                .get_transaction_by_sender_nonce(address, nonce)
-                .await
-            {
-                Ok(Some(tx)) => {
-                    log::warn!(
-                        "Nonce {nonce}: Hash={}, Block={:?}, Status={:?}",
-                        tx.inner.hash(),
-                        tx.block_number,
-                        tx.block_hash.map(|b| hex::encode(b))
-                    );
-                }
-                Ok(None) => {
-                    log::warn!("Nonce {nonce}: Transaction not found (None returned)");
-                }
-                Err(e) => {
-                    log::warn!("Nonce {nonce}: Error getting transaction: {e}");
-                }
-            }
-        }
-
-        // Also log the current transaction count for reference
-        match self.provider.get_transaction_count(address).await {
-            Ok(tx_count) => {
-                log::warn!("Current transaction count (nonce) for address {address}: {tx_count}");
-            }
-            Err(e) => {
-                log::warn!("Failed to get transaction count for address {address}: {e}");
-            }
-        }
-
-        Ok(())
-    }
-
     /// Processes a single transaction:
     /// - Gets the current nonce for the sender.
     /// - Signs and encodes the transaction.
@@ -243,20 +201,22 @@ impl TransactionQueue {
         // that it have full knowledge the returned nonces. At the same time tools outside of our
         // control can send transactions as well.
         let nonce_info = self.get_nonces(from).await?;
-        let nonce = std::cmp::max(
-            nonce_info.next_pending_nonce,
-            nonce_info.last_used_nonce + 1,
-        );
+        let nonce = match nonce_info.last_used_nonce {
+            Some(last_used) => std::cmp::max(nonce_info.next_pending_nonce, last_used + 1),
+            None => nonce_info.next_pending_nonce,
+        };
 
         log::info!("Nonce info: {nonce_info}");
 
-        // let pending = nonce_info.next_pending_nonce as i64 - (nonce_info.account_nonce as i64 + 1);
-        // if pending > 0 {
-        //     log::debug!("Still processing {pending} pending transactions");
-        // }
+        let pending = nonce_info.next_pending_nonce as i64 - (nonce_info.account_nonce as i64 + 1);
+        if pending > 0 {
+            log::debug!("Still processing {pending} pending transactions");
+        }
 
-        if nonce_info.last_used_nonce + 1 != nonce_info.next_pending_nonce {
-            log::warn!("Last used nonce is not equal to next pending nonce. Probably transaction was sent externally.");
+        if let Some(last_used) = nonce_info.last_used_nonce {
+            if (last_used + 1) != nonce_info.next_pending_nonce {
+                log::warn!("Last used nonce is not equal to next pending nonce. Probably transaction was sent externally.");
+            }
         }
 
         // Update the request with the next pending nonce.
@@ -302,22 +262,12 @@ impl TransactionQueue {
             }
 
             if attempt >= max_retries {
-                // List previous transactions for debugging when we fail
-                if let Err(e) = self.list_previous_transactions(from, nonce, 5).await {
-                    log::warn!("Failed to list previous transactions: {}", e);
-                }
                 return Err(anyhow!(
                     "Transaction failed after {max_retries} attempts, last hash: {tx_hash}"
                 ));
             }
 
             log::warn!("Transaction attempt {attempt} timed out (hash: {tx_hash}), retrying...",);
-
-            // List previous transactions for debugging when we timeout
-            if let Err(e) = self.list_previous_transactions(from, nonce, 3).await {
-                log::warn!("Failed to list previous transactions: {}", e);
-            }
-
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }
@@ -376,7 +326,7 @@ impl TransactionQueue {
     /// Sets the last used nonce for this account.
     fn set_last_used_nonce(&self, nonce: u64) {
         let mut last_used = self.last_used_nonce.lock().unwrap();
-        *last_used = nonce;
+        *last_used = Some(nonce);
     }
 
     /// Queues a transaction for processing and returns a channel to await the result.
@@ -523,6 +473,7 @@ pub async fn get_receipt(
     provider: &ResilientProvider,
     tx_hash: Hash,
     timeout_duration: Option<Duration>,
+    confirmations: u64,
 ) -> anyhow::Result<Option<TransactionReceipt>> {
     let start_time = std::time::Instant::now();
 
@@ -544,14 +495,24 @@ pub async fn get_receipt(
 
         match provider.get_transaction_receipt(tx_hash).await {
             Ok(opt_receipt) => match opt_receipt {
-                Some(receipt) => return Ok(Some(receipt)),
+                Some(receipt) => {
+                    log::info!(
+                        "Transaction {tx_hash} was included in a block {:?} ({:?}). Waiting for {confirmations} confirmations.",
+                        receipt.block_number,
+                        receipt.block_hash.map(|b| hex::encode(b))
+                    );
+                    provider
+                        .watch_for_confirmation(tx_hash, confirmations)
+                        .await?;
+                    return Ok(Some(receipt));
+                }
                 _ => {
                     log::trace!("Getting receipt returned None for transaction: {tx_hash}");
 
                     if let Some(tx) = tx {
                         if tx.block_hash.is_some() {
                             log::debug!(
-                            "Transaction {tx_hash} was already included in a block {:?} ({:?}).",
+                            "Transaction {tx_hash} was already included in a block {:?} ({:?}), but receipt is not available.",
                             tx.block_number,
                             tx.block_hash.map(|b| hex::encode(b))
                         );

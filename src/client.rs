@@ -7,7 +7,7 @@ use alloy::eips::BlockNumberOrTag;
 use alloy::primitives::{Address, B256};
 use alloy::providers::{Provider, ProviderBuilder};
 use alloy::rpc::client::ClientRef;
-use alloy::rpc::types::{SyncStatus, TransactionReceipt};
+use alloy::rpc::types::{Log, SyncStatus, TransactionReceipt};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::http::reqwest::Url;
 use bigdecimal::BigDecimal;
@@ -64,6 +64,8 @@ pub struct TransactionConfig {
     pub max_retries: u32,
     /// Percentage bump for replacement transactions (e.g. 10 for 10%).
     pub price_bump_percent: u128,
+    /// Number of confirmations to wait for when watching pending transactions.
+    pub required_confirmations: u64,
 }
 
 impl Default for TransactionConfig {
@@ -74,7 +76,8 @@ impl Default for TransactionConfig {
             max_fee_per_gas: 2_000_000,
             transaction_receipt_timeout: Duration::from_secs(60),
             max_retries: 3,
-            price_bump_percent: 10,
+            price_bump_percent: 100,
+            required_confirmations: 0,
         }
     }
 }
@@ -407,9 +410,16 @@ impl GolemBaseClient {
         }
 
         // Parse logs to get entity ID
-        let entity_id = receipt
-            .logs()
-            .iter()
+        let entity_id = Self::extract_entity_id(receipt.logs())?;
+
+        log::debug!("Created entity with ID: 0x{:x}", entity_id);
+        Ok(entity_id)
+    }
+
+    /// Extracts entity ID from transaction logs by looking for GolemBaseStorageEntityCreated events.
+    /// Returns the entity ID if found, or an error if not found.
+    pub fn extract_entity_id(logs: &[Log]) -> anyhow::Result<Hash> {
+        logs.iter()
             .inspect(|log| log::trace!("Log: {:?}", log))
             .find_map(|log| {
                 if log.topics().len() >= 2 && log.topics()[0] == golem_base_storage_entity_created()
@@ -420,10 +430,7 @@ impl GolemBaseClient {
                     None
                 }
             })
-            .ok_or_else(|| anyhow::anyhow!("No entity ID found in transaction logs"))?;
-
-        log::debug!("Created entity with ID: 0x{:x}", entity_id);
-        Ok(entity_id)
+            .ok_or_else(|| anyhow::anyhow!("No entity ID found in transaction logs"))
     }
 
     /// Removes entries from GolemBase.
@@ -542,9 +549,14 @@ impl GolemBaseClient {
     /// Waits for a arbitrary (not created by this client) transaction to be mined and returns
     /// its receipt. Handles retries for transaction indexing error.
     pub async fn wait_for_transaction(&self, tx_hash: Hash) -> anyhow::Result<TransactionReceipt> {
-        crate::account::get_receipt(&self.provider, tx_hash, None)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Transaction receipt not found for hash: {}", tx_hash))
+        crate::account::get_receipt(
+            &self.provider,
+            tx_hash,
+            None,
+            self.tx_config.required_confirmations,
+        )
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Transaction receipt not found for hash: {}", tx_hash))
     }
 
     /// Creates a new WebSocket client for event subscriptions using the default RPC URL.

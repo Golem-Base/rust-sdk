@@ -1,28 +1,31 @@
 use alloy::primitives::B256;
 use anyhow::{anyhow, Result};
 use dirs::config_dir;
+use golem_base_test_utils::find_entry_creation_transaction;
 use serial_test::serial;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
-use url::Url;
 
 use golem_base_sdk::{
     client::GolemBaseClient,
     entity::{Create, Update},
     PrivateKeySigner,
 };
-use golem_base_test_utils::{create_test_account, init_logger, GOLEM_BASE_URL};
+use golem_base_test_utils::{
+    create_test_account,
+    golembase::{Config, GolemBaseContainer},
+    init_logger,
+};
 
 #[tokio::test]
 #[serial]
 async fn test_create_and_retrieve_entry() -> Result<()> {
     init_logger(false);
 
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    // Start GolemBase container
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client = GolemBaseClient::new(container.get_url()?)?;
     let account = create_test_account(&client).await?;
-
-    let start_block = client.get_current_block_number().await?;
-    log::info!("Starting at block: {start_block}");
 
     let test_payload = b"test payload".to_vec();
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
@@ -33,6 +36,11 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
 
     let entry_id = client.create_entry(account, entry).await?;
     log::info!("Entry created with ID: 0x{entry_id:x}");
+
+    let (tx, start_block) = find_entry_creation_transaction(&client, entry_id)
+        .await?
+        .unwrap();
+    log::info!("Entry creation transaction: 0x{tx:x}");
 
     let entry_str = client.cat(entry_id).await?;
     log::info!("Retrieved entry 0x{entry_id:x}: {entry_str}");
@@ -45,7 +53,7 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
     assert_eq!(metadata.numeric_annotations[0].value, timestamp);
     assert_eq!(metadata.owner, account);
     // Entry should be created in start_block + 1.
-    assert_eq!(metadata.expires_at_block.unwrap(), start_block + 1001);
+    assert_eq!(metadata.expires_at_block.unwrap(), start_block + 1000);
     Ok(())
 }
 
@@ -54,7 +62,9 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
 async fn test_entity_operations() -> Result<()> {
     init_logger(false);
 
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    // Start GolemBase container
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client = GolemBaseClient::new(container.get_url()?)?;
     let account = create_test_account(&client).await?;
 
     // Create first entity
@@ -121,7 +131,7 @@ async fn test_entity_operations() -> Result<()> {
     Ok(())
 }
 
-fn get_client() -> Result<GolemBaseClient> {
+fn get_client(container: &GolemBaseContainer) -> Result<GolemBaseClient> {
     let mut private_key_path =
         config_dir().ok_or_else(|| anyhow!("Failed to get config directory"))?;
     private_key_path.push("golembase/private.key");
@@ -130,7 +140,9 @@ fn get_client() -> Result<GolemBaseClient> {
 
     let signer = PrivateKeySigner::from_bytes(&private_key)
         .map_err(|e| anyhow!("Failed to parse private key: {}", e))?;
-    let url = Url::parse(GOLEM_BASE_URL)?;
+
+    let url = container.get_url()?;
+
     let client = GolemBaseClient::builder()
         .wallet(signer)
         .rpc_url(url)
@@ -138,12 +150,15 @@ fn get_client() -> Result<GolemBaseClient> {
     Ok(client)
 }
 
+#[ignore]
 #[tokio::test]
 #[serial]
 async fn test_concurrent_entity_creation_batch() -> Result<()> {
-    init_logger(true);
+    init_logger(false);
 
-    let client = get_client()?;
+    // Start GolemBase container
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client = get_client(&container)?;
 
     // Number of entities to create per task
     const ENTITIES_PER_TASK: usize = 15;

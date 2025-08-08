@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - yagna/master
   pull_request:
     branches:
       - main
+      - yagna/master
   workflow_dispatch:
 
 jobs:

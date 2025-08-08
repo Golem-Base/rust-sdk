@@ -8,8 +8,11 @@ use serial_test::serial;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use golem_base_sdk::{client::GolemBaseClient, entity::Create, signers::TransactionSigner, Url};
-use golem_base_test_utils::{init_logger, GOLEM_BASE_URL, TEST_TTL};
+use golem_base_sdk::{client::GolemBaseClient, entity::Create, signers::TransactionSigner};
+use golem_base_test_utils::{
+    golembase::{Config, GolemBaseContainer},
+    init_logger, TEST_TTL,
+};
 
 /// A custom signer that uses tokio::task::spawn_local for signing
 struct LocalTaskSigner {
@@ -53,8 +56,11 @@ impl TransactionSigner for LocalTaskSigner {
 #[tokio::test]
 #[serial]
 async fn test_custom_signer_with_spawn_local() -> Result<()> {
-    init_logger(true);
-    let client = GolemBaseClient::new(Url::parse(GOLEM_BASE_URL)?)?;
+    init_logger(false);
+
+    // Start GolemBase container
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client = GolemBaseClient::new(container.get_url()?)?;
 
     // Create a custom signer
     let inner_signer = PrivateKeySigner::random();
