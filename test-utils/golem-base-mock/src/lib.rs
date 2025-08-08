@@ -12,7 +12,11 @@ use tokio::sync::RwLock;
 use crate::api::{EthRpcServer, GolemBaseRpcServer};
 
 pub mod api;
+pub mod blockchain;
+pub mod entity_db;
+pub mod execution;
 pub mod server;
+pub mod transaction_pool;
 
 // Re-export server functions for convenience
 pub use server::{create_test_mock_server, get_default_mock_server_url};
@@ -41,17 +45,9 @@ impl MockStateData {
 }
 
 /// Mock state for the RPC server
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct MockState {
     data: Arc<RwLock<MockStateData>>,
-}
-
-impl Default for MockState {
-    fn default() -> Self {
-        Self {
-            data: Arc::new(RwLock::new(MockStateData::new())),
-        }
-    }
 }
 
 /// Mock implementation of RPC methods (both Ethereum and GolemBase)
@@ -263,7 +259,7 @@ impl GolemBaseMockServer {
         }
     }
 
-    pub fn with_chain_id(mut self, chain_id: u64) -> Self {
+    pub fn with_chain_id(self, chain_id: u64) -> Self {
         let state = self.state.clone();
         tokio::spawn(async move {
             state.data.write().await.chain_id = U256::from(chain_id);
@@ -271,7 +267,7 @@ impl GolemBaseMockServer {
         self
     }
 
-    pub fn with_accounts(mut self, accounts: Vec<Address>) -> Self {
+    pub fn with_accounts(self, accounts: Vec<Address>) -> Self {
         let state = self.state.clone();
         tokio::spawn(async move {
             state.data.write().await.accounts = accounts;
@@ -287,7 +283,7 @@ impl GolemBaseMockServer {
         self
     }
 
-    pub fn with_syncing(mut self, syncing: bool) -> Self {
+    pub fn with_syncing(self, syncing: bool) -> Self {
         let state = self.state.clone();
         tokio::spawn(async move {
             state.data.write().await.syncing = syncing;

@@ -2463,6 +2463,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bigdecimal",
+ "bytes",
  "golem-base-sdk",
  "jsonrpsee",
  "log",

@@ -1,6 +1,6 @@
 use alloy::primitives::{Address, B256, U256};
 use alloy::rpc::types::{Block, BlockId, BlockNumberOrTag, Transaction, TransactionReceipt};
-use jsonrpsee::core::{async_trait, RpcResult};
+use jsonrpsee::core::RpcResult;
 use jsonrpsee::proc_macros::rpc;
 
 /// Mock implementation of Ethereum RPC methods

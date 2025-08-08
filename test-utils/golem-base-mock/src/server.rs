@@ -2,7 +2,7 @@ use alloy::primitives::{Address, U256};
 use std::net::SocketAddr;
 use std::str::FromStr;
 
-use crate::{GolemBaseMockServer, MockState};
+use crate::GolemBaseMockServer;
 
 /// Helper function to start a GolemBase mock server on a specific address
 pub async fn start_mock_server(
