@@ -1,12 +1,20 @@
-use alloy::primitives::{Address, B256, U256};
+use alloy::consensus::{EthereumTxEnvelope, TxEip4844, TxEip4844Variant};
+use alloy::primitives::{Address, Bytes, B256, U256};
+use alloy::rlp::Decodable;
 use alloy::rpc::types::{Block, BlockId, BlockNumberOrTag, Transaction, TransactionReceipt};
 use anyhow::Result;
 use jsonrpsee::core::{async_trait, RpcResult};
 use jsonrpsee::server::{RpcModule, Server};
+use jsonrpsee::types::{ErrorCode, ErrorObject};
 use rand::Rng;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+/// Helper function to create ErrorObject with a typed ErrorCode and message
+fn create_error(code: ErrorCode, message: impl Into<String>) -> ErrorObject<'static> {
+    ErrorObject::owned(code.code(), message.into(), None::<()>)
+}
 
 use crate::api::{EthRpcServer, GolemBaseRpcServer};
 use crate::blockchain::Blockchain;
@@ -109,20 +117,92 @@ impl EthRpcServer for GolemBaseMock {
         Ok(tx_hash)
     }
 
-    async fn send_raw_transaction(&self, _data: String) -> RpcResult<B256> {
-        // Mock implementation - return a random transaction hash
-        let mut rng = rand::thread_rng();
-        let tx_hash = B256::new(rng.gen());
-        Ok(tx_hash)
+    async fn send_raw_transaction(&self, data: Bytes) -> RpcResult<B256> {
+        // Use the bytes directly since input is already Bytes
+        let tx_bytes = data.to_vec();
+
+        // Decode the RLP-encoded transaction
+        let decoded = EthereumTxEnvelope::<TxEip4844>::decode(&mut &tx_bytes[..]).map_err(|e| {
+            create_error(
+                ErrorCode::ParseError,
+                format!("Failed to decode transaction: {e}"),
+            )
+        })?;
+
+        // Convert decoded transaction to our internal Transaction type
+        let transaction = crate::block::Transaction::try_from(decoded).map_err(|e| {
+            create_error(
+                ErrorCode::InvalidParams,
+                format!("Failed to convert transaction: {e}"),
+            )
+        })?;
+
+        let transaction = Arc::new(transaction);
+        self.transaction_pool
+            .add_transaction(transaction.clone())
+            .await;
+
+        Ok(transaction.hash)
     }
 
     async fn chain_id(&self) -> RpcResult<U256> {
         Ok(self.chain_id)
     }
 
-    async fn get_transaction_by_hash(&self, _hash: B256) -> RpcResult<Option<Transaction>> {
-        // Mock implementation - return None for now
-        // In a real implementation, this would return actual transaction data
+    async fn get_transaction_by_hash(&self, hash: B256) -> RpcResult<Option<Transaction>> {
+        // First check the blockchain for mined transactions (to get block info)
+        if let Some(tx) = self.blockchain.get_transaction(&hash).await {
+            // Since block is added to chain, we need to find in which exact block it is.
+            let block = self
+                .blockchain
+                .find_block_containing_transaction(&hash)
+                .await
+                .ok_or(create_error(
+                    ErrorCode::InternalError,
+                    format!("Failed to find block containing transaction: {hash}"),
+                ))?;
+            let idx = block.find_transaction_index(&hash).ok_or(create_error(
+                ErrorCode::InternalError,
+                format!("Failed to find transaction index in block: {hash}"),
+            ))?;
+
+            // Build Transaction from block and transaction data
+            let tx_envelope: EthereumTxEnvelope<TxEip4844Variant> = tx.to_envelope();
+            let alloy_tx = Transaction {
+                inner: tx_envelope.try_into_recovered().map_err(|e| {
+                    create_error(
+                        ErrorCode::InternalError,
+                        format!("Failed to convert transaction: {e}"),
+                    )
+                })?,
+                block_hash: Some(block.header.block_hash),
+                block_number: Some(block.header.block_number),
+                transaction_index: Some(idx),
+                effective_gas_price: None,
+            };
+            return Ok(Some(alloy_tx));
+        }
+
+        // If not found in blockchain, check the transaction pool for pending transactions
+        if let Some(tx) = self.transaction_pool.get_transaction(&hash).await {
+            // Convert our internal Transaction to alloy Transaction format for pending transactions
+            let tx_envelope: EthereumTxEnvelope<TxEip4844Variant> = tx.to_envelope();
+            let alloy_tx = Transaction {
+                inner: tx_envelope.try_into_recovered().map_err(|e| {
+                    create_error(
+                        ErrorCode::InternalError,
+                        format!("Failed to convert pending transaction: {e}"),
+                    )
+                })?,
+                block_hash: None,
+                block_number: None,
+                transaction_index: None,
+                effective_gas_price: None,
+            };
+            return Ok(Some(alloy_tx));
+        }
+
+        // Transaction not found in pool or blockchain
         Ok(None)
     }
 
@@ -176,6 +256,12 @@ impl EthRpcServer for GolemBaseMock {
             "gasUsedRatio": [],
             "reward": []
         }))
+    }
+
+    async fn gas_price(&self) -> RpcResult<U256> {
+        // Mock implementation - return a reasonable gas price
+        // In a real implementation, this would return the current gas price from the network
+        Ok(U256::from(20_000_000_000u64)) // 20 gwei
     }
 }
 

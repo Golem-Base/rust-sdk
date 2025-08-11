@@ -1,4 +1,4 @@
-use alloy::primitives::{Address, B256, U256};
+use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::rpc::types::{Block, BlockId, BlockNumberOrTag, Transaction, TransactionReceipt};
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::proc_macros::rpc;
@@ -37,7 +37,7 @@ pub trait EthRpc {
     async fn send_transaction(&self, transaction: serde_json::Value) -> RpcResult<B256>;
 
     #[method(name = "sendRawTransaction")]
-    async fn send_raw_transaction(&self, data: String) -> RpcResult<B256>;
+    async fn send_raw_transaction(&self, data: Bytes) -> RpcResult<B256>;
 
     #[method(name = "chainId")]
     async fn chain_id(&self) -> RpcResult<U256>;
@@ -65,6 +65,9 @@ pub trait EthRpc {
         newest_block: BlockId,
         reward_percentiles: Option<Vec<f64>>,
     ) -> RpcResult<serde_json::Value>;
+
+    #[method(name = "gasPrice")]
+    async fn gas_price(&self) -> RpcResult<U256>;
 }
 
 /// Mock implementation of GolemBase RPC methods

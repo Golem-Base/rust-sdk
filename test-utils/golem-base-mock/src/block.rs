@@ -1,6 +1,10 @@
-use alloy::consensus::Header as ConsensusHeader;
-use alloy::primitives::{Address, Bloom, Bytes, B256, B64, U256};
-use alloy::rpc::types::{Block as AlloyBlock, BlockTransactions, Header as AlloyHeader};
+use alloy::consensus::{EthereumTxEnvelope, Signed, TxEip4844, TxEip4844Variant};
+use alloy::consensus::{Header as ConsensusHeader, Transaction as _};
+use alloy::primitives::{Address, Bloom, Bytes, Signature, B256, B64, U256};
+use alloy::rpc::types::{
+    AccessList, Block as AlloyBlock, BlockTransactions, Header as AlloyHeader,
+};
+use anyhow::anyhow;
 use std::sync::Arc;
 
 /// Represents a transaction in the mock blockchain
@@ -10,10 +14,14 @@ pub struct Transaction {
     pub from: Address,
     pub to: Address,
     pub value: U256,
-    pub gas: U256,
-    pub gas_price: U256,
-    pub nonce: U256,
+    pub gas_limit: u64,
+    pub max_fee_per_gas: u128,
+    pub max_priority_fee_per_gas: u128,
+    pub max_fee_per_blob_gas: u128,
+    pub nonce: u64,
     pub data: Bytes,
+    pub chain_id: u64,
+    pub signature: Signature,
 }
 
 /// Represents the header of a block
@@ -91,6 +99,22 @@ impl Block {
             transactions,
         }
     }
+
+    /// Find the index of a specific transaction in this block
+    pub fn find_transaction_index(&self, transaction_hash: &B256) -> Option<u64> {
+        for (index, tx) in self.transactions.iter().enumerate() {
+            if tx.hash == *transaction_hash {
+                return Some(index as u64);
+            }
+        }
+        None
+    }
+}
+
+impl Transaction {
+    pub fn to_envelope(self: &Self) -> EthereumTxEnvelope<TxEip4844Variant> {
+        self.clone().into()
+    }
 }
 
 impl Into<AlloyBlock> for Block {
@@ -130,5 +154,62 @@ impl Into<AlloyBlock> for Block {
             ),
             withdrawals: None,
         }
+    }
+}
+
+impl TryFrom<EthereumTxEnvelope<TxEip4844>> for Transaction {
+    type Error = anyhow::Error;
+
+    fn try_from(decoded: EthereumTxEnvelope<TxEip4844>) -> Result<Self, Self::Error> {
+        // Check if this is an EIP-4844 transaction
+        if !matches!(decoded, EthereumTxEnvelope::Eip4844(_)) {
+            return Err(anyhow!("Unsupported transaction type"));
+        }
+
+        let transaction = Self {
+            hash: decoded.tx_hash().clone(),
+            from: decoded
+                .recover_signer()
+                .map_err(|e| anyhow!("Failed to recover signer: {e}"))?,
+            to: decoded.to().unwrap_or(Address::ZERO),
+            value: decoded.value(),
+            gas_limit: decoded.gas_limit(),
+            max_fee_per_gas: decoded.max_fee_per_gas(),
+            max_priority_fee_per_gas: decoded
+                .max_priority_fee_per_gas()
+                .ok_or(anyhow!("Missing max priority fee per gas"))?,
+            max_fee_per_blob_gas: decoded
+                .max_fee_per_blob_gas()
+                .ok_or(anyhow!("Missing max fee per blob gas"))?,
+            nonce: decoded.nonce(),
+            data: decoded.input().clone(),
+            chain_id: decoded.chain_id().ok_or(anyhow!("No chain id"))?,
+            signature: decoded.signature().clone(),
+        };
+
+        Ok(transaction)
+    }
+}
+
+impl Into<EthereumTxEnvelope<TxEip4844Variant>> for Transaction {
+    fn into(self) -> EthereumTxEnvelope<TxEip4844Variant> {
+        // Create an EIP-4844 transaction envelope
+        EthereumTxEnvelope::Eip4844(Signed::new_unchecked(
+            TxEip4844Variant::TxEip4844(TxEip4844 {
+                chain_id: self.chain_id,
+                nonce: self.nonce,
+                max_fee_per_gas: self.max_fee_per_gas,
+                max_priority_fee_per_gas: self.max_priority_fee_per_gas,
+                gas_limit: self.gas_limit,
+                to: self.to,
+                value: self.value,
+                input: self.data,
+                access_list: AccessList::default(),
+                blob_versioned_hashes: vec![],
+                max_fee_per_blob_gas: self.max_fee_per_blob_gas,
+            }),
+            self.signature,
+            self.hash,
+        ))
     }
 }

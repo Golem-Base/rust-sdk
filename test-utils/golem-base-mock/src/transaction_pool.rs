@@ -24,6 +24,7 @@ impl TransactionPool {
     pub async fn add_transaction(&self, transaction: Arc<Transaction>) {
         let hash = transaction.hash;
         self.state.write().await.insert(hash, transaction);
+        log::info!("Transaction 0x{:x} added to pool", hash);
     }
 
     /// Get a transaction from the pool by hash
@@ -77,20 +78,8 @@ impl TransactionPool {
     }
 
     /// Get transaction by hash
-    pub async fn get_transaction_by_hash(&self, hash: &B256) -> Option<serde_json::Value> {
-        // Convert our internal Transaction to the expected format
-        let transaction = self.state.read().await.get(hash).cloned();
-        transaction.map(|tx| {
-            serde_json::json!({
-                "hash": format!("0x{:x}", tx.hash),
-                "from": format!("0x{:x}", tx.from),
-                "to": format!("0x{:x}", tx.to),
-                "value": format!("0x{:x}", tx.value),
-                "gas": format!("0x{:x}", tx.gas),
-                "gasPrice": format!("0x{:x}", tx.gas_price),
-                "nonce": format!("0x{:x}", tx.nonce),
-                "data": format!("0x{:x}", tx.data)
-            })
-        })
+    pub async fn get_transaction_by_hash(&self, hash: &B256) -> Option<Arc<Transaction>> {
+        // Return the actual transaction object
+        self.state.read().await.get(hash).cloned()
     }
 }

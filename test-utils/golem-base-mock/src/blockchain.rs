@@ -155,6 +155,22 @@ impl Blockchain {
             .cloned()
     }
 
+    /// Find the block that contains a specific transaction
+    pub async fn find_block_containing_transaction(
+        &self,
+        transaction_hash: &B256,
+    ) -> Option<Arc<Block>> {
+        let state = self.state.read().await;
+        for (_, block) in &state.blocks_by_number {
+            for tx in &block.transactions {
+                if tx.hash == *transaction_hash {
+                    return Some(block.clone());
+                }
+            }
+        }
+        None
+    }
+
     /// Get an account by its address
     pub async fn get_account(&self, address: &Address) -> Option<Account> {
         self.state.read().await.accounts.get(address).cloned()
