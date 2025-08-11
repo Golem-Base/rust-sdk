@@ -1,5 +1,7 @@
-use crate::blockchain::Transaction;
+use crate::block::Transaction;
+use alloy::primitives::Address;
 use alloy::primitives::B256;
+use alloy::primitives::U256;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -53,5 +55,42 @@ impl TransactionPool {
     /// Check if the pool is empty
     pub async fn is_empty(&self) -> bool {
         self.state.read().await.is_empty()
+    }
+
+    /// Get transaction count for an address (nonce)
+    pub async fn get_transaction_count(&self, address: &Address) -> U256 {
+        // For now, return a simple count based on transactions in the pool
+        // In a real implementation, this would track nonces per address
+        let transactions = self.state.read().await;
+        let count = transactions
+            .values()
+            .filter(|tx| tx.from == *address)
+            .count();
+        U256::from(count)
+    }
+
+    /// Get transaction receipt (mock implementation)
+    pub async fn get_receipt(&self, _hash: &B256) -> Option<serde_json::Value> {
+        // Mock implementation - return None for now
+        // In a real implementation, this would return actual transaction receipts
+        None
+    }
+
+    /// Get transaction by hash
+    pub async fn get_transaction_by_hash(&self, hash: &B256) -> Option<serde_json::Value> {
+        // Convert our internal Transaction to the expected format
+        let transaction = self.state.read().await.get(hash).cloned();
+        transaction.map(|tx| {
+            serde_json::json!({
+                "hash": format!("0x{:x}", tx.hash),
+                "from": format!("0x{:x}", tx.from),
+                "to": format!("0x{:x}", tx.to),
+                "value": format!("0x{:x}", tx.value),
+                "gas": format!("0x{:x}", tx.gas),
+                "gasPrice": format!("0x{:x}", tx.gas_price),
+                "nonce": format!("0x{:x}", tx.nonce),
+                "data": format!("0x{:x}", tx.data)
+            })
+        })
     }
 }

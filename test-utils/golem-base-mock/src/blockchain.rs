@@ -1,7 +1,9 @@
+use crate::block::{Block, Transaction};
+use crate::entity_db::EntityDb;
 use alloy::primitives::{Address, B256, U256};
-use bytes::Bytes;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
 /// Represents an account in the mock blockchain
@@ -32,37 +34,6 @@ impl Account {
     }
 }
 
-/// Represents a transaction in the mock blockchain
-#[derive(Clone, Debug)]
-pub struct Transaction {
-    pub hash: B256,
-    pub from: Address,
-    pub to: Address,
-    pub value: U256,
-    pub gas: U256,
-    pub gas_price: U256,
-    pub nonce: U256,
-    pub data: Bytes,
-}
-
-/// Represents the header of a block
-#[derive(Clone, Debug)]
-pub struct BlockHeader {
-    pub block_number: u64,
-    pub previous_block_hash: B256,
-    pub block_hash: B256,
-    pub gas_limit: U256,
-    pub gas_used: U256,
-    pub timestamp: u64,
-}
-
-/// Represents a block in the mock blockchain
-#[derive(Clone, Debug)]
-pub struct Block {
-    pub header: BlockHeader,
-    pub transactions: Vec<Arc<Transaction>>,
-}
-
 /// Internal state of the blockchain
 #[derive(Clone, Debug, Default)]
 struct BlockchainState {
@@ -76,13 +47,15 @@ struct BlockchainState {
 #[derive(Clone, Debug, Default)]
 pub struct Blockchain {
     state: Arc<RwLock<BlockchainState>>,
+    entity_db: Arc<EntityDb>,
 }
 
 impl Blockchain {
     /// Create a new empty mock blockchain
-    pub fn new() -> Self {
+    pub fn new(entity_db: Arc<EntityDb>) -> Self {
         Self {
             state: Arc::new(RwLock::new(BlockchainState::default())),
+            entity_db,
         }
     }
 
@@ -107,6 +80,11 @@ impl Blockchain {
 
             // Update accounts
             Self::update_account_for_transaction(&mut state, &transaction);
+
+            // Extract and add entities from transaction data
+            if let Some(entity) = self.extract_entity_from_transaction(transaction).await {
+                self.entity_db.add_entity(entity).await;
+            }
         }
     }
 
@@ -132,6 +110,19 @@ impl Blockchain {
         receiver_account
             .received_transactions
             .push(transaction.hash);
+    }
+
+    /// Extract entity from transaction data (simplified)
+    /// In a real implementation, you would parse the transaction data
+    /// and extract GolemBase entity operations
+    async fn extract_entity_from_transaction(
+        &self,
+        _transaction: &Arc<Transaction>,
+    ) -> Option<crate::entity_db::Entity> {
+        // This is a simplified implementation
+        // In a real scenario, you would parse the transaction data
+        // and extract actual entity information
+        None
     }
 
     /// Get a block by its number
@@ -173,5 +164,78 @@ impl Blockchain {
     pub async fn get_account_mut(&self, address: &Address) -> Option<Account> {
         // For now, return a clone since we can't return a mutable reference from async
         self.state.read().await.accounts.get(address).cloned()
+    }
+
+    /// Get balance for an account
+    pub async fn get_balance(&self, address: &Address) -> U256 {
+        self.state
+            .read()
+            .await
+            .accounts
+            .get(address)
+            .map(|account| account.balance)
+            .unwrap_or(U256::ZERO)
+    }
+
+    /// Get all accounts
+    pub async fn get_accounts(&self) -> Vec<Address> {
+        self.state.read().await.accounts.keys().cloned().collect()
+    }
+
+    /// Get all blocks
+    pub async fn get_blocks(&self) -> HashMap<u64, Arc<Block>> {
+        self.state.read().await.blocks_by_number.clone()
+    }
+
+    /// Get the latest block number
+    pub async fn get_latest_block_number(&self) -> anyhow::Result<u64> {
+        let latest = self
+            .state
+            .read()
+            .await
+            .blocks_by_number
+            .keys()
+            .max()
+            .copied();
+
+        latest.ok_or_else(|| anyhow::anyhow!("No blocks found in blockchain"))
+    }
+
+    /// Add accounts with initial balances
+    pub async fn add_accounts(&self, accounts: Vec<Address>) {
+        let mut state = self.state.write().await;
+        for address in accounts {
+            state
+                .accounts
+                .entry(address)
+                .or_insert_with(|| Account::new(address));
+        }
+    }
+
+    /// Set balance for an account
+    pub async fn set_balance(&self, address: Address, balance: U256) {
+        let mut state = self.state.write().await;
+        let account = state
+            .accounts
+            .entry(address)
+            .or_insert_with(|| Account::new(address));
+        account.balance = balance;
+    }
+
+    /// Create and add genesis block
+    pub async fn create_genesis_block(&self) {
+        let genesis_block = Block::new(
+            0,                      // Genesis block number
+            B256::ZERO,             // No previous block
+            Vec::new(),             // No transactions
+            U256::from(30_000_000), // Gas limit
+            U256::ZERO,             // No gas used
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        );
+
+        self.add_block(Arc::new(genesis_block)).await;
     }
 }

@@ -4,14 +4,18 @@ use anyhow::Result;
 use jsonrpsee::core::{async_trait, RpcResult};
 use jsonrpsee::server::{RpcModule, Server};
 use rand::Rng;
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::api::{EthRpcServer, GolemBaseRpcServer};
+use crate::blockchain::Blockchain;
+use crate::entity_db::EntityDb;
+use crate::execution::ExecutionEngine;
+use crate::transaction_pool::TransactionPool;
 
 pub mod api;
+pub mod block;
 pub mod blockchain;
 pub mod entity_db;
 pub mod execution;
@@ -21,46 +25,36 @@ pub mod transaction_pool;
 // Re-export server functions for convenience
 pub use server::{create_test_mock_server, get_default_mock_server_url};
 
-/// Internal state data for the mock server
+/// Mock implementation of RPC methods (both Ethereum and GolemBase)
 #[derive(Clone, Default)]
-struct MockStateData {
+pub struct GolemBaseMock {
     chain_id: U256,
-    accounts: Vec<Address>,
-    balances: HashMap<Address, U256>,
-    transaction_count: HashMap<Address, U256>,
-    transactions: HashMap<B256, Transaction>,
-    receipts: HashMap<B256, TransactionReceipt>,
-    blocks: HashMap<u64, Block>,
-    entities: HashMap<B256, serde_json::Value>,
-    syncing: bool,
+    blockchain: Blockchain,
+    entity_db: EntityDb,
+    transaction_pool: TransactionPool,
+    execution: ExecutionEngine,
 }
 
-impl MockStateData {
-    fn new() -> Self {
+impl GolemBaseMock {
+    pub fn new() -> Self {
+        let entity_db = EntityDb::new();
+        let blockchain = Blockchain::new(Arc::new(entity_db.clone()));
+        let transaction_pool = TransactionPool::new();
+        let execution_engine = ExecutionEngine::new(
+            Arc::new(RwLock::new(blockchain.clone())),
+            Arc::new(transaction_pool.clone()),
+        );
+
         Self {
             chain_id: U256::from(1337),
-            ..Default::default()
+            blockchain,
+            entity_db,
+            transaction_pool,
+            execution: execution_engine,
         }
     }
 }
 
-/// Mock state for the RPC server
-#[derive(Clone, Default)]
-pub struct MockState {
-    data: Arc<RwLock<MockStateData>>,
-}
-
-/// Mock implementation of RPC methods (both Ethereum and GolemBase)
-#[derive(Clone)]
-pub struct GolemBaseMock {
-    state: MockState,
-}
-
-impl GolemBaseMock {
-    pub fn new(state: MockState) -> Self {
-        Self { state }
-    }
-}
 #[async_trait]
 impl EthRpcServer for GolemBaseMock {
     async fn get_transaction_count(
@@ -68,21 +62,14 @@ impl EthRpcServer for GolemBaseMock {
         address: Address,
         _block: Option<BlockId>,
     ) -> RpcResult<U256> {
-        let count = self
-            .state
-            .data
-            .read()
-            .await
-            .transaction_count
-            .get(&address)
-            .copied()
-            .unwrap_or(U256::ZERO);
+        let count = self.transaction_pool.get_transaction_count(&address).await;
         Ok(count)
     }
 
-    async fn get_transaction_receipt(&self, hash: B256) -> RpcResult<Option<TransactionReceipt>> {
-        let receipt = self.state.data.read().await.receipts.get(&hash).cloned();
-        Ok(receipt)
+    async fn get_transaction_receipt(&self, _hash: B256) -> RpcResult<Option<TransactionReceipt>> {
+        // Mock implementation - return None for now
+        // In a real implementation, this would return actual transaction receipts
+        Ok(None)
     }
 
     async fn get_proof(
@@ -104,24 +91,15 @@ impl EthRpcServer for GolemBaseMock {
     }
 
     async fn get_balance(&self, address: Address, _block: Option<BlockId>) -> RpcResult<U256> {
-        let balance = self
-            .state
-            .data
-            .read()
-            .await
-            .balances
-            .get(&address)
-            .copied()
-            .unwrap_or(U256::ZERO);
-        Ok(balance)
+        Ok(self.blockchain.get_balance(&address).await)
     }
 
     async fn accounts(&self) -> RpcResult<Vec<Address>> {
-        Ok(self.state.data.read().await.accounts.clone())
+        Ok(self.blockchain.get_accounts().await)
     }
 
     async fn get_accounts(&self) -> RpcResult<Vec<Address>> {
-        Ok(self.state.data.read().await.accounts.clone())
+        Ok(self.blockchain.get_accounts().await)
     }
 
     async fn send_transaction(&self, _transaction: serde_json::Value) -> RpcResult<B256> {
@@ -139,23 +117,17 @@ impl EthRpcServer for GolemBaseMock {
     }
 
     async fn chain_id(&self) -> RpcResult<U256> {
-        Ok(self.state.data.read().await.chain_id)
+        Ok(self.chain_id)
     }
 
-    async fn get_transaction_by_hash(&self, hash: B256) -> RpcResult<Option<Transaction>> {
-        let transaction = self
-            .state
-            .data
-            .read()
-            .await
-            .transactions
-            .get(&hash)
-            .cloned();
-        Ok(transaction)
+    async fn get_transaction_by_hash(&self, _hash: B256) -> RpcResult<Option<Transaction>> {
+        // Mock implementation - return None for now
+        // In a real implementation, this would return actual transaction data
+        Ok(None)
     }
 
     async fn syncing(&self) -> RpcResult<bool> {
-        Ok(self.state.data.read().await.syncing)
+        Ok(false) // Mock implementation - always false
     }
 
     async fn get_block_by_number(
@@ -163,22 +135,47 @@ impl EthRpcServer for GolemBaseMock {
         block: BlockNumberOrTag,
         _full: Option<bool>,
     ) -> RpcResult<Option<Block>> {
-        match block {
-            BlockNumberOrTag::Number(block_num) => {
-                let block = self.state.data.read().await.blocks.get(&block_num).cloned();
-                Ok(block)
+        // Get block number from BlockNumberOrTag
+        let block_number = match block {
+            BlockNumberOrTag::Number(num) => num,
+            BlockNumberOrTag::Latest | BlockNumberOrTag::Safe | BlockNumberOrTag::Finalized => {
+                // For mock, just return the latest block number
+                match self.blockchain.get_latest_block_number().await {
+                    Ok(num) => num,
+                    Err(_) => return Ok(None), // Return None if no blocks exist
+                }
             }
-            BlockNumberOrTag::Latest => {
-                // Return the latest block or None
-                let blocks = &self.state.data.read().await.blocks;
-                let latest_block = blocks
-                    .keys()
-                    .max()
-                    .and_then(|&num| blocks.get(&num).cloned());
-                Ok(latest_block)
+            BlockNumberOrTag::Earliest => 0,
+            BlockNumberOrTag::Pending => {
+                // Return None for pending blocks in mock implementation
+                return Ok(None);
             }
-            _ => Ok(None),
-        }
+        };
+
+        let block = self.blockchain.get_block_by_number(block_number).await;
+        Ok(block.map(|block| (*block).clone().into()))
+    }
+
+    async fn estimate_gas(&self, _call_request: serde_json::Value) -> RpcResult<U256> {
+        // Mock implementation - return a reasonable gas estimate
+        // In a real implementation, this would simulate the transaction and estimate gas
+        Ok(U256::from(21000))
+    }
+
+    async fn fee_history(
+        &self,
+        _block_count: U256,
+        _newest_block: BlockId,
+        _reward_percentiles: Option<Vec<f64>>,
+    ) -> RpcResult<serde_json::Value> {
+        // Mock implementation - return empty fee history
+        // In a real implementation, this would return actual fee history data
+        Ok(serde_json::json!({
+            "oldestBlock": "0x0",
+            "baseFeePerGas": [],
+            "gasUsedRatio": [],
+            "reward": []
+        }))
     }
 }
 
@@ -246,31 +243,29 @@ impl GolemBaseRpcServer for GolemBaseMock {
 }
 
 /// GolemBase Mock Server
+#[derive(Clone, Default)]
 pub struct GolemBaseMockServer {
-    state: MockState,
+    pub state: GolemBaseMock,
     server: Option<jsonrpsee::server::ServerHandle>,
 }
 
 impl GolemBaseMockServer {
     pub fn new() -> Self {
         Self {
-            state: MockState::default(),
+            state: GolemBaseMock::new(),
             server: None,
         }
     }
 
-    pub fn with_chain_id(self, chain_id: u64) -> Self {
-        let state = self.state.clone();
-        tokio::spawn(async move {
-            state.data.write().await.chain_id = U256::from(chain_id);
-        });
+    pub fn with_chain_id(mut self, chain_id: u64) -> Self {
+        self.state.chain_id = U256::from(chain_id);
         self
     }
 
     pub fn with_accounts(self, accounts: Vec<Address>) -> Self {
         let state = self.state.clone();
         tokio::spawn(async move {
-            state.data.write().await.accounts = accounts;
+            state.blockchain.add_accounts(accounts).await;
         });
         self
     }
@@ -278,15 +273,7 @@ impl GolemBaseMockServer {
     pub fn with_balance(self, address: Address, balance: U256) -> Self {
         let state = self.state.clone();
         tokio::spawn(async move {
-            state.data.write().await.balances.insert(address, balance);
-        });
-        self
-    }
-
-    pub fn with_syncing(self, syncing: bool) -> Self {
-        let state = self.state.clone();
-        tokio::spawn(async move {
-            state.data.write().await.syncing = syncing;
+            state.blockchain.set_balance(address, balance).await;
         });
         self
     }
@@ -298,7 +285,7 @@ impl GolemBaseMockServer {
         let mut module = RpcModule::new(());
 
         // Register RPC methods (both Ethereum and GolemBase)
-        let rpc_impl = GolemBaseMock::new(self.state.clone());
+        let rpc_impl = self.state.clone();
         module.merge(EthRpcServer::into_rpc(rpc_impl.clone()))?;
         module.merge(GolemBaseRpcServer::into_rpc(rpc_impl))?;
 
@@ -307,25 +294,15 @@ impl GolemBaseMockServer {
         let addr = server.local_addr()?;
         log::info!("GolemBase Mock Server listening on {}", addr);
 
+        // Start the execution engine to produce blocks
+        self.state.blockchain.create_genesis_block().await;
+        self.state.execution.start().await;
+
         let server_handle = server.start(module);
 
         Ok(Self {
             state: self.state,
             server: Some(server_handle),
         })
-    }
-
-    pub fn state(&self) -> &MockState {
-        &self.state
-    }
-
-    pub fn state_mut(&mut self) -> &mut MockState {
-        &mut self.state
-    }
-}
-
-impl Default for GolemBaseMockServer {
-    fn default() -> Self {
-        Self::new()
     }
 }

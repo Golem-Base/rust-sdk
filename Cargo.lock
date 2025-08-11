@@ -2465,6 +2465,7 @@ dependencies = [
  "bigdecimal",
  "bytes",
  "golem-base-sdk",
+ "golem-base-test-utils",
  "jsonrpsee",
  "log",
  "rand 0.8.5",

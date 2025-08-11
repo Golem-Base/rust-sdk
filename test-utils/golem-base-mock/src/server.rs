@@ -31,22 +31,19 @@ pub async fn create_test_mock_server(
 
     let server = GolemBaseMockServer::new()
         .with_chain_id(31337) // Hardhat default
-        .with_accounts(test_accounts.clone())
-        .with_syncing(false);
+        .with_accounts(test_accounts.clone());
 
     // Start the server
     let socket_addr = SocketAddr::from_str("127.0.0.1:8545")?;
-    let mut server = server.start(socket_addr).await?;
+    let server = server.start(socket_addr).await?;
 
     // Set initial balances for test accounts
     for account in test_accounts {
         server
-            .state_mut()
-            .data
-            .write()
-            .await
-            .balances
-            .insert(account, U256::from(1000000000000000000000u128));
+            .state
+            .blockchain
+            .set_balance(account, U256::from(1000000000000000000000u128))
+            .await;
     }
 
     Ok(server)

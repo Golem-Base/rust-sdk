@@ -54,6 +54,17 @@ pub trait EthRpc {
         block: BlockNumberOrTag,
         full: Option<bool>,
     ) -> RpcResult<Option<Block>>;
+
+    #[method(name = "estimateGas")]
+    async fn estimate_gas(&self, call_request: serde_json::Value) -> RpcResult<U256>;
+
+    #[method(name = "feeHistory")]
+    async fn fee_history(
+        &self,
+        block_count: U256,
+        newest_block: BlockId,
+        reward_percentiles: Option<Vec<f64>>,
+    ) -> RpcResult<serde_json::Value>;
 }
 
 /// Mock implementation of GolemBase RPC methods
@@ -91,4 +102,4 @@ pub trait GolemBaseRpc {
         &self,
         block_number: u64,
     ) -> RpcResult<Option<Vec<B256>>>;
-} 
+}
