@@ -94,8 +94,20 @@ impl ExecutionEngine {
             state.current_block_number
         };
 
+        log::info!("=== Mining new block #{block_number} ===");
+
         // Get transactions from pool (limit to 100 per block)
         let transactions = self.transaction_pool.get_transaction_batch(100).await;
+        let transaction_count = transactions.len();
+
+        if transaction_count == 0 {
+            log::info!("No transactions in pool, creating empty block");
+        } else {
+            log::info!("Including {} transactions in block:", transaction_count);
+            for (i, tx) in transactions.iter().enumerate() {
+                log::info!("  TX {}: 0x{:x}", i + 1, tx.hash);
+            }
+        }
 
         // Remove processed transactions from pool
         for transaction in &transactions {
@@ -106,8 +118,15 @@ impl ExecutionEngine {
 
         // Create and add block
         let block = self.create_block(block_number, transactions).await;
+        let block_hash = block.header.block_hash;
         let blockchain = self.blockchain.write().await;
         blockchain.add_block(Arc::new(block)).await;
+
+        log::info!(
+            "=== Block #{block_number} (0x{:x}) mined successfully with {} transactions ===",
+            block_hash,
+            transaction_count
+        );
     }
 
     /// Create a block with the given transactions

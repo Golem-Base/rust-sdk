@@ -1,6 +1,7 @@
 use crate::block::{Block, Transaction};
 use crate::entity_db::EntityDb;
 use alloy::primitives::{Address, B256, U256};
+use golem_base_sdk::utils::wei_to_eth;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -110,6 +111,16 @@ impl Blockchain {
         receiver_account
             .received_transactions
             .push(transaction.hash);
+
+        if transaction.value > U256::ZERO {
+            log::debug!(
+                "Account transfer: {} -> {} (value: {} ETH, tx: 0x{:x})",
+                transaction.from,
+                transaction.to,
+                wei_to_eth(transaction.value),
+                transaction.hash
+            );
+        }
     }
 
     /// Extract entity from transaction data (simplified)

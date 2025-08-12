@@ -21,18 +21,24 @@ async fn test_golem_base_mock_integration() -> Result<(), Box<dyn std::error::Er
     assert_eq!(chain_id, 31337);
 
     // Create a test account with funding
+    log::info!("Creating test account and funding it...");
     let account = create_test_account(&client).await.unwrap();
     let balance = client.get_balance(account).await?;
     assert!(balance == BigDecimal::from(1));
 
+    log::info!("Account {account} created with balance {balance}");
+
     // Test basic entity creation
+    log::info!("Creating test entity...");
+
     let test_data = b"Hello, GolemBase!";
     let create = Create::new(test_data.to_vec(), 100)
         .annotate_string("test_type", "Test")
         .annotate_number("test_timestamp", 1234567890);
 
     let result = client.create_entry(account, create).await.unwrap();
-    log::info!("Created {} entities", result);
+
+    log::info!("Created entity {result}...");
 
     log::info!("✅ All GolemBase mock tests completed successfully!");
     Ok(())

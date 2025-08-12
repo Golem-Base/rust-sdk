@@ -15,6 +15,7 @@ anyhow = "1.0"
 log = "0.4"
 async-trait = "0.1"
 rand = "0.8"
+golem-base-sdk = { workspace = true }
 
 [dev-dependencies]
 golem-base-sdk = { workspace = true }

@@ -106,9 +106,6 @@ impl EthRpcServer for GolemBaseMock {
                 tx.to
             );
             tx
-        } else if let Some(tx) = self.transaction_pool.get_transaction(&hash).await {
-            log::debug!("Transaction found in transaction pool (pending)");
-            tx
         } else {
             log::debug!("Transaction not found anywhere");
             return Ok(None);
@@ -256,8 +253,6 @@ impl EthRpcServer for GolemBaseMock {
             chain_id: self.chain_id.try_into().unwrap_or(1337),
             signature: signature.clone(),
         };
-
-        log::info!("Created internal transaction with signature");
 
         // Add to transaction pool (reusing send_raw_transaction logic)
         let transaction = Arc::new(internal_transaction);
