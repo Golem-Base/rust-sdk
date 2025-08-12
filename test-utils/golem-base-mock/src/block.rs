@@ -163,7 +163,10 @@ impl TryFrom<EthereumTxEnvelope<TxEip4844>> for Transaction {
     fn try_from(decoded: EthereumTxEnvelope<TxEip4844>) -> Result<Self, Self::Error> {
         // Check if this is an EIP-4844 transaction
         if !matches!(decoded, EthereumTxEnvelope::Eip4844(_)) {
-            return Err(anyhow!("Unsupported transaction type"));
+            return Err(anyhow!(
+                "Unsupported transaction type: {:?}",
+                decoded.tx_type()
+            ));
         }
 
         let transaction = Self {

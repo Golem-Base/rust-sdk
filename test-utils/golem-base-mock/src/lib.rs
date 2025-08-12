@@ -1,25 +1,27 @@
-use alloy::consensus::{EthereumTxEnvelope, TxEip4844, TxEip4844Variant};
-use alloy::primitives::{Address, Bytes, B256, U256};
+use alloy::consensus::{
+    Eip658Value, EthereumTxEnvelope, Receipt, ReceiptEnvelope, ReceiptWithBloom, TxEip4844,
+    TxEip4844Variant,
+};
+use alloy::network::{TransactionBuilder, TxSigner};
+use alloy::primitives::TxKind;
+use alloy::primitives::{Address, Bloom, Bytes, B256, U256};
 use alloy::rlp::Decodable;
-use alloy::rpc::types::{Block, BlockId, BlockNumberOrTag, Transaction, TransactionReceipt};
+use alloy::rpc::types::{
+    Block, BlockId, BlockNumberOrTag, Transaction, TransactionReceipt, TransactionRequest,
+};
 use anyhow::Result;
 use jsonrpsee::core::{async_trait, RpcResult};
 use jsonrpsee::server::{RpcModule, Server};
 use jsonrpsee::types::{ErrorCode, ErrorObject};
-use rand::Rng;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-
-/// Helper function to create ErrorObject with a typed ErrorCode and message
-fn create_error(code: ErrorCode, message: impl Into<String>) -> ErrorObject<'static> {
-    ErrorObject::owned(code.code(), message.into(), None::<()>)
-}
 
 use crate::api::{EthRpcServer, GolemBaseRpcServer};
 use crate::blockchain::Blockchain;
 use crate::entity_db::EntityDb;
 use crate::execution::ExecutionEngine;
+use crate::managed_accounts::ManagedAccounts;
 use crate::transaction_pool::TransactionPool;
 
 pub mod api;
@@ -27,11 +29,17 @@ pub mod block;
 pub mod blockchain;
 pub mod entity_db;
 pub mod execution;
+pub mod managed_accounts;
 pub mod server;
 pub mod transaction_pool;
 
 // Re-export server functions for convenience
 pub use server::{create_test_mock_server, get_default_mock_server_url};
+
+/// Helper function to create ErrorObject with a typed ErrorCode and message
+fn create_error(code: ErrorCode, message: impl Into<String>) -> ErrorObject<'static> {
+    ErrorObject::owned(code.code(), message.into(), None::<()>)
+}
 
 /// Mock implementation of RPC methods (both Ethereum and GolemBase)
 #[derive(Clone, Default)]
@@ -41,6 +49,7 @@ pub struct GolemBaseMock {
     entity_db: EntityDb,
     transaction_pool: TransactionPool,
     execution: ExecutionEngine,
+    managed_accounts: ManagedAccounts,
 }
 
 impl GolemBaseMock {
@@ -59,6 +68,7 @@ impl GolemBaseMock {
             entity_db,
             transaction_pool,
             execution: execution_engine,
+            managed_accounts: ManagedAccounts::new(),
         }
     }
 }
@@ -70,14 +80,81 @@ impl EthRpcServer for GolemBaseMock {
         address: Address,
         _block: Option<BlockId>,
     ) -> RpcResult<U256> {
-        let count = self.transaction_pool.get_transaction_count(&address).await;
-        Ok(count)
+        // Get pending transactions from the pool
+        let pending_count = self.transaction_pool.get_transaction_count(&address).await;
+
+        // Get the account nonce (already processed transactions) from the blockchain
+        let account_nonce = if let Some(account) = self.blockchain.get_account(&address).await {
+            account.nonce
+        } else {
+            U256::ZERO
+        };
+
+        // Total nonce = account nonce + pending transactions
+        let total_count = account_nonce + pending_count;
+        Ok(total_count)
     }
 
-    async fn get_transaction_receipt(&self, _hash: B256) -> RpcResult<Option<TransactionReceipt>> {
-        // Mock implementation - return None for now
-        // In a real implementation, this would return actual transaction receipts
-        Ok(None)
+    async fn get_transaction_receipt(&self, hash: B256) -> RpcResult<Option<TransactionReceipt>> {
+        log::debug!("Getting transaction receipt for hash: 0x{:x}", hash);
+
+        // Get transaction from blockchain first, then from pool if not found
+        let transaction = if let Some(tx) = self.blockchain.get_transaction(&hash).await {
+            log::debug!(
+                "Transaction found in blockchain: from={:?}, to={:?}",
+                tx.from,
+                tx.to
+            );
+            tx
+        } else if let Some(tx) = self.transaction_pool.get_transaction(&hash).await {
+            log::debug!("Transaction found in transaction pool (pending)");
+            tx
+        } else {
+            log::debug!("Transaction not found anywhere");
+            return Ok(None);
+        };
+
+        // Try to find the block containing this transaction (may be None for pending transactions)
+        let block = self
+            .blockchain
+            .find_block_containing_transaction(&hash)
+            .await;
+
+        if let Some(block_ref) = &block {
+            log::debug!(
+                "Transaction found in block: number={}, hash=0x{:x}",
+                block_ref.header.block_number,
+                block_ref.header.block_hash
+            );
+        } else {
+            log::debug!("Transaction not in any block (pending)");
+        }
+
+        let receipt = TransactionReceipt {
+            transaction_hash: hash,
+            transaction_index: block
+                .clone()
+                .map(|b| b.find_transaction_index(&hash))
+                .flatten(),
+            block_hash: block.clone().map(|b| b.header.block_hash),
+            block_number: block.clone().map(|b| b.header.block_number),
+            from: transaction.from,
+            to: Some(transaction.to),
+            inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom {
+                receipt: Receipt {
+                    status: Eip658Value::success(),
+                    cumulative_gas_used: 0,
+                    logs: vec![],
+                },
+                logs_bloom: Bloom::ZERO,
+            }),
+            gas_used: 0,
+            effective_gas_price: 0,
+            blob_gas_used: None,    // No blob gas in this mock
+            blob_gas_price: None,   // No blob gas in this mock
+            contract_address: None, // No contract creation in this mock
+        };
+        Ok(Some(receipt))
     }
 
     async fn get_proof(
@@ -103,18 +180,96 @@ impl EthRpcServer for GolemBaseMock {
     }
 
     async fn accounts(&self) -> RpcResult<Vec<Address>> {
-        Ok(self.blockchain.get_accounts().await)
+        // Return list of managed accounts
+        Ok(self.managed_accounts.get_all_accounts())
     }
 
     async fn get_accounts(&self) -> RpcResult<Vec<Address>> {
         Ok(self.blockchain.get_accounts().await)
     }
 
-    async fn send_transaction(&self, _transaction: serde_json::Value) -> RpcResult<B256> {
-        // Mock implementation - return a random transaction hash
-        let mut rng = rand::thread_rng();
-        let tx_hash = B256::new(rng.gen());
-        Ok(tx_hash)
+    async fn send_transaction(&self, transaction: TransactionRequest) -> RpcResult<B256> {
+        // Log the transaction data
+        log::info!(
+            "Received transaction: {}",
+            serde_json::to_string_pretty(&transaction)
+                .unwrap_or_else(|_| "Invalid JSON".to_string())
+        );
+
+        // Get the sender address
+        let from_address = transaction.from.ok_or_else(|| {
+            create_error(
+                ErrorCode::InvalidParams,
+                "Missing 'from' field in transaction".to_string(),
+            )
+        })?;
+
+        // Get the account for the sender address
+        let signer = self
+            .managed_accounts
+            .get_account(from_address)
+            .ok_or_else(|| {
+                create_error(
+                    ErrorCode::InvalidParams,
+                    format!("Account {from_address} is not managed by this node.",),
+                )
+            })?;
+
+        let mut signed = transaction.clone().build_unsigned().map_err(|e| {
+            create_error(
+                ErrorCode::InvalidParams,
+                format!("Failed to build transaction: {e:?}"),
+            )
+        })?;
+
+        let signature = signer.sign_transaction(&mut signed).await.map_err(|e| {
+            create_error(
+                ErrorCode::InvalidParams,
+                format!("Failed to sign transaction: {e:?}"),
+            )
+        })?;
+
+        let internal_transaction = crate::block::Transaction {
+            hash: signed.tx_hash(&signature),
+            from: from_address,
+            to: match transaction.to.ok_or_else(|| {
+                create_error(
+                    ErrorCode::InvalidParams,
+                    "Missing 'to' field in transaction".to_string(),
+                )
+            })? {
+                TxKind::Call(addr) => addr,
+                TxKind::Create => {
+                    return Err(create_error(
+                        ErrorCode::InvalidParams,
+                        "Contract creation not supported in this mock".to_string(),
+                    ))
+                }
+            },
+            value: transaction.value.unwrap_or(U256::ZERO),
+            gas_limit: transaction.gas.unwrap_or(21000),
+            max_fee_per_gas: transaction.max_fee_per_gas.unwrap_or(20000000000),
+            max_priority_fee_per_gas: transaction.max_priority_fee_per_gas.unwrap_or(1000000000),
+            max_fee_per_blob_gas: 0, // No blob gas
+            nonce: transaction.nonce.unwrap_or(0),
+            data: transaction.input.into_input().unwrap_or_default(),
+            chain_id: self.chain_id.try_into().unwrap_or(1337),
+            signature: signature.clone(),
+        };
+
+        log::info!("Created internal transaction with signature");
+
+        // Add to transaction pool (reusing send_raw_transaction logic)
+        let transaction = Arc::new(internal_transaction);
+        self.transaction_pool
+            .add_transaction(transaction.clone())
+            .await;
+
+        log::info!(
+            "Added transaction to pool with hash: 0x{:x}",
+            transaction.hash
+        );
+        Ok(transaction.hash)
     }
 
     async fn send_raw_transaction(&self, data: Bytes) -> RpcResult<B256> {
@@ -263,6 +418,16 @@ impl EthRpcServer for GolemBaseMock {
         // In a real implementation, this would return the current gas price from the network
         Ok(U256::from(20_000_000_000u64)) // 20 gwei
     }
+
+    async fn block_number(&self) -> RpcResult<U256> {
+        match self.blockchain.get_latest_block_number().await {
+            Ok(num) => Ok(U256::from(num)),
+            Err(e) => Err(create_error(
+                ErrorCode::InternalError,
+                format!("Error getting block: {e}"),
+            )),
+        }
+    }
 }
 
 #[async_trait]
@@ -328,6 +493,13 @@ impl GolemBaseRpcServer for GolemBaseMock {
     }
 }
 
+impl GolemBaseMock {
+    /// Creates a new account with a random private key
+    pub fn create_account(&self) -> Address {
+        self.managed_accounts.create_account()
+    }
+}
+
 /// GolemBase Mock Server
 #[derive(Clone, Default)]
 pub struct GolemBaseMockServer {
@@ -348,20 +520,14 @@ impl GolemBaseMockServer {
         self
     }
 
-    pub fn with_accounts(self, accounts: Vec<Address>) -> Self {
-        let state = self.state.clone();
-        tokio::spawn(async move {
-            state.blockchain.add_accounts(accounts).await;
-        });
-        self
-    }
-
-    pub fn with_balance(self, address: Address, balance: U256) -> Self {
-        let state = self.state.clone();
-        tokio::spawn(async move {
-            state.blockchain.set_balance(address, balance).await;
-        });
-        self
+    pub async fn create_test_account(&mut self, initial_balance: U256) -> Address {
+        let address = self.state.create_account();
+        self.state.blockchain.add_accounts(vec![address]).await;
+        self.state
+            .blockchain
+            .set_balance(address, initial_balance)
+            .await;
+        address
     }
 
     pub async fn start(

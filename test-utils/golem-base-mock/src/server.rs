@@ -1,4 +1,4 @@
-use alloy::primitives::{Address, U256};
+use alloy::primitives::U256;
 use std::net::SocketAddr;
 use std::str::FromStr;
 
@@ -22,29 +22,19 @@ pub async fn start_default_mock_server(
 /// Helper function to create a mock server with test accounts and balances
 pub async fn create_test_mock_server(
 ) -> Result<GolemBaseMockServer, Box<dyn std::error::Error + Send + Sync>> {
-    // Create test accounts
-    let test_accounts = vec![
-        Address::from_str("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")?,
-        Address::from_str("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC")?,
-        Address::from_str("0x90F79bf6EB2c4f870365E785982E1f101E93b906")?,
-    ];
+    // Create server
+    let mut server = GolemBaseMockServer::new().with_chain_id(31337); // Hardhat default
 
-    let server = GolemBaseMockServer::new()
-        .with_chain_id(31337) // Hardhat default
-        .with_accounts(test_accounts.clone());
+    // Create test accounts with initial balances
+    for _ in 0..3 {
+        server
+            .create_test_account(U256::from(1000000000000000000000u128))
+            .await;
+    }
 
     // Start the server
     let socket_addr = SocketAddr::from_str("127.0.0.1:8545")?;
     let server = server.start(socket_addr).await?;
-
-    // Set initial balances for test accounts
-    for account in test_accounts {
-        server
-            .state
-            .blockchain
-            .set_balance(account, U256::from(1000000000000000000000u128))
-            .await;
-    }
 
     Ok(server)
 }
