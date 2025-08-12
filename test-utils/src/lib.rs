@@ -1,4 +1,5 @@
 use alloy::primitives::B256;
+use alloy::signers::local::LocalSigner;
 use anyhow::Result;
 use dirs::config_dir;
 use golem_base_sdk::{GolemBaseClient, PrivateKeySigner};
@@ -13,9 +14,11 @@ pub const GOLEM_BASE_WS_URL: &str = "ws://localhost:8545";
 pub const TEST_TTL: u64 = 30;
 
 pub fn get_client() -> Result<GolemBaseClient> {
-    let mut private_key_path =
-        config_dir().ok_or_else(|| anyhow::anyhow!("Failed to get config directory"))?;
-    private_key_path.push("golembase/private.key");
+    let keypath = config_dir()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get config directory"))?
+        .join("golembase")
+        .join("wallet.json");
+    let signer = LocalSigner::decrypt_keystore(keypath, "get password from stdin")?;
     let private_key_bytes = fs::read(&private_key_path).map_err(|e| {
         anyhow::anyhow!(
             "Failed to read private key at {}: {}",

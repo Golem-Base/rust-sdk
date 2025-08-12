@@ -10,7 +10,7 @@ members = ["api", "demo", "test-utils"]
 resolver = "2"
 
 [dependencies]
-alloy = { version = "1.0", features = ["full", "json-rpc"] }
+alloy = { version = "1.0", features = ["full", "json-rpc", "signer-local"] }
 alloy-json-rpc = "1.0"
 alloy-rlp = "0.3"
 alloy-sol-types = "1.2"
