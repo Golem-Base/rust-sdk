@@ -1,76 +1,112 @@
-# Nix flake for reproducible Rust development and builds.
-# - Uses `crane` for Rust builds and incremental caching.
-# - Uses `rust-overlay` for toolchain from `rust-toolchain` file.
-# - Provides a `devShell` with all dev dependencies and `pre-commit`.
-# - Exposes the built crate as the default package.
-
 {
-  # Flake inputs: build helpers, overlays, and package set
+  description = "A Rust SDK for interacting with GolemBase.";
+
   inputs = {
-    crane.url = "github:ipetkov/crane";
-    flake-utils.url = "github:numtide/flake-utils";
     nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz";
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
+
+    crane.url = "github:ipetkov/crane";
+
+    fenix = {
+      url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.rust-analyzer-src.follows = "";
     };
+
+    flake-utils.url = "github:numtide/flake-utils";
   };
 
-  # Flake outputs: build and dev environments for each system
   outputs =
-    {
-      nixpkgs,
-      crane,
-      rust-overlay,
-      flake-utils,
-      ...
+    { self
+    , nixpkgs
+    , crane
+    , fenix
+    , flake-utils
+    , ...
     }:
-    flake-utils.lib.eachDefaultSystem (
-      system:
-      let
+    flake-utils.lib.eachDefaultSystem (system:
+    let
+      inherit (pkgs) lib;
+      pkgs = nixpkgs.legacyPackages.${system};
 
-        # Import nixpkgs with Rust overlay
-        overlays = [ (import rust-overlay) ];
-        pkgs = import nixpkgs { inherit system overlays; };
+      rustToolchain = fenix.packages.${system}.fromToolchainFile {
+        file = ./.rust-toolchain.toml;
+        sha256 = "sha256-Qxt8XAuaUR2OMdKbN4u8dBJOhSHxS+uS06Wl9+flVEk=";
+      };
 
-        # Rust toolchain and build dependencies
-        rustToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain;
-        nativeBuildInputs = with pkgs; [
-          rustToolchain
-          pkg-config
-        ];
+      craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
+      src =
+        let
+          markdownFilter = path: _type: builtins.match ".*md$" path != null;
+          markdownOrCargo = path: type:
+            (markdownFilter path type) || (craneLib.filterCargoSources path type);
+        in
+        lib.cleanSourceWith {
+          src = ./.;
+          filter = markdownOrCargo;
+          name = "source";
+        };
+
+      commonArgs = {
+        inherit src;
+        strictDeps = true;
+
+        # TODO: Check dependencies for rustls, we can potentially
+        # remove the dependency on pkg-config and openssl
+        nativeBuildInputs = with pkgs; [ pkg-config ];
+
         buildInputs = with pkgs; [ openssl ];
+      };
 
-        # Prepare source and build args using crane
-        craneLib = crane.mkLib pkgs;
-        src = craneLib.cleanCargoSource ./.;
-        commonArgs = {
-          inherit src nativeBuildInputs buildInputs;
-          strictDeps = true;
-          # The tests don't work in the nix sandbox
-          doCheck = false;
+      cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+
+      golem-base-sdk = craneLib.buildPackage (commonArgs // {
+        inherit cargoArtifacts;
+        doCheck = false; # The tests don't work in the nix sandbox
+      });
+    in
+    {
+      # Additional cargo checks can be found at https://github.com/ipetkov/crane.
+      #
+      # These derivations are inherited by the `devShell`.
+      checks = {
+        inherit golem-base-sdk;
+
+        cargo-clippy = craneLib.cargoClippy (commonArgs // {
+          inherit cargoArtifacts;
+          cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+        });
+
+        cargo-fmt = craneLib.cargoFmt {
+          inherit src;
         };
 
-        # Build Rust dependencies and crate
-        cargoArtifacts = craneLib.buildDepsOnly commonArgs;
-        rustSdk = craneLib.buildPackage (commonArgs // { inherit cargoArtifacts; });
-
-      in
-      {
-        # Expose built crate and devShell
-        packages = {
-          default = rustSdk;
+        taplo-fmt = craneLib.taploFmt {
+          src = pkgs.lib.sources.sourceFilesBySuffices src [ ".toml" ];
         };
 
-        devShells.default =
-          with pkgs;
-          mkShell {
-            inherit nativeBuildInputs;
-            buildInputs = buildInputs ++ [ pre-commit ];
-            shellHook = ''
-              export PATH=${rustToolchain}/bin:$PATH
-            '';
-          };
-      }
-    );
+        cargo-doc = craneLib.cargoDoc (commonArgs // {
+          inherit cargoArtifacts;
+          cargoDocExtraArgs = "--no-deps --workspace";
+          # This can be commented out or tweaked as necessary, e.g. set to
+          # `--deny rustdoc::broken-intra-doc-links` to only enforce that lint
+          env.RUSTDOCFLAGS = "--deny warnings";
+        });
+      };
+
+      packages = {
+        inherit golem-base-sdk;
+        default = golem-base-sdk;
+      };
+
+      devShells.default = craneLib.devShell {
+        checks = self.checks.${system};
+        packages = with pkgs; [
+          pre-commit
+          nil
+          nixpkgs-fmt
+        ];
+      };
+
+      formatter = pkgs.nixpkgs-fmt;
+    });
 }

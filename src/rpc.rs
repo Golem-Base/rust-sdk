@@ -85,15 +85,15 @@ impl GolemBaseRoClient {
         params: S,
     ) -> Result<R, Error> {
         let method = method.into();
-        log::debug!("RPC Call - Method: {}, Params: {:?}", method, params);
+        log::debug!("RPC Call - Method: {method}, Params: {params:?}");
         self.provider
             .client()
             .request(method.clone(), params)
             .await
-            .inspect(|res| log::debug!("RPC Response: {:?}", res))
+            .inspect(|res| log::debug!("RPC Response: {res:?}"))
             .map_err(|e| match e {
                 RpcError::ErrorResp(err) => {
-                    anyhow!("Error response from RPC service: {}", err)
+                    anyhow!("Error response from RPC service: {err}")
                 }
                 RpcError::SerError(err) => {
                     anyhow!("Serialization error: {err}")

@@ -1,43 +1,34 @@
-# `pre-commit` configuration for Rust projects.
+# `pre-commit` hook configuration for running checks from the nix flake.
 #
-# Defines formatting, linting, and TOML validation hooks.
+# This hook will run `nix flake check` before every commit to
+# ensure your project passes all flake-defined checks.
 #
-# To enable these checks before every commit, install `pre-commit` and run:
+# You can view which checks will be run for your system with `nix flake show`.
 #
-#   pre-commit install
+# Usage:
+# 1. Make sure you are inside the dev shell:
 #
-# This will set up the hooks as git `pre-commit` hooks.
+#      `nix develop`
+#
+#    (Otherwise, `nix flake check` may fail due to missing dependencies.)
+#
+# 2. Install the pre-commit hook (only once per repo):
+#
+#      `pre-commit install`
+#
+# 3. From now on, every `git commit` will automatically run `nix flake check`.
+#
+#    To bypass these checks (not recommended), commit with:
+#
+#      `git commit --no-verify`
+#
+# ------------------------------------------------------------
 
 repos:
   - repo: local
     hooks:
-      - id: rustfmt
-        name: rustfmt
-        entry: rustfmt
-        args: ["--edition", "2024", "--check"]
+      - id: nix-flake-check
+        name: nix flake check
+        entry: nix flake check
         language: system
-        types: [rust]
-        files: \.rs$
-
-      - id: cargo-clippy
-        name: cargo clippy
-        entry: cargo
-        args: ["clippy", "--all-targets", "--all-features", "--", "-D", "warnings"]
-        language: system
-        types: [rust]
         pass_filenames: false
-
-    #   - id: cargo-audit
-    #     name: cargo audit
-    #     entry: cargo
-    #     args: ["audit"]
-    #     language: system
-    #     files: ^(Cargo\.toml|Cargo\.lock)$
-    #     pass_filenames: false
-
-      - id: taplo-validate
-        name: Taplo TOML validate
-        entry: taplo
-        args: ["check"]
-        language: system
-        files: \.toml$

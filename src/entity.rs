@@ -182,7 +182,7 @@ impl TryFrom<TransactionReceipt> for TransactionResult {
         receipt.logs().iter().cloned().try_for_each(|log| {
             let log: alloy::primitives::Log = log.into();
             let parsed = GolemBaseABI::GolemBaseABIEvents::decode_log(&log).map_err(|e| {
-                Self::Error::UnexpectedLogDataError(format!("Error decoding event log: {}", e))
+                Self::Error::UnexpectedLogDataError(format!("Error decoding event log: {e}"))
             })?;
             match parsed.data {
                 GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityCreated(data) => {
