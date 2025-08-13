@@ -40,6 +40,49 @@ async fn test_golem_base_mock_integration() -> Result<(), Box<dyn std::error::Er
 
     log::info!("Created entity {result}...");
 
+    log::info!("Retrieving storage value for entity key {result}...");
+    let storage_value = client.get_storage_value::<Vec<u8>>(result).await.unwrap();
+    let storage_string = String::from_utf8(storage_value.clone()).unwrap();
+    log::info!("Storage value: {}", storage_string);
+    assert_eq!(storage_value, test_data);
+
+    log::info!("Querying entities by string annotation 'test_type = \"Test\"'...");
+    let test_type_results = client.query_entities("test_type = \"Test\"").await.unwrap();
+    log::info!(
+        "Found {} entities with test_type = 'Test'",
+        test_type_results.len()
+    );
+    assert_eq!(test_type_results.len(), 1);
+    assert_eq!(test_type_results[0].key, result);
+    assert_eq!(test_type_results[0].value, test_data.as_slice());
+
+    log::info!("Querying entities by numeric annotation 'test_timestamp = 1234567890'...");
+    let timestamp_results = client
+        .query_entities("test_timestamp = 1234567890")
+        .await
+        .unwrap();
+    log::info!(
+        "Found {} entities with test_timestamp = 1234567890",
+        timestamp_results.len()
+    );
+    assert_eq!(timestamp_results.len(), 1);
+    assert_eq!(timestamp_results[0].key, result);
+
+    log::info!("Querying entity keys by annotation...");
+    let test_type_keys = client
+        .query_entity_keys("test_type = \"Test\"")
+        .await
+        .unwrap();
+    assert_eq!(test_type_keys.len(), 1);
+    assert_eq!(test_type_keys[0], result);
+
+    log::info!("Getting entity metadata...");
+    let metadata = client.get_entity_metadata(result).await.unwrap();
+    log::info!("Entity metadata: {:?}", metadata);
+    assert_eq!(metadata.owner, account);
+    assert_eq!(metadata.string_annotations.len(), 1);
+    assert_eq!(metadata.numeric_annotations.len(), 1);
+
     log::info!("✅ All GolemBase mock tests completed successfully!");
     Ok(())
 }
