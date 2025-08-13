@@ -120,7 +120,7 @@ impl ExecutionEngine {
         let block = self.create_block(block_number, transactions).await;
         let block_hash = block.header.block_hash;
         let blockchain = self.blockchain.write().await;
-        blockchain.add_block(Arc::new(block)).await;
+        blockchain.add_block(block).await;
 
         log::info!(
             "=== Block #{block_number} (0x{:x}) mined successfully with {} transactions ===",

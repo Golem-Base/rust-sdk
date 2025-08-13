@@ -1,0 +1,10 @@
+---
+description: Guideline how to code
+globs:
+alwaysApply: true
+---
+
+- Don't use fully qualified paths. Import symbols properly instead. Only exceptions: anyhow::Result, log::
+- Prefer resusing functions instead of generating and duplicating code
+- When modifying code, always consider my selection over general context
+- Don't write junior comments. Don't describe what next line does, what can be directly understood from code. Comments should explain why the specific solution was chosen.

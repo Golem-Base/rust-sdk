@@ -1,11 +1,17 @@
-use crate::block::{Block, Transaction};
-use crate::entity_db::EntityDb;
 use alloy::primitives::{Address, B256, U256};
-use golem_base_sdk::utils::wei_to_eth;
+use alloy::rlp::Decodable;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
+
+use golem_base_sdk::account::GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS;
+use golem_base_sdk::entity::GolemBaseTransaction;
+use golem_base_sdk::utils::wei_to_eth;
+
+use crate::block::{Block, Transaction};
+use crate::entity_db::{Entity, EntityDb};
 
 /// Represents an account in the mock blockchain
 #[derive(Clone, Debug)]
@@ -61,12 +67,12 @@ impl Blockchain {
     }
 
     /// Add a block to the blockchain
-    pub async fn add_block(&self, block: Arc<Block>) {
+    pub async fn add_block(&self, block: Block) {
         let mut state = self.state.write().await;
         let block_number = block.header.block_number;
         let block_hash = block.header.block_hash;
 
-        // Add block to block maps
+        let block = Arc::new(block);
         state.blocks_by_number.insert(block_number, block.clone());
         state.blocks_by_hash.insert(block_hash, block.clone());
 
@@ -83,9 +89,8 @@ impl Blockchain {
             Self::update_account_for_transaction(&mut state, &transaction);
 
             // Extract and add entities from transaction data
-            if let Some(entity) = self.extract_entity_from_transaction(transaction).await {
-                self.entity_db.add_entity(entity).await;
-            }
+            self.extract_entity_from_transaction(transaction, &block)
+                .await;
         }
     }
 
@@ -123,17 +128,67 @@ impl Blockchain {
         }
     }
 
-    /// Extract entity from transaction data (simplified)
-    /// In a real implementation, you would parse the transaction data
-    /// and extract GolemBase entity operations
-    async fn extract_entity_from_transaction(
-        &self,
-        _transaction: &Arc<Transaction>,
-    ) -> Option<crate::entity_db::Entity> {
-        // This is a simplified implementation
-        // In a real scenario, you would parse the transaction data
-        // and extract actual entity information
-        None
+    /// Extract entity from transaction data and modify entity database state
+    /// Checks if transaction is to storage contract and decodes GolemBase entity operations
+    async fn extract_entity_from_transaction(&self, transaction: &Arc<Transaction>, block: &Block) {
+        // Check if transaction is to the GolemBase storage processor contract
+        if transaction.to != GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS {
+            return;
+        }
+
+        // Try to decode the transaction data as a GolemBaseTransaction
+        // This is the inverse of the encoding shown in send_db_transaction
+        if let Ok(golem_tx) = GolemBaseTransaction::decode(&mut transaction.data.as_ref()) {
+            // Process creates
+            for (idx, create) in golem_tx.creates.into_iter().enumerate() {
+                let entity = Entity::create(create, transaction.from).with_hash(
+                    block.header.block_number,
+                    idx,
+                    transaction.hash,
+                );
+                self.entity_db.add_entity(entity.clone()).await;
+                log::info!(
+                    "Entity created: 0x{:x}, owner: 0x{:x}",
+                    entity.key,
+                    entity.owner
+                );
+            }
+
+            // Process updates
+            for update in &golem_tx.updates {
+                // Update the entity directly in the database
+                self.entity_db
+                    .update_entity(&update.entity_key, update)
+                    .await;
+                log::info!("Entity updated: 0x{:x}", update.entity_key);
+            }
+
+            // Process extensions
+            for extend in &golem_tx.extensions {
+                // For extensions, we need to update the existing entity's BTL
+                self.entity_db
+                    .update_entity_btl(&extend.entity_key, extend.number_of_blocks)
+                    .await;
+                log::info!(
+                    "Entity extended: 0x{:x}, new BTL: {}",
+                    extend.entity_key,
+                    extend.number_of_blocks
+                );
+            }
+
+            // Process deletes
+            for delete in &golem_tx.deletes {
+                if let Some(entity) = self.entity_db.remove_entity(delete).await {
+                    log::info!(
+                        "Entity deleted: 0x{:x}, owner: 0x{:x}",
+                        entity.key,
+                        entity.owner
+                    );
+                } else {
+                    log::warn!("Entity not found for deletion: 0x{:x}", delete);
+                }
+            }
+        }
     }
 
     /// Get a block by its number
@@ -263,6 +318,6 @@ impl Blockchain {
                 .as_secs(),
         );
 
-        self.add_block(Arc::new(genesis_block)).await;
+        self.add_block(genesis_block).await;
     }
 }
