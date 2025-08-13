@@ -162,7 +162,10 @@ impl TryFrom<EthereumTxEnvelope<TxEip4844>> for Transaction {
 
     fn try_from(decoded: EthereumTxEnvelope<TxEip4844>) -> Result<Self, Self::Error> {
         // Check if this is an EIP-4844 transaction
-        if !matches!(decoded, EthereumTxEnvelope::Eip4844(_)) {
+        if !matches!(
+            decoded,
+            EthereumTxEnvelope::Eip4844(_) | EthereumTxEnvelope::Eip1559(_)
+        ) {
             return Err(anyhow!(
                 "Unsupported transaction type: {:?}",
                 decoded.tx_type()
@@ -181,9 +184,7 @@ impl TryFrom<EthereumTxEnvelope<TxEip4844>> for Transaction {
             max_priority_fee_per_gas: decoded
                 .max_priority_fee_per_gas()
                 .ok_or(anyhow!("Missing max priority fee per gas"))?,
-            max_fee_per_blob_gas: decoded
-                .max_fee_per_blob_gas()
-                .ok_or(anyhow!("Missing max fee per blob gas"))?,
+            max_fee_per_blob_gas: decoded.max_fee_per_blob_gas().unwrap_or(0),
             nonce: decoded.nonce(),
             data: decoded.input().clone(),
             chain_id: decoded.chain_id().ok_or(anyhow!("No chain id"))?,
