@@ -8,9 +8,13 @@ use tokio::sync::RwLock;
 
 use golem_base_sdk::account::GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS;
 use golem_base_sdk::entity::GolemBaseTransaction;
+use golem_base_sdk::events::{
+    golem_base_storage_entity_created, golem_base_storage_entity_deleted,
+    golem_base_storage_entity_ttl_extended, golem_base_storage_entity_updated,
+};
 use golem_base_sdk::utils::wei_to_eth;
 
-use crate::block::{Block, Transaction};
+use crate::block::{Block, Transaction, TransactionLog};
 use crate::entity_db::{Entity, EntityDb};
 
 /// Represents an account in the mock blockchain
@@ -72,11 +76,8 @@ impl Blockchain {
         let block_number = block.header.block_number;
         let block_hash = block.header.block_hash;
 
-        let block = Arc::new(block);
-        state.blocks_by_number.insert(block_number, block.clone());
-        state.blocks_by_hash.insert(block_hash, block.clone());
-
         // Process all transactions in the block
+        let mut all_logs = Vec::new();
         for transaction in &block.transactions {
             let transaction_hash = transaction.hash;
 
@@ -88,10 +89,23 @@ impl Blockchain {
             // Update accounts
             Self::update_account_for_transaction(&mut state, &transaction);
 
-            // Extract and add entities from transaction data
-            self.extract_entity_from_transaction(transaction, &block)
+            // Extract and add entities from transaction data, collect logs
+            let transaction_logs = self
+                .extract_entity_from_transaction(transaction, &block)
                 .await;
+            all_logs.extend(transaction_logs);
         }
+
+        // Create a new block with logs and add it to the state
+        let block = Block {
+            header: block.header.clone(),
+            transactions: block.transactions.clone(),
+            transaction_logs: all_logs,
+        };
+
+        let block = Arc::new(block);
+        state.blocks_by_number.insert(block_number, block.clone());
+        state.blocks_by_hash.insert(block_hash, block.clone());
     }
 
     /// Update account state based on a transaction
@@ -130,65 +144,129 @@ impl Blockchain {
 
     /// Extract entity from transaction data and modify entity database state
     /// Checks if transaction is to storage contract and decodes GolemBase entity operations
-    async fn extract_entity_from_transaction(&self, transaction: &Arc<Transaction>, block: &Block) {
+    /// Returns transaction logs for the block
+    async fn extract_entity_from_transaction(
+        &self,
+        transaction: &Arc<Transaction>,
+        block: &Block,
+    ) -> Vec<TransactionLog> {
+        let mut logs = Vec::new();
+
         // Check if transaction is to the GolemBase storage processor contract
         if transaction.to != GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS {
-            return;
+            return logs;
         }
 
         // Try to decode the transaction data as a GolemBaseTransaction
         // This is the inverse of the encoding shown in send_db_transaction
-        if let Ok(golem_tx) = GolemBaseTransaction::decode(&mut transaction.data.as_ref()) {
-            // Process creates
-            for (idx, create) in golem_tx.creates.into_iter().enumerate() {
-                let entity = Entity::create(create, transaction.from).with_hash(
-                    block.header.block_number,
-                    idx,
-                    transaction.hash,
-                );
-                self.entity_db.add_entity(entity.clone()).await;
-                log::info!(
-                    "Entity created: 0x{:x}, owner: 0x{:x}",
-                    entity.key,
-                    entity.owner
-                );
-            }
-
-            // Process updates
-            for update in &golem_tx.updates {
-                // Update the entity directly in the database
-                self.entity_db
-                    .update_entity(&update.entity_key, update)
-                    .await;
-                log::info!("Entity updated: 0x{:x}", update.entity_key);
-            }
-
-            // Process extensions
-            for extend in &golem_tx.extensions {
-                // For extensions, we need to update the existing entity's BTL
-                self.entity_db
-                    .update_entity_btl(&extend.entity_key, extend.number_of_blocks)
-                    .await;
-                log::info!(
-                    "Entity extended: 0x{:x}, new BTL: {}",
-                    extend.entity_key,
-                    extend.number_of_blocks
-                );
-            }
-
-            // Process deletes
-            for delete in &golem_tx.deletes {
-                if let Some(entity) = self.entity_db.remove_entity(delete).await {
-                    log::info!(
-                        "Entity deleted: 0x{:x}, owner: 0x{:x}",
-                        entity.key,
-                        entity.owner
+        match GolemBaseTransaction::decode(&mut transaction.data.as_ref()) {
+            Ok(golem_tx) => {
+                // Process creates
+                for (idx, create) in golem_tx.creates.into_iter().enumerate() {
+                    let entity = Entity::create(create, transaction.from).with_hash(
+                        block.header.block_number,
+                        idx,
+                        transaction.hash,
                     );
-                } else {
-                    log::warn!("Entity not found for deletion: 0x{:x}", delete);
+                    self.entity_db.add_entity(entity.clone()).await;
+
+                    // Create log for entity creation
+                    let create_log = TransactionLog::create_entity_log(
+                        transaction,
+                        golem_base_storage_entity_created(),
+                        entity.key,
+                    );
+                    logs.push(create_log);
+
+                    log::info!(
+                        "Entity created: 0x{:x}, owner: 0x{:x}, tx: 0x{:x}",
+                        entity.key,
+                        entity.owner,
+                        transaction.hash
+                    );
+                }
+
+                // Process updates
+                for update in &golem_tx.updates {
+                    let entity_key = update.entity_key;
+
+                    // Update the entity directly in the database
+                    self.entity_db.update_entity(&entity_key, update).await;
+
+                    // Create log for entity update
+                    let update_log = TransactionLog::create_entity_log(
+                        transaction,
+                        golem_base_storage_entity_updated(),
+                        entity_key,
+                    );
+                    logs.push(update_log);
+
+                    log::info!(
+                        "Entity updated: 0x{:x}, tx: 0x{:x}",
+                        entity_key,
+                        transaction.hash
+                    );
+                }
+
+                // Process extensions
+                for extend in &golem_tx.extensions {
+                    let entity_key = extend.entity_key;
+                    let number_of_blocks = extend.number_of_blocks;
+
+                    // For extensions, we need to update the existing entity's BTL
+                    self.entity_db
+                        .update_entity_btl(&entity_key, number_of_blocks)
+                        .await;
+
+                    // Create log for entity extension
+                    let extend_log = TransactionLog::create_entity_log(
+                        transaction,
+                        golem_base_storage_entity_ttl_extended(),
+                        entity_key,
+                    );
+                    logs.push(extend_log);
+
+                    log::info!(
+                        "Entity extended: 0x{:x}, new BTL: {}, tx: 0x{:x}",
+                        entity_key,
+                        number_of_blocks,
+                        transaction.hash
+                    );
+                }
+
+                // Process deletes
+                for delete in &golem_tx.deletes {
+                    let key = *delete;
+                    if let Some(entity) = self.entity_db.remove_entity(&key).await {
+                        // Create log for entity deletion
+                        let delete_log = TransactionLog::create_entity_log(
+                            transaction,
+                            golem_base_storage_entity_deleted(),
+                            key,
+                        );
+                        logs.push(delete_log);
+
+                        log::info!(
+                            "Entity deleted: 0x{:x}, owner: 0x{:x}, tx: 0x{:x}",
+                            entity.key,
+                            entity.owner,
+                            transaction.hash
+                        );
+                    } else {
+                        log::warn!(
+                            "Entity not found for deletion: 0x{:x}, tx: 0x{:x}",
+                            key,
+                            transaction.hash
+                        );
+                    }
                 }
             }
+            Err(e) => {
+                log::warn!("Failed to decode GolemBase transaction: {}", e);
+            }
         }
+
+        logs
     }
 
     /// Get a block by its number

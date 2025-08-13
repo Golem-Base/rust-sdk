@@ -7,7 +7,7 @@ use alloy::primitives::TxKind;
 use alloy::primitives::{Address, Bloom, Bytes, B256, U256};
 use alloy::rlp::Decodable;
 use alloy::rpc::types::{
-    Block, BlockId, BlockNumberOrTag, Transaction, TransactionReceipt, TransactionRequest,
+    Block, BlockId, BlockNumberOrTag, Log, Transaction, TransactionReceipt, TransactionRequest,
 };
 use anyhow::Result;
 use jsonrpsee::core::{async_trait, RpcResult};
@@ -112,36 +112,53 @@ impl EthRpcServer for GolemBaseMock {
         };
 
         // Try to find the block containing this transaction (may be None for pending transactions)
-        let block = self
+        let block = match self
             .blockchain
             .find_block_containing_transaction(&hash)
-            .await;
+            .await
+        {
+            Some(block) => {
+                log::debug!(
+                    "Transaction found in block: number={}, hash=0x{:x}",
+                    block.header.block_number,
+                    block.header.block_hash
+                );
+                block
+            }
+            None => {
+                log::debug!("Transaction not in any block (pending)");
+                return Ok(None);
+            }
+        };
 
-        if let Some(block_ref) = &block {
-            log::debug!(
-                "Transaction found in block: number={}, hash=0x{:x}",
-                block_ref.header.block_number,
-                block_ref.header.block_hash
-            );
-        } else {
-            log::debug!("Transaction not in any block (pending)");
-        }
+        let logs: Vec<Log> = block
+            .get_all_logs()
+            .iter()
+            .enumerate()
+            .map(|(log_index, log)| Log {
+                block_timestamp: Some(block.header.timestamp),
+                block_hash: Some(block.header.block_hash),
+                block_number: Some(block.header.block_number),
+                transaction_hash: Some(hash),
+                transaction_index: block.find_transaction_index(&hash),
+                log_index: Some(log_index as u64),
+                removed: false,
+                inner: log.to_log_data(),
+            })
+            .collect();
 
         let receipt = TransactionReceipt {
             transaction_hash: hash,
-            transaction_index: block
-                .clone()
-                .map(|b| b.find_transaction_index(&hash))
-                .flatten(),
-            block_hash: block.clone().map(|b| b.header.block_hash),
-            block_number: block.clone().map(|b| b.header.block_number),
+            transaction_index: block.find_transaction_index(&hash),
+            block_hash: Some(block.header.block_hash),
+            block_number: Some(block.header.block_number),
             from: transaction.from,
             to: Some(transaction.to),
             inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom {
                 receipt: Receipt {
                     status: Eip658Value::success(),
                     cumulative_gas_used: 0,
-                    logs: vec![],
+                    logs: logs,
                 },
                 logs_bloom: Bloom::ZERO,
             }),

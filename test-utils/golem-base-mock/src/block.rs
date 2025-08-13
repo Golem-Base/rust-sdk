@@ -1,11 +1,20 @@
 use alloy::consensus::{EthereumTxEnvelope, Signed, TxEip4844, TxEip4844Variant};
 use alloy::consensus::{Header as ConsensusHeader, Transaction as _};
-use alloy::primitives::{Address, Bloom, Bytes, Signature, B256, B64, U256};
+use alloy::primitives::{Address, Bloom, Bytes, Log, Signature, B256, B64, U256};
 use alloy::rpc::types::{
     AccessList, Block as AlloyBlock, BlockTransactions, Header as AlloyHeader,
 };
 use anyhow::anyhow;
 use std::sync::Arc;
+
+/// Represents a transaction log entry
+#[derive(Clone, Debug)]
+pub struct TransactionLog {
+    pub transaction_hash: B256,
+    pub address: Address,
+    pub topics: Vec<B256>,
+    pub data: Bytes,
+}
 
 /// Represents a transaction in the mock blockchain
 #[derive(Clone, Debug)]
@@ -40,6 +49,28 @@ pub struct BlockHeader {
 pub struct Block {
     pub header: BlockHeader,
     pub transactions: Vec<Arc<Transaction>>,
+    pub transaction_logs: Vec<TransactionLog>,
+}
+
+impl TransactionLog {
+    /// Create a new entity log entry
+    pub fn create_entity_log(
+        transaction: &Arc<Transaction>,
+        event_signature: B256,
+        entity_key: B256,
+    ) -> Self {
+        Self {
+            transaction_hash: transaction.hash,
+            address: golem_base_sdk::account::GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS,
+            topics: vec![event_signature, entity_key],
+            data: Bytes::from(entity_key.as_slice().to_vec()),
+        }
+    }
+
+    /// Convert to alloy LogData
+    pub fn to_log_data(&self) -> Log {
+        Log::new(self.address, self.topics.clone(), self.data.clone()).unwrap_or(Log::empty())
+    }
 }
 
 impl Block {
@@ -97,7 +128,27 @@ impl Block {
         Self {
             header,
             transactions,
+            transaction_logs: Vec::new(),
         }
+    }
+
+    /// Add transaction logs to the block
+    pub fn add_transaction_logs(&mut self, logs: Vec<TransactionLog>) {
+        self.transaction_logs.extend(logs);
+    }
+
+    /// Get logs for a specific transaction
+    pub fn get_logs_for_transaction(&self, transaction_hash: &B256) -> Vec<TransactionLog> {
+        self.transaction_logs
+            .iter()
+            .cloned()
+            .filter(|log| &log.transaction_hash == transaction_hash)
+            .collect()
+    }
+
+    /// Get all transaction logs
+    pub fn get_all_logs(&self) -> Vec<TransactionLog> {
+        self.transaction_logs.clone()
     }
 
     /// Find the index of a specific transaction in this block
