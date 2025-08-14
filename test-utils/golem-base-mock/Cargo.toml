@@ -22,3 +22,4 @@ golem-base-sdk = { workspace = true }
 golem-base-sdk = { workspace = true }
 golem-base-test-utils = { workspace = true }
 bigdecimal = "0.4"
+serial_test = "3.2"

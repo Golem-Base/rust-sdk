@@ -3,9 +3,11 @@ use bigdecimal::BigDecimal;
 use golem_base_mock::{create_test_mock_server, get_default_mock_server_url};
 use golem_base_sdk::{entity::Create, GolemBaseClient};
 use golem_base_test_utils::{create_test_account, init_logger};
+use serial_test::serial;
 
 /// Comprehensive integration test that demonstrates using the GolemBase mock server with GolemBaseClient
 #[tokio::test]
+#[serial]
 async fn test_golem_base_mock_integration() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 {
     init_logger(false);
