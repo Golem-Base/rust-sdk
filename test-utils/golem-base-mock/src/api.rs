@@ -82,7 +82,7 @@ pub trait GolemBaseRpc {
     #[method(name = "getEntity")]
     async fn get_entity(&self, key: B256) -> RpcResult<Option<serde_json::Value>>;
 
-    #[method(name = "getEntityMetadata")]
+    #[method(name = "getEntityMetaData")]
     async fn get_entity_metadata(&self, key: B256) -> RpcResult<Option<serde_json::Value>>;
 
     #[method(name = "getEntityCount")]

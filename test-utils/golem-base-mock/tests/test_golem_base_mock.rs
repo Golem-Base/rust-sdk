@@ -8,7 +8,7 @@ use golem_base_test_utils::{create_test_account, init_logger};
 #[tokio::test]
 async fn test_golem_base_mock_integration() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 {
-    init_logger(true);
+    init_logger(false);
 
     // Test 1: Basic functionality with default mock server
     log::info!("Testing basic functionality with default mock server...");

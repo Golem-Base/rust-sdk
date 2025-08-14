@@ -3,7 +3,7 @@ use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use bytes::Bytes;
 use golem_base_sdk::entity::{Create, NumericAnnotation, StringAnnotation, Update};
-use golem_base_sdk::rpc::EntityMetaData;
+use golem_base_sdk::rpc::{serialize_base64, EntityMetaData, SearchResult};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -16,7 +16,7 @@ use crate::query_parser::{Expression, Parser, QueryCondition};
 pub struct Entity {
     #[serde(serialize_with = "serialize_b256")]
     pub key: B256,
-    #[serde(serialize_with = "serialize_bytes")]
+    #[serde(serialize_with = "serialize_base64")]
     pub data: Bytes,
     pub btl: u64,
     #[serde(serialize_with = "serialize_address")]
@@ -108,6 +108,15 @@ impl From<&Entity> for EntityMetaData {
             string_annotations: entity.string_annotations.clone(),
             numeric_annotations: entity.numeric_annotations.clone(),
             owner: entity.owner,
+        }
+    }
+}
+
+impl From<&Entity> for SearchResult {
+    fn from(entity: &Entity) -> Self {
+        Self {
+            key: entity.key,
+            value: entity.data.clone(),
         }
     }
 }
@@ -436,14 +445,6 @@ where
     S: serde::Serializer,
 {
     serializer.serialize_str(&format!("0x{:x}", value))
-}
-
-/// Serialize Bytes as base64 string
-fn serialize_bytes<S>(value: &Bytes, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    serializer.serialize_str(&BASE64.encode(value))
 }
 
 /// Serialize Address as hex string with 0x prefix
