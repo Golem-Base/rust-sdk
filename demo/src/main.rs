@@ -25,15 +25,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     private_key_path.push("golembase/private.key");
     let private_key_bytes = fs::read(&private_key_path).map_err(|e| {
         format!(
-            "Failed to read private key at {}: {}",
+            "Failed to read private key at {}: {e}",
             private_key_path.display(),
-            e
         )
     })?;
     let private_key = Hash::from_slice(&private_key_bytes);
 
     let signer = PrivateKeySigner::from_bytes(&private_key)
-        .map_err(|e| format!("Failed to parse private key: {}", e))?;
+        .map_err(|e| format!("Failed to parse private key: {e}"))?;
     let url = Url::parse("http://localhost:8545").unwrap();
     let client = GolemBaseClient::builder()
         .wallet(signer)

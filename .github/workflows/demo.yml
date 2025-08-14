@@ -14,11 +14,15 @@ jobs:
       - name: Check out the SDK repo
         uses: actions/checkout@v4
 
-      - name: Setup Go, Rust and Golem Base
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Go and Golem Base
         uses: ./.github/workflows/setup
 
+      # TODO: This could probably just be a derivation
       - name: Run Rust demo example
-        run: cargo run
+        run: nix develop --command cargo run
         working-directory: ./demo
 
   run-tests-and-docs:
@@ -30,17 +34,20 @@ jobs:
       - name: Setup Go, Rust and Golem Base
         uses: ./.github/workflows/setup
 
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
       - name: Run tests
-        run: cargo test
+        run: nix flake check --keep-going -L
 
       - name: Build docs
-        run: cargo doc --no-deps --workspace
+        run: nix build .#checks.x86_64-linux.cargo-doc
 
       - name: Deploy docs to branch folder
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./target/doc
+          publish_dir: ./result/share/doc
           publish_branch: gh-pages
           destination_dir: ${{ github.head_ref }}
 
