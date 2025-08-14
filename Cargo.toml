@@ -6,7 +6,7 @@ description = "A Rust SDK for interacting with GolemBase."
 license = "GPL-3.0-or-later"
 
 [workspace]
-members = ["api", "demo", "test-utils"]
+members = ["demo", "test-utils"]
 resolver = "2"
 
 [dependencies]
