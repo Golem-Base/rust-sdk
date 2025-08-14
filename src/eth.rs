@@ -4,16 +4,14 @@ use crate::entity::{
 };
 use crate::entity::{Hash, TransactionResult};
 
-use alloy;
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, TxKind, address};
 use alloy::providers::Provider;
 use alloy::rpc::types::{TransactionReceipt, TransactionRequest};
-use alloy_sol_types::sol;
 use displaydoc::Display;
 use thiserror::Error;
 
-sol! {
+alloy::sol! {
     contract GolemBaseABI {
         event GolemBaseStorageEntityCreated(
             uint256 indexed entityKey,

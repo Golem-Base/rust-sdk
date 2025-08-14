@@ -1,12 +1,13 @@
+use std::io::{self, IsTerminal, Read, Write};
+
 use dirs::config_dir;
 use futures::StreamExt;
 use golem_base_sdk::entity::{Create, EntityResult, Extend, Update};
 use golem_base_sdk::events::EventsClient;
 use golem_base_sdk::{
-    Address, Annotation, GolemBaseClient, GolemBaseRoClient, Hash, PrivateKeySigner, Url,
+    Address, Annotation, GolemBaseClient, GolemBaseRoClient, PrivateKeySigner, Url,
 };
 use log::info;
-use std::fs;
 
 async fn log_num_of_entities_owned(client: &GolemBaseRoClient, owner_address: Address) {
     let n = client
@@ -21,19 +22,25 @@ async fn log_num_of_entities_owned(client: &GolemBaseRoClient, owner_address: Ad
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    let mut private_key_path = config_dir().ok_or("Failed to get config directory")?;
-    private_key_path.push("golembase/private.key");
-    let private_key_bytes = fs::read(&private_key_path).map_err(|e| {
-        format!(
-            "Failed to read private key at {}: {}",
-            private_key_path.display(),
-            e
-        )
-    })?;
-    let private_key = Hash::from_slice(&private_key_bytes);
+    let keypath = config_dir()
+        .ok_or("Failed to get config directory")?
+        .join("golembase")
+        .join("wallet.json");
 
-    let signer = PrivateKeySigner::from_bytes(&private_key)
-        .map_err(|e| format!("Failed to parse private key: {}", e))?;
+    let mut password = String::new();
+    let stdin = io::stdin();
+
+    if stdin.is_terminal() {
+        // Interactive mode
+        print!("Enter password to decrypt keystore: ");
+        io::stdout().flush()?;
+        stdin.read_line(&mut password)?;
+    } else {
+        // Piped input
+        stdin.lock().read_to_string(&mut password)?;
+    }
+
+    let signer = PrivateKeySigner::decrypt_keystore(keypath, password.trim_end())?;
     let url = Url::parse("http://localhost:8545").unwrap();
     let client = GolemBaseClient::builder()
         .wallet(signer)
