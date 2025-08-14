@@ -2,6 +2,7 @@ use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::rpc::types::{
     Block, BlockId, BlockNumberOrTag, Transaction, TransactionReceipt, TransactionRequest,
 };
+use golem_base_sdk::rpc::SearchResult;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::proc_macros::rpc;
 
@@ -81,9 +82,6 @@ pub trait GolemBaseRpc {
     #[method(name = "getEntity")]
     async fn get_entity(&self, key: B256) -> RpcResult<Option<serde_json::Value>>;
 
-    #[method(name = "search")]
-    async fn search(&self, query: serde_json::Value) -> RpcResult<Vec<serde_json::Value>>;
-
     #[method(name = "getEntityMetadata")]
     async fn get_entity_metadata(&self, key: B256) -> RpcResult<Option<serde_json::Value>>;
 
@@ -94,16 +92,13 @@ pub trait GolemBaseRpc {
     async fn get_all_entity_keys(&self) -> RpcResult<Option<Vec<B256>>>;
 
     #[method(name = "getEntitiesOfOwner")]
-    async fn get_entities_of_owner(&self, addresses: Vec<Address>) -> RpcResult<Option<Vec<B256>>>;
+    async fn get_entities_of_owner(&self, address: Address) -> RpcResult<Option<Vec<B256>>>;
 
     #[method(name = "getStorageValue")]
-    async fn get_storage_value(&self, keys: Vec<B256>) -> RpcResult<String>;
+    async fn get_storage_value(&self, keys: B256) -> RpcResult<String>;
 
     #[method(name = "queryEntities")]
-    async fn query_entities(
-        &self,
-        queries: Vec<String>,
-    ) -> RpcResult<Option<Vec<serde_json::Value>>>;
+    async fn query_entities(&self, query: String) -> RpcResult<Vec<SearchResult>>;
 
     #[method(name = "getEntitiesToExpireAtBlock")]
     async fn get_entities_to_expire_at_block(

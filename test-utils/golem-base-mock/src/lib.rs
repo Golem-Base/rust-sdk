@@ -10,6 +10,7 @@ use alloy::rpc::types::{
     Block, BlockId, BlockNumberOrTag, Log, Transaction, TransactionReceipt, TransactionRequest,
 };
 use anyhow::Result;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use jsonrpsee::core::{async_trait, RpcResult};
 use jsonrpsee::server::{RpcModule, Server};
 use jsonrpsee::types::{ErrorCode, ErrorObject};
@@ -23,6 +24,7 @@ use crate::entity_db::EntityDb;
 use crate::execution::ExecutionEngine;
 use crate::managed_accounts::ManagedAccounts;
 use crate::transaction_pool::TransactionPool;
+use golem_base_sdk::rpc::{EntityMetaData, SearchResult};
 
 pub mod api;
 pub mod block;
@@ -30,6 +32,7 @@ pub mod blockchain;
 pub mod entity_db;
 pub mod execution;
 pub mod managed_accounts;
+pub mod query_parser;
 pub mod server;
 pub mod transaction_pool;
 
@@ -444,63 +447,89 @@ impl EthRpcServer for GolemBaseMock {
 
 #[async_trait]
 impl GolemBaseRpcServer for GolemBaseMock {
-    async fn get_entity(&self, _key: B256) -> RpcResult<Option<serde_json::Value>> {
-        // Mock implementation - return None for now
-        Ok(None)
+    async fn get_entity(&self, key: B256) -> RpcResult<Option<serde_json::Value>> {
+        Ok(self
+            .entity_db
+            .get_entity(&key)
+            .await
+            .map(|entity| {
+                serde_json::to_value(entity).map_err(|e| {
+                    create_error(
+                        ErrorCode::InternalError,
+                        format!("Failed to serialize entity: {}", e),
+                    )
+                })
+            })
+            .transpose()?)
     }
 
-    async fn search(&self, _query: serde_json::Value) -> RpcResult<Vec<serde_json::Value>> {
-        // Mock implementation - return empty search results
-        Ok(vec![])
-    }
-
-    async fn get_entity_metadata(&self, _key: B256) -> RpcResult<Option<serde_json::Value>> {
-        // Mock implementation - return empty metadata
-        Ok(Some(serde_json::json!({
-            "expires_at_block": null,
-            "payload": null,
-            "string_annotations": [],
-            "numeric_annotations": [],
-            "owner": "0x0000000000000000000000000000000000000000"
-        })))
+    async fn get_entity_metadata(&self, key: B256) -> RpcResult<Option<serde_json::Value>> {
+        Ok(self
+            .entity_db
+            .get_entity(&key)
+            .await
+            .map(|entity| {
+                let metadata = EntityMetaData::from(&entity);
+                serde_json::to_value(metadata).map_err(|e| {
+                    create_error(
+                        ErrorCode::InternalError,
+                        format!("Failed to serialize entity metadata: {}", e),
+                    )
+                })
+            })
+            .transpose()?)
     }
 
     async fn get_entity_count(&self) -> RpcResult<u64> {
-        // Mock implementation - return 0 for now
-        Ok(0)
+        Ok(self.entity_db.count().await as u64)
     }
 
     async fn get_all_entity_keys(&self) -> RpcResult<Option<Vec<B256>>> {
-        // Mock implementation - return empty list
-        Ok(Some(vec![]))
+        Ok(Some(self.entity_db.get_all_keys().await))
     }
 
-    async fn get_entities_of_owner(
-        &self,
-        _addresses: Vec<Address>,
-    ) -> RpcResult<Option<Vec<B256>>> {
-        // Mock implementation - return empty list
-        Ok(Some(vec![]))
+    async fn get_entities_of_owner(&self, address: Address) -> RpcResult<Option<Vec<B256>>> {
+        // Use the owner index to efficiently get entities by owner
+        let keys = self.entity_db.get_entities_by_owner(&address).await;
+        Ok(Some(keys))
     }
 
-    async fn get_storage_value(&self, _keys: Vec<B256>) -> RpcResult<String> {
-        // Mock implementation - return empty base64 encoded string
-        Ok("".to_string())
+    async fn get_storage_value(&self, key: B256) -> RpcResult<String> {
+        if let Some(entity) = self.entity_db.get_entity(&key).await {
+            let encoded = BASE64.encode(&entity.data);
+            Ok(encoded)
+        } else {
+            Err(create_error(
+                ErrorCode::InvalidParams,
+                format!("Entity not found for key: 0x{:x}", key),
+            ))
+        }
     }
 
-    async fn query_entities(
-        &self,
-        _queries: Vec<String>,
-    ) -> RpcResult<Option<Vec<serde_json::Value>>> {
-        // Mock implementation - return empty list
-        Ok(Some(vec![]))
+    async fn query_entities(&self, query: String) -> RpcResult<Vec<SearchResult>> {
+        let entities = self.entity_db.query_entities(&query).await.map_err(|e| {
+            create_error(
+                ErrorCode::InvalidParams,
+                format!("Query parsing failed: {}", e),
+            )
+        })?;
+
+        let results: Vec<SearchResult> = entities
+            .into_iter()
+            .map(|entity| SearchResult {
+                key: entity.key,
+                value: entity.data,
+            })
+            .collect();
+        Ok(results)
     }
 
     async fn get_entities_to_expire_at_block(
         &self,
         _block_number: u64,
     ) -> RpcResult<Option<Vec<B256>>> {
-        // Mock implementation - return empty list
+        // For now, return empty list since the EntityDb doesn't track expiration blocks
+        // In a real implementation, you'd want to add an expiration index to the EntityDb
         Ok(Some(vec![]))
     }
 }
@@ -516,6 +545,7 @@ impl GolemBaseMock {
 #[derive(Clone, Default)]
 pub struct GolemBaseMockServer {
     pub state: GolemBaseMock,
+    #[allow(dead_code)]
     server: Option<jsonrpsee::server::ServerHandle>,
 }
 

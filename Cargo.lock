@@ -2462,6 +2462,7 @@ dependencies = [
  "alloy-json-rpc",
  "anyhow",
  "async-trait",
+ "base64 0.21.7",
  "bigdecimal",
  "bytes",
  "golem-base-sdk",

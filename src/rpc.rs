@@ -46,7 +46,7 @@ pub struct EntityMetaData {
 
 /// Represents a single search result from a query.
 /// Contains the entity key and the value (decoded from base64).
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SearchResult {
     #[serde(rename = "key")]
     pub key: Hash,
