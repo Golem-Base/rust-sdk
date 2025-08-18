@@ -1,7 +1,6 @@
 use alloy::primitives::Address;
-use alloy::providers::Provider;
 use alloy::rpc::json_rpc::{RpcRecv, RpcSend};
-use alloy_json_rpc::RpcError;
+use alloy_json_rpc::RpcError as AlloyError;
 use anyhow::anyhow;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use bytes::Bytes;
@@ -11,6 +10,7 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use thiserror::Error;
 
+use crate::resilient_provider::RpcError;
 use crate::{GolemBaseClient, Hash, NumericAnnotation, StringAnnotation};
 
 /// Represents errors that can occur in the GolemBase RPC module.
@@ -87,19 +87,17 @@ impl GolemBaseClient {
         let method = method.into();
         log::debug!("RPC Call - Method: {}, Params: {:?}", method, params);
         self.provider
-            .inner()
-            .client()
             .request(method.clone(), params)
             .await
             .inspect(|res| log::debug!("RPC Response: {:?}", res))
             .map_err(|e| match e {
-                RpcError::ErrorResp(err) => {
-                    anyhow!("Error response from RPC service: {}", err)
+                RpcError::Original(AlloyError::ErrorResp(err)) => {
+                    anyhow!("Error response from RPC service: {err}")
                 }
-                RpcError::SerError(err) => {
+                RpcError::Original(AlloyError::SerError(err)) => {
                     anyhow!("Serialization error: {err}")
                 }
-                RpcError::DeserError { err, text } => {
+                RpcError::Original(AlloyError::DeserError { err, text }) => {
                     log::debug!("Deserialization error: {err}, response text: {text}");
                     anyhow!("Deserialization error: {err}")
                 }
