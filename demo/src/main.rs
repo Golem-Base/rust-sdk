@@ -40,7 +40,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         stdin.lock().read_to_string(&mut password)?;
     }
 
+    info!("Attempting to decrypt keystore at {}", keypath.display());
     let signer = PrivateKeySigner::decrypt_keystore(keypath, password.trim_end())?;
+    info!(
+        "Successfully decrypted keystore with address: {}",
+        signer.address()
+    );
+
     let url = Url::parse("http://localhost:8545").unwrap();
     let client = GolemBaseClient::builder()
         .wallet(signer)

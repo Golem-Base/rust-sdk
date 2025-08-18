@@ -17,7 +17,7 @@ pub fn get_client() -> Result<GolemBaseClient> {
         .ok_or_else(|| anyhow::anyhow!("Failed to get config directory"))?
         .join("golembase")
         .join("wallet.json");
-    let signer = PrivateKeySigner::decrypt_keystore(keypath, TEST_KEYSTORE_PASSPHRASE.to_string())?;
+    let signer = PrivateKeySigner::decrypt_keystore(keypath, TEST_KEYSTORE_PASSPHRASE)?;
     let url = Url::parse(GOLEM_BASE_URL)?;
     let client = GolemBaseClient::builder()
         .wallet(signer)

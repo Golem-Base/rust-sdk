@@ -3,7 +3,6 @@
 # - Starts a `gb-op-geth` container for Ethereum-compatible RPC.
 # - Checks out the `gb-op-geth` repo and sets up Go.
 # - Creates and funds a test account.
-# - Reads the `./rust-toolchain` version and install it.
 #
 # To use, reference this action in your workflow with `uses:`.
 
@@ -31,16 +30,7 @@ runs:
 
     - name: Create and fund an account
       run: |
-        go run ./cmd/golembase account create
-        go run ./cmd/golembase account fund
+        printf "password" | go run ./cmd/golembase account create
+        printf "password" | go run ./cmd/golembase account fund
       working-directory: ./gb-op-geth
       shell: bash
-
-    - name: Set `env.rust_stable`
-      run: echo "RUST_STABLE=$(cat ./rust-toolchain)" >> $GITHUB_ENV
-      shell: bash
-
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@v1
-      with:
-        toolchain: ${{ env.RUST_STABLE }}

@@ -153,7 +153,7 @@ async fn test_concurrent_entity_creation_batch() -> Result<()> {
         async move {
             let mut creates = Vec::with_capacity(ENTITIES_PER_TASK);
             for i in 0..ENTITIES_PER_TASK {
-                let payload = format!("task1_entity_{}", i).into_bytes();
+                let payload = format!("task1_entity_{i}").into_bytes();
                 let entry = Create::new(payload, 300)
                     .annotate_string("task", "task1")
                     .annotate_number("index", i as u64);
@@ -169,7 +169,7 @@ async fn test_concurrent_entity_creation_batch() -> Result<()> {
         async move {
             let mut creates = Vec::with_capacity(ENTITIES_PER_TASK);
             for i in 0..ENTITIES_PER_TASK {
-                let payload = format!("task2_entity_{}", i).into_bytes();
+                let payload = format!("task2_entity_{i}").into_bytes();
                 let entry = Create::new(payload, 300)
                     .annotate_string("task", "task2")
                     .annotate_number("index", i as u64);
@@ -193,7 +193,7 @@ async fn test_concurrent_entity_creation_batch() -> Result<()> {
                 .await?,
         )
         .unwrap();
-        assert_eq!(entry_str, format!("task1_entity_{}", i));
+        assert_eq!(entry_str, format!("task1_entity_{i}"));
 
         let metadata = client.get_entity_metadata(result.entity_key).await?;
         assert_eq!(metadata.string_annotations[0].value, "task1");
@@ -207,7 +207,7 @@ async fn test_concurrent_entity_creation_batch() -> Result<()> {
                 .await?,
         )
         .unwrap();
-        assert_eq!(entry_str, format!("task2_entity_{}", i));
+        assert_eq!(entry_str, format!("task2_entity_{i}"));
 
         let metadata = client.get_entity_metadata(result.entity_key).await?;
         assert_eq!(metadata.string_annotations[0].value, "task2");

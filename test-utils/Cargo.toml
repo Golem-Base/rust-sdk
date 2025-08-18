@@ -10,6 +10,6 @@ bigdecimal = "0.4"
 env_logger = "0.11.8"
 log = "0.4"
 
-golem-base-sdk = { workspace = true }
 dirs = "6.0.0"
+golem-base-sdk = { workspace = true }
 url = "2.5.4"

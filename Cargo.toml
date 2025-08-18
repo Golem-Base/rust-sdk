@@ -6,7 +6,7 @@ description = "A Rust SDK for interacting with GolemBase."
 license = "GPL-3.0-or-later"
 
 [workspace]
-members = ["api", "demo", "test-utils"]
+members = ["demo", "test-utils"]
 resolver = "2"
 
 # This is available as a feature in the alloy crate, however,
@@ -16,11 +16,15 @@ resolver = "2"
 # 
 # https://github.com/alloy-rs/rlp/issues/40
 [dependencies.alloy-rlp]
-version = "0.3.12"
 features = ["derive"]
+version = "0.3.12"
 
 [dependencies]
-alloy = { version = "1.0.24", features = ["provider-ws", "json-rpc", "signer-keystore"] }
+alloy = { version = "1.0.24", features = [
+  "provider-ws",
+  "json-rpc",
+  "signer-keystore",
+] }
 anyhow = "1.0"
 base64 = "0.22"
 bigdecimal = "0.4"
