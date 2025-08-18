@@ -11,7 +11,7 @@ For **getting up and running quickly**, we recommend the following two steps:
 1. Start golembase-op-geth through its [`docker-compose`](https://github.com/Golem-Base/golembase-op-geth/blob/main/RUN_LOCALLY.md) ;
 2. [Install the demo CLI](https://github.com/Golem-Base/golembase-demo-cli?tab=readme-ov-file#installation) and [create a user](https://github.com/Golem-Base/golembase-demo-cli?tab=readme-ov-file#quickstart), or build the [actual CLI](https://github.com/Golem-Base/golembase-op-geth/blob/main/cmd/golembase/README.md) as it's included in the `golembase-op-geth` repository.
 
-When you create a user, it will generate a private key file called `private.key` and store it in the standard folder as per the [XDG specification](https://specifications.freedesktop.org/basedir-spec/latest/):
+When you create a user, it will generate a new wallet file called `wallet.json` and store it in the standard folder as per the [XDG specification](https://specifications.freedesktop.org/basedir-spec/latest/):
 - `~/.config/golembase/` on **Linux**
 - `~/Library/Application Support/golembase/` on **macOS**
 - `%LOCALAPPDATA%\golembase\` on **Windows**
