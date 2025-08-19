@@ -41,7 +41,8 @@ impl EndpointCallback {
     }
 }
 
-/// Generic wrapper for any response type that can include notification
+/// Generic wrapper for any response type that can include notification.
+/// It sends a notification on drop.
 #[derive(Debug, Clone)]
 pub struct WithCallback<T: Display> {
     pub response: T,
@@ -78,8 +79,9 @@ impl<T: Display> Drop for WithCallback<T> {
         // forget to trigger it.
         if let Some(sender) = self.callback.take() {
             log::debug!(
-                "{}: sending callback for triggered response: {}",
+                "{}: sending callback ({}-th time) for triggered response: {}",
                 self.endpoint_name,
+                self.call_count,
                 self.response
             );
             let _ = sender.send(());
@@ -92,7 +94,7 @@ impl WithCallback<CallOverride> {
     /// Check if this override is already outdated.
     pub fn should_remove_override(&self) -> bool {
         match &self.response {
-            CallOverride::Once(_) => true, // Remove after first use
+            CallOverride::Once(_) => self.call_count >= 1, // Remove after first use
             CallOverride::Until { until, .. } => {
                 // Remove if expired
                 std::time::Instant::now() >= *until
@@ -110,6 +112,14 @@ impl WithCallback<CallOverride> {
             CallOverride::Once(_) => true,
             CallOverride::Until { until, .. } => std::time::Instant::now() < *until,
             CallOverride::NTimes { n, .. } => self.call_count < *n,
+        }
+    }
+
+    pub fn response(&self) -> &CallResponse {
+        match &self.response {
+            CallOverride::Once(response) => response,
+            CallOverride::Until { response, .. } => response,
+            CallOverride::NTimes { response, .. } => response,
         }
     }
 }
@@ -191,7 +201,9 @@ impl MockController {
 
     /// Add a global override response that will be used for any RPC call
     /// Returns a notifier that can be used to wait for the endpoint to be triggered
-    pub async fn global_override(&self, rpc_override: CallOverride) -> EndpointCallback {
+    pub fn global_override(&self, rpc_override: CallOverride) -> EndpointCallback {
+        log::debug!("Adding global override: {:?}", rpc_override);
+
         let (sender, receiver) = mpsc::channel(CALLBACK_CHANNEL_SIZE);
         let overrides = WithCallback::new(rpc_override, sender, GLOBAL_OVERRIDE_KEY.to_string());
 
@@ -206,11 +218,9 @@ impl MockController {
 
     /// Add a response override for a specific RPC call
     /// Returns a notifier that can be used to wait for the endpoint to be triggered
-    pub async fn override_rpc(
-        &self,
-        rpc_name: &str,
-        rpc_override: CallOverride,
-    ) -> EndpointCallback {
+    pub fn override_rpc(&self, rpc_name: &str, rpc_override: CallOverride) -> EndpointCallback {
+        log::debug!("Adding RPC override for '{}': {:?}", rpc_name, rpc_override);
+
         let (sender, receiver) = mpsc::channel(CALLBACK_CHANNEL_SIZE);
         let overrides = WithCallback::new(rpc_override, sender, rpc_name.to_string());
 
