@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use alloy::eips::BlockNumberOrTag;
 use alloy::network::{Ethereum, Network};
 use alloy::primitives::{Address, B256, U256};
@@ -23,7 +25,7 @@ impl Default for ResilientProviderConfig {
         Self {
             max_retries: 3,
             retry_delay_ms: 100,
-            backend_health_timeout_secs: 60,
+            backend_health_timeout_secs: 30,
         }
     }
 }
@@ -97,7 +99,7 @@ where
                 {
                     let elapsed = start_time.elapsed();
                     let timeout_duration =
-                        std::time::Duration::from_secs(self.config.backend_health_timeout_secs);
+                        Duration::from_secs(self.config.backend_health_timeout_secs);
 
                     if elapsed >= timeout_duration {
                         return Err(anyhow!(
@@ -111,10 +113,7 @@ where
                         elapsed.as_secs_f64(),
                         timeout_duration.as_secs_f64()
                     );
-                    tokio::time::sleep(tokio::time::Duration::from_millis(
-                        self.config.retry_delay_ms,
-                    ))
-                    .await;
+                    tokio::time::sleep(Duration::from_millis(self.config.retry_delay_ms)).await;
                     continue;
                 }
                 Err(e) => return Err(anyhow!("{e}")),
