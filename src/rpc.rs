@@ -46,17 +46,21 @@ pub struct EntityMetaData {
 
 /// Represents a single search result from a query.
 /// Contains the entity key and the value (decoded from base64).
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SearchResult {
     #[serde(rename = "key")]
     pub key: Hash,
-    #[serde(rename = "value", deserialize_with = "deserialize_base64")]
+    #[serde(
+        rename = "value",
+        deserialize_with = "deserialize_base64",
+        serialize_with = "serialize_base64"
+    )]
     pub value: Bytes,
 }
 
 /// Helper for deserializing base64-encoded storage values.
 /// Used to decode entity values returned from the RPC API.
-fn deserialize_base64<'de, D>(deserializer: D) -> Result<Bytes, D::Error>
+pub fn deserialize_base64<'de, D>(deserializer: D) -> Result<Bytes, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -65,6 +69,14 @@ where
         .decode(s)
         .map(Bytes::from)
         .map_err(serde::de::Error::custom)
+}
+
+/// Serialize Bytes as base64 string
+pub fn serialize_base64<S>(value: &Bytes, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&BASE64.encode(value))
 }
 
 impl SearchResult {
@@ -89,7 +101,7 @@ impl GolemBaseClient {
         self.provider
             .request(method.clone(), params)
             .await
-            .inspect(|res| log::debug!("RPC Response: {:?}", res))
+            .inspect(|res| log::trace!("RPC Response: {:?}", res))
             .map_err(|e| match e {
                 RpcError::Original(AlloyError::ErrorResp(err)) => {
                     anyhow!("Error response from RPC service: {err}")
