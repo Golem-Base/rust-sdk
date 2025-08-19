@@ -35,8 +35,9 @@ pub async fn cleanup_entities(client: &GolemBaseClient, account: Address) -> Res
 pub async fn create_test_account(client: &GolemBaseClient) -> Result<Address> {
     let account = client.account_generate("test123").await?;
     let fund_tx = client.fund(account, BigDecimal::from(1)).await?;
+    let balance = client.get_balance(account).await?;
 
-    log::info!("Account {account} funded with transaction: {fund_tx}");
+    log::info!("Account {account} funded with transaction: {fund_tx} and balance {balance}");
     Ok(account)
 }
 

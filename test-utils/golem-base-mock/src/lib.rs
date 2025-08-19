@@ -17,6 +17,7 @@ use tokio::sync::RwLock;
 
 use crate::api::{EthRpcServer, GolemBaseRpcServer};
 use crate::blockchain::Blockchain;
+use crate::controller::{CallOverride, CallResponse, MockController};
 use crate::entity_db::EntityDb;
 use crate::execution::ExecutionEngine;
 use crate::managed_accounts::ManagedAccounts;
@@ -26,6 +27,7 @@ use golem_base_sdk::rpc::{EntityMetaData, SearchResult};
 pub mod api;
 pub mod block;
 pub mod blockchain;
+pub mod controller;
 pub mod entity_db;
 pub mod execution;
 pub mod managed_accounts;
@@ -33,7 +35,7 @@ pub mod query_parser;
 pub mod server;
 pub mod transaction_pool;
 
-// Re-export server types for convenience
+// Re-export symbols for user of the library.
 pub use server::GolemBaseMockServer;
 
 /// Helper function to create ErrorObject with a typed ErrorCode and message
@@ -50,6 +52,7 @@ pub struct GolemBaseMock {
     transaction_pool: TransactionPool,
     execution: ExecutionEngine,
     managed_accounts: ManagedAccounts,
+    controller: MockController,
 }
 
 impl GolemBaseMock {
@@ -69,6 +72,7 @@ impl GolemBaseMock {
             transaction_pool,
             execution: execution_engine,
             managed_accounts: ManagedAccounts::new(),
+            controller: MockController::new(),
         }
     }
 }
@@ -80,6 +84,45 @@ impl EthRpcServer for GolemBaseMock {
         address: Address,
         _block: Option<BlockId>,
     ) -> RpcResult<U256> {
+        // Check for controller overrides first
+        if let Some(override_response) = self
+            .controller
+            .take_next_override("eth_getTransactionCount")
+        {
+            match &override_response.response {
+                CallOverride::Once(response) => {
+                    match response {
+                        CallResponse::Error(err) => {
+                            return Err(create_error(ErrorCode::InternalError, err.to_string()))
+                        }
+                        CallResponse::Success => {
+                            // Continue with normal logic
+                        }
+                    }
+                }
+                CallOverride::Until { response, .. } => {
+                    match response {
+                        CallResponse::Error(err) => {
+                            return Err(create_error(ErrorCode::InternalError, err.to_string()))
+                        }
+                        CallResponse::Success => {
+                            // Continue with normal logic
+                        }
+                    }
+                }
+                CallOverride::NTimes { response, .. } => {
+                    match response {
+                        CallResponse::Error(err) => {
+                            return Err(create_error(ErrorCode::InternalError, err.to_string()))
+                        }
+                        CallResponse::Success => {
+                            // Continue with normal logic
+                        }
+                    }
+                }
+            }
+        }
+
         // Get pending transactions from the pool
         let pending_count = self.transaction_pool.get_transaction_count(&address).await;
 
