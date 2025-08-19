@@ -82,7 +82,11 @@ impl GolemBaseMock {
     ///
     /// Note that this function must be used in very specific way to work correctly:
     /// ```
-    /// let _override = self.next_override("eth_getTransactionCount")?;
+    /// use golem_base_mock::GolemBaseMock;
+    ///
+    /// let mock = GolemBaseMock::new();
+    /// let _override = mock.next_override("eth_getTransactionCount")?;
+    /// anyhow::Ok(())
     /// ```
     /// Override must not be dropped before going out of the scope of RPC call.
     /// Otherwise, it will send a notification to the client, before we will finish processing the call.
