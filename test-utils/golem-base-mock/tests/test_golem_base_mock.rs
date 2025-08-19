@@ -1,5 +1,10 @@
+use std::time::Duration;
+
 use bigdecimal::BigDecimal;
-use golem_base_mock::GolemBaseMockServer;
+use golem_base_mock::{
+    controller::{CallOverride, CallResponse, CallbackResult},
+    GolemBaseMockServer,
+};
 use golem_base_sdk::{entity::Create, GolemBaseClient};
 use golem_base_test_utils::{create_test_account, init_logger};
 use serial_test::serial;
@@ -83,5 +88,55 @@ async fn test_golem_base_mock_integration() -> anyhow::Result<()> {
     assert_eq!(metadata.numeric_annotations.len(), 1);
 
     log::info!("✅ All GolemBase mock tests completed successfully!");
+    Ok(())
+}
+
+// Test triggering callback for CallOverride::Once.
+#[tokio::test]
+#[serial]
+async fn test_golem_base_mock_once_callback_waiting() -> anyhow::Result<()> {
+    init_logger(false);
+
+    let mock = GolemBaseMockServer::create_test_mock_server().await?;
+    let ctrl = mock.controller();
+    let client = GolemBaseClient::new(mock.url().clone())?;
+    let account = create_test_account(&client).await.unwrap();
+
+    log::info!("Create callbacks first to be sure that they will be triggered in correct order");
+    let mut call1 = ctrl.override_rpc(
+        "eth_getBalance",
+        CallOverride::Once(CallResponse::Error("error sending request".to_string())),
+    );
+    let mut call2 = ctrl.override_rpc("eth_getBalance", CallOverride::Once(CallResponse::Success));
+
+    log::info!("Create a task that will get balance, what will trigger callbacks internally");
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        let balance = client.get_balance(account).await.unwrap();
+        log::info!("Balance: {balance}");
+    });
+
+    log::info!("First callback should be triggered after async task will finish sleeping");
+    call1.triggered(Duration::from_millis(1200)).await.unwrap();
+    log::info!("✅ First callback triggered");
+
+    log::info!("Second callback should be triggered immediately, because get_balance will retry");
+    call2.triggered(Duration::from_millis(100)).await.unwrap();
+    log::info!("✅ Second callback triggered");
+
+    log::info!("Validating if channel won't return anything after override was used.");
+    let result1 = call1
+        .wait_for_trigger(Duration::from_millis(1))
+        .await
+        .unwrap();
+    matches!(result1, CallbackResult::ChannelDropped);
+
+    let result2 = call2
+        .wait_for_trigger(Duration::from_millis(1))
+        .await
+        .unwrap();
+    matches!(result2, CallbackResult::ChannelDropped);
+
     Ok(())
 }

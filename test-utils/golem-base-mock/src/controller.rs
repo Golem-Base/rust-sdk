@@ -15,7 +15,7 @@ use tokio::sync::mpsc;
 pub enum CallbackResult {
     /// The endpoint was triggered and a response was sent
     Triggered,
-    /// The notification channel was dropped (e.g., market was dropped)
+    /// The notification channel was dropped
     ChannelDropped,
 }
 
@@ -26,6 +26,7 @@ pub struct EndpointCallback {
 
 impl EndpointCallback {
     /// Wait for the endpoint to be triggered with a timeout
+    #[must_use]
     pub async fn wait_for_trigger(
         &mut self,
         timeout: std::time::Duration,
@@ -37,6 +38,15 @@ impl EndpointCallback {
                 "Timeout {} waiting for endpoint",
                 humantime::format_duration(timeout)
             )),
+        }
+    }
+
+    /// Check if the callback was triggered within the timeout
+    /// Returns an error if the callback wasn't triggered
+    pub async fn triggered(&mut self, timeout: std::time::Duration) -> Result<(), anyhow::Error> {
+        match self.wait_for_trigger(timeout).await? {
+            CallbackResult::Triggered => Ok(()),
+            CallbackResult::ChannelDropped => Err(anyhow::anyhow!("Callback channel was dropped")),
         }
     }
 }
@@ -84,7 +94,10 @@ impl<T: Display> Drop for WithCallback<T> {
                 self.call_count,
                 self.response
             );
-            let _ = sender.send(());
+
+            if let Err(e) = sender.try_send(()) {
+                log::error!("Failed to send callback for {}: {}", self.endpoint_name, e);
+            }
         }
     }
 }
@@ -247,11 +260,13 @@ impl MockController {
         {
             // User can know on which endpoint global override was triggered.
             override_wrapper.endpoint_name = format!("{GLOBAL_OVERRIDE_KEY}: {rpc_name}");
+            controller.cleanup_outdated_overrides();
             return Some(override_wrapper);
         }
 
         // Then check RPC-specific overrides
         if let Some(override_wrapper) = controller.get_first_valid_override(rpc_name) {
+            controller.cleanup_outdated_overrides();
             return Some(override_wrapper);
         }
 
