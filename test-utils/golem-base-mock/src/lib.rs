@@ -9,12 +9,9 @@ use alloy::rlp::Decodable;
 use alloy::rpc::types::{
     Block, BlockId, BlockNumberOrTag, Log, Transaction, TransactionReceipt, TransactionRequest,
 };
-use anyhow::Result;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use jsonrpsee::core::{async_trait, RpcResult};
-use jsonrpsee::server::{RpcModule, Server};
 use jsonrpsee::types::{ErrorCode, ErrorObject};
-use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -36,8 +33,8 @@ pub mod query_parser;
 pub mod server;
 pub mod transaction_pool;
 
-// Re-export server functions for convenience
-pub use server::{create_test_mock_server, get_default_mock_server_url};
+// Re-export server types for convenience
+pub use server::GolemBaseMockServer;
 
 /// Helper function to create ErrorObject with a typed ErrorCode and message
 fn create_error(code: ErrorCode, message: impl Into<String>) -> ErrorObject<'static> {
@@ -538,65 +535,5 @@ impl GolemBaseMock {
     /// Creates a new account with a random private key
     pub fn create_account(&self) -> Address {
         self.managed_accounts.create_account()
-    }
-}
-
-/// GolemBase Mock Server
-#[derive(Clone, Default)]
-pub struct GolemBaseMockServer {
-    pub state: GolemBaseMock,
-    #[allow(dead_code)]
-    server: Option<jsonrpsee::server::ServerHandle>,
-}
-
-impl GolemBaseMockServer {
-    pub fn new() -> Self {
-        Self {
-            state: GolemBaseMock::new(),
-            server: None,
-        }
-    }
-
-    pub fn with_chain_id(mut self, chain_id: u64) -> Self {
-        self.state.chain_id = U256::from(chain_id);
-        self
-    }
-
-    pub async fn create_test_account(&mut self, initial_balance: U256) -> Address {
-        let address = self.state.create_account();
-        self.state.blockchain.add_accounts(vec![address]).await;
-        self.state
-            .blockchain
-            .set_balance(address, initial_balance)
-            .await;
-        address
-    }
-
-    pub async fn start(
-        self,
-        addr: SocketAddr,
-    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let mut module = RpcModule::new(());
-
-        // Register RPC methods (both Ethereum and GolemBase)
-        let rpc_impl = self.state.clone();
-        module.merge(EthRpcServer::into_rpc(rpc_impl.clone()))?;
-        module.merge(GolemBaseRpcServer::into_rpc(rpc_impl))?;
-
-        let server = Server::builder().build(addr).await?;
-
-        let addr = server.local_addr()?;
-        log::info!("GolemBase Mock Server listening on {}", addr);
-
-        // Start the execution engine to produce blocks
-        self.state.blockchain.create_genesis_block().await;
-        self.state.execution.start().await;
-
-        let server_handle = server.start(module);
-
-        Ok(Self {
-            state: self.state,
-            server: Some(server_handle),
-        })
     }
 }

@@ -1,6 +1,5 @@
-use alloy::transports::http::reqwest::Url;
 use bigdecimal::BigDecimal;
-use golem_base_mock::{create_test_mock_server, get_default_mock_server_url};
+use golem_base_mock::GolemBaseMockServer;
 use golem_base_sdk::{entity::Create, GolemBaseClient};
 use golem_base_test_utils::{create_test_account, init_logger};
 use serial_test::serial;
@@ -8,19 +7,17 @@ use serial_test::serial;
 /// Comprehensive integration test that demonstrates using the GolemBase mock server with GolemBaseClient
 #[tokio::test]
 #[serial]
-async fn test_golem_base_mock_integration() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
-{
+async fn test_golem_base_mock_integration() -> anyhow::Result<()> {
     init_logger(false);
 
     // Test 1: Basic functionality with default mock server
     log::info!("Testing basic functionality with default mock server...");
-    let _mock_server = create_test_mock_server().await?;
-    let rpc_url = Url::parse(&get_default_mock_server_url())?;
-    let client = GolemBaseClient::new(rpc_url)?;
+    let server = GolemBaseMockServer::create_test_mock_server().await?;
+    let client = GolemBaseClient::new(server.url().clone())?;
 
     // Are we able to get the chain id?
     let chain_id = client.get_chain_id().await?;
-    assert_eq!(chain_id, 31337);
+    assert_eq!(chain_id, 1337);
 
     // Create a test account with funding
     log::info!("Creating test account and funding it...");

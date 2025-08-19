@@ -103,7 +103,7 @@ impl GolemBaseClient {
             .client()
             .request(method.clone(), params)
             .await
-            .inspect(|res| log::debug!("RPC Response: {:?}", res))
+            .inspect(|res| log::trace!("RPC Response: {:?}", res))
             .map_err(|e| match e {
                 RpcError::ErrorResp(err) => {
                     anyhow!("Error response from RPC service: {}", err)
