@@ -1,7 +1,7 @@
 use alloy::primitives::Address;
 use alloy::providers::Provider;
+use alloy::rpc::json_rpc::RpcError;
 use alloy::rpc::json_rpc::{RpcRecv, RpcSend};
-use alloy_json_rpc::RpcError;
 use anyhow::anyhow;
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use bytes::Bytes;

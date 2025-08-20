@@ -22,7 +22,7 @@ jobs:
 
       # TODO: This could probably just be a derivation
       - name: Run Rust demo example
-        run: nix develop --command cargo run
+        run: printf "password" | nix develop --command cargo run
         working-directory: ./demo
 
   run-tests-and-docs:

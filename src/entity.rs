@@ -1,7 +1,7 @@
 use alloy::primitives::B256;
 use alloy::rpc::types::TransactionReceipt;
+use alloy::sol_types::SolEventInterface;
 use alloy_rlp::{Encodable, RlpDecodable, RlpEncodable};
-use alloy_sol_types::SolEventInterface;
 use bon::bon;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};

@@ -9,11 +9,22 @@ license = "GPL-3.0-or-later"
 members = ["demo", "test-utils"]
 resolver = "2"
 
+# This is available as a feature in the alloy crate, however,
+# the macro expansion is broken as it doesn't rexport the crate
+# name correctly and references `alloy_rlp` directly. Once this
+# is fixed, this can be removed and "rlp" can be added to features.
+# 
+# https://github.com/alloy-rs/rlp/issues/40
+[dependencies.alloy-rlp]
+features = ["derive"]
+version = "0.3.12"
+
 [dependencies]
-alloy = { version = "1.0", features = ["full", "json-rpc"] }
-alloy-json-rpc = "1.0"
-alloy-rlp = "0.3"
-alloy-sol-types = "1.2"
+alloy = { version = "1.0.24", features = [
+  "provider-ws",
+  "json-rpc",
+  "signer-keystore",
+] }
 anyhow = "1.0"
 base64 = "0.22"
 bigdecimal = "0.4"
