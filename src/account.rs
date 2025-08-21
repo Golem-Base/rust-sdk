@@ -5,6 +5,7 @@ use alloy::consensus::{
 use alloy::hex;
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{address, keccak256, Address, B256, U256};
+use alloy::providers::PendingTransactionConfig;
 use alloy::rpc::types::eth::TransactionRequest;
 use alloy::rpc::types::TransactionReceipt;
 use alloy_rlp::{Decodable, Encodable};
@@ -478,61 +479,95 @@ pub async fn get_receipt(
         log::debug!("Transaction {tx_hash} wasn't send to seqencer properly. Caller should retry.");
         return Ok(None);
     }
+    let _ = wait_for_indexing(provider, tx_hash, timeout_duration).await;
 
     loop {
-        // Check if we've exceeded the timeout
+        // Recalculate timeout in case it decreased during retries
+        let elapsed = start_time.elapsed();
+        let remaining_timeout = timeout_duration.map(|timeout| timeout.saturating_sub(elapsed));
+
+        if let Some(remaining_timeout) = remaining_timeout {
+            if remaining_timeout == Duration::ZERO {
+                return Ok(None);
+            }
+        }
+
+        let config = PendingTransactionConfig::new(tx_hash)
+            .with_required_confirmations(confirmations)
+            .with_timeout(remaining_timeout);
+        provider
+            .watch_for_confirmation(config)
+            .await
+            .map_err(|e| anyhow!("Failed watching for {tx_hash} confirmation: {e}"))?;
+
+        match provider
+            .get_transaction_receipt(tx_hash)
+            .await
+            .map_err(|e| anyhow!("Failed to get transaction receipt: {e}"))?
+        {
+            Some(receipt) => {
+                log::info!(
+                    "Transaction {tx_hash} was included in a block {:?} ({:?}). Waiting for {confirmations} confirmations.",
+                    receipt.block_number,
+                    receipt.block_hash.map(|b| hex::encode(b))
+                );
+                return Ok(Some(receipt));
+            }
+            None => {
+                log::trace!("Getting receipt returned None for transaction: {tx_hash}");
+
+                if let Some(tx) = provider.get_transaction_by_hash(tx_hash).await? {
+                    if tx.block_hash.is_some() {
+                        log::debug!(
+                        "Transaction {tx_hash} was already included in a block {:?} ({:?}), but receipt is not available.",
+                        tx.block_number,
+                        tx.block_hash.map(|b| hex::encode(b))
+                    );
+                        bail!("Transaction {tx_hash} was already included in a block, but we are not able to get the receipt.");
+                    }
+                }
+
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                continue;
+            }
+        }
+    }
+}
+
+/// Waits for transaction indexing to complete by retrying get_transaction_receipt calls.
+/// This function is workaround for problem with local GolemBase setup, which sometimes returns this
+/// error on the beginning. After initial period we shouldn't get this error again.
+async fn wait_for_indexing(
+    provider: &ResilientProvider,
+    tx_hash: Hash,
+    timeout_duration: Option<Duration>,
+) -> anyhow::Result<Option<TransactionReceipt>> {
+    let start_time = std::time::Instant::now();
+
+    loop {
+        // Check timeout
         if let Some(duration) = timeout_duration {
             if start_time.elapsed() >= duration {
                 return Ok(None);
             }
         }
 
-        // Must be checked before getting the receipt, to avoid race conditions.
-        let tx = provider.get_transaction_by_hash(tx_hash).await?;
-
         match provider.get_transaction_receipt(tx_hash).await {
-            Ok(opt_receipt) => match opt_receipt {
-                Some(receipt) => {
-                    log::info!(
-                        "Transaction {tx_hash} was included in a block {:?} ({:?}). Waiting for {confirmations} confirmations.",
-                        receipt.block_number,
-                        receipt.block_hash.map(|b| hex::encode(b))
-                    );
-                    provider
-                        .watch_for_confirmation(tx_hash, confirmations)
-                        .await?;
-                    return Ok(Some(receipt));
-                }
-                _ => {
-                    log::trace!("Getting receipt returned None for transaction: {tx_hash}");
-
-                    if let Some(tx) = tx {
-                        if tx.block_hash.is_some() {
-                            log::debug!(
-                            "Transaction {tx_hash} was already included in a block {:?} ({:?}), but receipt is not available.",
-                            tx.block_number,
-                            tx.block_hash.map(|b| hex::encode(b))
-                        );
-                            bail!("Transaction {tx_hash} was already included in a block, but we are not able to get the receipt.");
-                        }
-                    }
-
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                    continue;
-                }
-            },
+            Ok(Some(receipt)) => return Ok(Some(receipt)),
+            Ok(None) => {
+                // Receipt not available yet, wait and retry
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                continue;
+            }
             Err(e)
                 if e.to_string()
                     .contains("transaction indexing is in progress") =>
             {
                 log::debug!("Ignoring `indexing is in progress` error for transaction: {tx_hash}");
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
                 continue;
             }
-
-            Err(e) => {
-                return Err(anyhow!("Failed to get transaction receipt: {}", e));
-            }
+            Err(e) => return Err(anyhow!("Failed to get transaction receipt: {e}")),
         }
     }
 }

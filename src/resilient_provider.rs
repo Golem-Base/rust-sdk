@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use alloy::eips::BlockNumberOrTag;
 use alloy::network::{Ethereum, Network};
-use alloy::primitives::{Address, B256, U256};
+use alloy::primitives::{Address, U256};
 use alloy::providers::{
     DynProvider, PendingTransactionBuilder, PendingTransactionConfig, Provider,
 };
@@ -236,14 +236,7 @@ where
     }
 
     /// Watches a pending transaction and waits for the specified number of confirmations with retry logic.
-    pub async fn watch_for_confirmation(&self, tx_hash: B256, confirmations: u64) -> Result<()> {
-        if confirmations == 0 {
-            return Ok(());
-        }
-
-        let config =
-            PendingTransactionConfig::new(tx_hash).with_required_confirmations(confirmations);
-
+    pub async fn watch_for_confirmation(&self, config: PendingTransactionConfig) -> Result<()> {
         let pending_tx = self
             .retry("watch_pending_transaction", || async {
                 self.provider
