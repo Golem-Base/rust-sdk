@@ -244,10 +244,7 @@ impl TransactionQueue {
                 .provider
                 .send_raw_transaction(&encoded)
                 .await
-                .map_err(|e| anyhow!("Failed to send transaction: {e}"))?
-                .register()
-                .await
-                .map_err(|e| anyhow!("Failed to register transaction: {e}"))?;
+                .map_err(|e| anyhow!("Failed to send transaction: {e}"))?;
 
             let tx_hash = *pending.tx_hash();
             attempt += 1;

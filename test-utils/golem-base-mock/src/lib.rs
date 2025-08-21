@@ -17,7 +17,7 @@ use tokio::sync::RwLock;
 
 use crate::api::{EthRpcServer, GolemBaseRpcServer};
 use crate::blockchain::Blockchain;
-use crate::controller::{CallOverride, CallResponse, MockController, WithCallback};
+use crate::controller::{should_fail, CallOverride, CallResponse, MockController, WithCallback};
 use crate::entity_db::EntityDb;
 use crate::execution::ExecutionEngine;
 use crate::managed_accounts::ManagedAccounts;
@@ -106,6 +106,13 @@ impl GolemBaseMock {
                 // anything complicated afterwards.
                 CallResponse::Error(err) => {
                     return Err(create_error(ErrorCode::InternalError, err.to_string()));
+                }
+                // FailEachNth response: return error based on frequency fraction
+                CallResponse::FailEachNth { error, frequency } => {
+                    if should_fail(frequency, override_response.call_count) {
+                        return Err(create_error(ErrorCode::InternalError, error));
+                    }
+                    Ok(Some(override_response))
                 }
                 // Caller should process normal logic, but we need to notify the client.
                 // We return WithCallback struct that will do this on drop.

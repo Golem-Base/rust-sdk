@@ -1,14 +1,11 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::{Arc, Mutex};
-
-/// Channel buffer size for endpoint callbacks
-const CALLBACK_CHANNEL_SIZE: usize = 50;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 /// Identifier for global overrides that apply to all RPC calls
 const GLOBAL_OVERRIDE_KEY: &str = "global";
-
-use tokio::sync::mpsc;
 
 /// Result of waiting for an endpoint to be triggered
 #[derive(Debug, Clone)]
@@ -21,7 +18,7 @@ pub enum CallbackResult {
 
 /// Wrapper object that provides an await function to wait for endpoint trigger
 pub struct EndpointCallback {
-    receiver: mpsc::Receiver<()>,
+    receiver: UnboundedReceiver<()>,
 }
 
 impl EndpointCallback {
@@ -56,13 +53,13 @@ impl EndpointCallback {
 #[derive(Debug, Clone)]
 pub struct WithCallback<T: Display> {
     pub response: T,
-    pub callback: Option<mpsc::Sender<()>>,
+    pub callback: Option<UnboundedSender<()>>,
     pub endpoint_name: String,
     pub call_count: usize,
 }
 
 impl<T: Display> WithCallback<T> {
-    pub fn new(response: T, sender: mpsc::Sender<()>, endpoint_name: String) -> Self {
+    pub fn new(response: T, sender: UnboundedSender<()>, endpoint_name: String) -> Self {
         Self {
             response,
             callback: Some(sender),
@@ -95,7 +92,7 @@ impl<T: Display> Drop for WithCallback<T> {
                 self.response
             );
 
-            if let Err(e) = sender.try_send(()) {
+            if let Err(e) = sender.send(()) {
                 log::error!("Failed to send callback for {}: {}", self.endpoint_name, e);
             }
         }
@@ -116,6 +113,7 @@ impl WithCallback<CallOverride> {
                 // Remove if count exceeded
                 self.call_count >= *n
             }
+            CallOverride::Always(_) => false, // Always overrides are never outdated
         }
     }
 
@@ -125,6 +123,7 @@ impl WithCallback<CallOverride> {
             CallOverride::Once(_) => true,
             CallOverride::Until { until, .. } => std::time::Instant::now() < *until,
             CallOverride::NTimes { n, .. } => self.call_count < *n,
+            CallOverride::Always(_) => true, // Always overrides are always used
         }
     }
 
@@ -133,6 +132,7 @@ impl WithCallback<CallOverride> {
             CallOverride::Once(response) => response,
             CallOverride::Until { response, .. } => response,
             CallOverride::NTimes { response, .. } => response,
+            CallOverride::Always(response) => response,
         }
     }
 }
@@ -147,6 +147,10 @@ pub enum CallResponse {
     /// This variant allows to capture the fact of calling the RPC. User code can
     /// wait for this event to happen in test or validate this fact as a condition for test to pass.
     Success,
+    /// RPC call will fail every Nth request based on the frequency value.
+    /// For example, frequency 3 means every 3rd request fails.
+    #[display("FailEachNth: {error} every {frequency} requests")]
+    FailEachNth { error: String, frequency: usize },
 }
 
 #[derive(Debug, derive_more::Display, Clone)]
@@ -160,6 +164,8 @@ pub enum CallOverride {
     },
     #[display("Override: {n} times -> {response}")]
     NTimes { response: CallResponse, n: usize },
+    #[display("Override: always -> {}", _0)]
+    Always(CallResponse),
 }
 
 /// Inner state of the mock controller
@@ -217,7 +223,7 @@ impl MockController {
     pub fn global_override(&self, rpc_override: CallOverride) -> EndpointCallback {
         log::debug!("Adding global override: {:?}", rpc_override);
 
-        let (sender, receiver) = mpsc::channel(CALLBACK_CHANNEL_SIZE);
+        let (sender, receiver) = mpsc::unbounded_channel();
         let overrides = WithCallback::new(rpc_override, sender, GLOBAL_OVERRIDE_KEY.to_string());
 
         let mut lock = self.inner.lock().unwrap();
@@ -234,7 +240,7 @@ impl MockController {
     pub fn override_rpc(&self, rpc_name: &str, rpc_override: CallOverride) -> EndpointCallback {
         log::debug!("Adding RPC override for '{}': {:?}", rpc_name, rpc_override);
 
-        let (sender, receiver) = mpsc::channel(CALLBACK_CHANNEL_SIZE);
+        let (sender, receiver) = mpsc::unbounded_channel();
         let overrides = WithCallback::new(rpc_override, sender, rpc_name.to_string());
 
         let mut lock = self.inner.lock().unwrap();
@@ -272,4 +278,10 @@ impl MockController {
 
         None
     }
+}
+
+/// Determines if a request should fail based on frequency
+/// For frequency 3, every 3rd request fails
+pub fn should_fail(frequency: usize, call_count: usize) -> bool {
+    call_count > 0 && call_count % frequency == 0
 }
