@@ -13,7 +13,7 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
     let client = get_client()?;
 
     let start_block = client.get_current_block_number().await?;
-    log::info!("Starting at block: {start_block}");
+    tracing::info!("Starting at block: {start_block}");
 
     let test_payload = b"test payload".to_vec();
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
@@ -24,16 +24,16 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
 
     let tx_results = client.create_entities(vec![create_tx]).await?;
     let entity_result = &tx_results[0];
-    log::info!("Entry created with ID: {entity_result:?}");
+    tracing::info!("Entry created with ID: {entity_result:?}");
 
     let entry_str = client
         .get_storage_value::<Bytes>(entity_result.entity_key)
         .await?;
-    log::info!("Retrieved value: {entry_str:?}");
+    tracing::info!("Retrieved value: {entry_str:?}");
     assert_eq!(entry_str, String::from_utf8(test_payload)?);
 
     let metadata = client.get_entity_metadata(entity_result.entity_key).await?;
-    log::info!("Retrieved metadata: {metadata:?}");
+    tracing::info!("Retrieved metadata: {metadata:?}");
 
     assert_eq!(metadata.string_annotations[0].value, "Test");
     assert_eq!(metadata.numeric_annotations[0].value, timestamp);
@@ -57,7 +57,7 @@ async fn test_entity_operations() -> Result<()> {
 
     let tx1_results = client.create_entities(vec![create1]).await?;
     let entity1_result = &tx1_results[0];
-    log::info!("Entry created with ID: {entity1_result:?}");
+    tracing::info!("Entry created with ID: {entity1_result:?}");
 
     // Create second entity
     let payload2 = b"second entity".to_vec();
@@ -68,7 +68,7 @@ async fn test_entity_operations() -> Result<()> {
 
     let tx2_results = client.create_entities(vec![create2]).await?;
     let entity2_result = &tx2_results[0];
-    log::info!("Entry created with ID: {entity1_result:?}");
+    tracing::info!("Entry created with ID: {entity1_result:?}");
 
     // Verify both entities exist
     let entity1_str = String::from_utf8(
@@ -85,8 +85,8 @@ async fn test_entity_operations() -> Result<()> {
             .to_vec(),
     )
     .unwrap();
-    log::info!("Retrieved first entry: {entity1_str}");
-    log::info!("Retrieved second entry: {entity2_str}");
+    tracing::info!("Retrieved first entry: {entity1_str}");
+    tracing::info!("Retrieved second entry: {entity2_str}");
     assert_eq!(entity1_str, String::from_utf8(payload1)?);
     assert_eq!(entity2_str, String::from_utf8(payload2)?);
 
@@ -98,7 +98,7 @@ async fn test_entity_operations() -> Result<()> {
         .annotate_number("test_timestamp", updated_timestamp);
 
     client.update_entities(vec![update]).await?;
-    log::info!("First entry updated");
+    tracing::info!("First entry updated");
 
     // Verify first entity was updated
     let updated_str = String::from_utf8(
@@ -107,14 +107,14 @@ async fn test_entity_operations() -> Result<()> {
             .await?,
     )
     .unwrap();
-    log::info!("Retrieved updated first entry: {updated_str}");
+    tracing::info!("Retrieved updated first entry: {updated_str}");
     assert_eq!(updated_str, String::from_utf8(updated_payload.clone())?);
 
     // Remove second entity
     client
         .delete_entities(vec![entity2_result.entity_key])
         .await?;
-    log::info!("Second entry removed");
+    tracing::info!("Second entry removed");
 
     // Verify second entity was removed
     let result = client.get_entity_metadata(entity2_result.entity_key).await;
@@ -133,7 +133,7 @@ async fn test_entity_operations() -> Result<()> {
             .to_vec(),
     )
     .unwrap();
-    log::info!("Retrieved final first entry: {final_str}");
+    tracing::info!("Retrieved final first entry: {final_str}");
     assert_eq!(final_str, String::from_utf8(updated_payload)?);
 
     Ok(())
@@ -214,7 +214,7 @@ async fn test_concurrent_entity_creation_batch() -> Result<()> {
         assert_eq!(metadata.numeric_annotations[0].value, i as u64);
     }
 
-    log::info!(
+    tracing::info!(
         "Successfully verified {} concurrent batch entity creations",
         ENTITIES_PER_TASK * 2
     );
@@ -227,7 +227,7 @@ async fn test_failed_tx_explicit_gas() -> Result<()> {
     let client = get_client()?;
 
     let start_block = client.get_current_block_number().await?;
-    log::info!("Starting at block: {start_block}");
+    tracing::info!("Starting at block: {start_block}");
 
     let create_tx = GolemBaseTransaction::builder()
         .extensions(vec![Extend::new(FixedBytes::with_last_byte(1), 1000)])

@@ -4,12 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-alloy = { version = "1.0.24", features = ["full", "json-rpc"] }
+alloy = { version = "1.0.24", features = [
+  "provider-ws",
+  "json-rpc",
+  "signer-keystore",
+] }
 anyhow = "1.0"
 bigdecimal = "0.4"
-env_logger = "0.11.8"
-log = "0.4"
-
 dirs = "6.0.0"
 golem-base-sdk = { workspace = true }
+tracing = { version = "0.1" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2.5.4"

@@ -25,42 +25,42 @@ async fn test_query_entities() -> Result<()> {
     {
         // Test queries
         let type_test_entries = client.query_entity_keys("type = \"test\"").await?;
-        log::info!("Entries with type = \"test\": {type_test_entries:?}");
+        tracing::info!("Entries with type = \"test\": {type_test_entries:?}");
         assert!(type_test_entries.contains(&entity1.entity_key));
         assert!(type_test_entries.contains(&entity2.entity_key));
 
         let category_alpha_entries = client.query_entity_keys("category = \"alpha\"").await?;
-        log::info!("Entries with category = \"alpha\": {category_alpha_entries:?}");
+        tracing::info!("Entries with category = \"alpha\": {category_alpha_entries:?}");
         assert!(category_alpha_entries.contains(&entity1.entity_key));
         assert!(category_alpha_entries.contains(&entity3.entity_key));
 
         let type_demo_entries = client.query_entity_keys("type = \"demo\"").await?;
-        log::info!("Entries with type = \"demo\": {type_demo_entries:?}");
+        tracing::info!("Entries with type = \"demo\": {type_demo_entries:?}");
         assert!(type_demo_entries.contains(&entity3.entity_key));
 
         let combined_and = client
             .query_entity_keys("type = \"test\" && category = \"beta\"")
             .await?;
-        log::info!("Entries with type = \"test\" && category = \"beta\": {combined_and:?}");
+        tracing::info!("Entries with type = \"test\" && category = \"beta\": {combined_and:?}");
         assert!(combined_and.contains(&entity2.entity_key));
 
         let combined_or = client
             .query_entity_keys("type = \"demo\" || category = \"beta\"")
             .await?;
-        log::info!("Entries with type = \"demo\" || category = \"beta\": {combined_or:?}");
+        tracing::info!("Entries with type = \"demo\" || category = \"beta\": {combined_or:?}");
         assert!(combined_or.contains(&entity2.entity_key));
         assert!(combined_or.contains(&entity3.entity_key));
 
         // Test empty result
         let no_results = client.query_entity_keys("type = \"nonexistent\"").await?;
-        log::info!("Entries with type = \"nonexistent\": {no_results:?}");
+        tracing::info!("Entries with type = \"nonexistent\": {no_results:?}");
         assert_eq!(no_results.len(), 0);
 
         // Test selecting all entries
         let all_entries = client
             .query_entity_keys("type = \"test\" || type = \"demo\"")
             .await?;
-        log::info!("All entries: {all_entries:?}");
+        tracing::info!("All entries: {all_entries:?}");
         assert!(all_entries.contains(&entity1.entity_key));
         assert!(all_entries.contains(&entity2.entity_key));
         assert!(all_entries.contains(&entity3.entity_key));

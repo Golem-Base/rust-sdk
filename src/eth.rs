@@ -164,7 +164,7 @@ impl GolemBaseClient {
                 nm.base_nonce = on_chain_nonce;
             }
             Err(e) => {
-                log::warn!("Failed to fetch on-chain nonce: {e}");
+                tracing::warn!("Failed to fetch on-chain nonce: {e}");
             }
         }
         nm.next_nonce().await
@@ -176,9 +176,9 @@ impl GolemBaseClient {
         &self,
         payload: GolemBaseTransaction,
     ) -> Result<TransactionReceipt, Error> {
-        log::debug!("payload: {payload:?}");
+        tracing::debug!("payload: {payload:?}");
         let encoded = payload.encoded();
-        log::debug!("buffer: {encoded:?}");
+        tracing::debug!("buffer: {encoded:?}");
 
         let nonce = self.next_nonce().await;
 
@@ -194,7 +194,7 @@ impl GolemBaseClient {
             nonce: Some(nonce),
             ..Default::default()
         };
-        log::debug!("transaction: {tx:?}");
+        tracing::debug!("transaction: {tx:?}");
 
         let gas_limit = if let Some(gas_limit) = payload.gas_limit {
             gas_limit
@@ -219,12 +219,12 @@ impl GolemBaseClient {
             .send_transaction(tx.clone())
             .await
             .map_err(|e| Error::TransactionSendError(e.to_string()))?;
-        log::debug!("pending transaction: {pending_tx:?}");
+        tracing::debug!("pending transaction: {pending_tx:?}");
         let receipt = pending_tx
             .get_receipt()
             .await
             .map_err(|e| Error::TransactionReceiptError(e.to_string()))?;
-        log::debug!("receipt: {receipt:?}");
+        tracing::debug!("receipt: {receipt:?}");
         {
             let mut nm = self.nonce_manager.lock().await;
             nm.complete().await;
