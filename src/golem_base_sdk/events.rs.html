@@ -126,14 +126,14 @@
 <a href=#126 id=126 data-nosnippet>126</a>    <span class="doccomment">/// Creates a new `EventsClient` by connecting to the given websocket `Url`.
 <a href=#127 id=127 data-nosnippet>127</a>    /// Establishes a connection to the blockchain node for event streaming.
 <a href=#128 id=128 data-nosnippet>128</a>    </span><span class="kw">pub async fn </span>new(url: Url) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
-<a href=#129 id=129 data-nosnippet>129</a>        <span class="macro">log::debug!</span>(<span class="string">"Connecting to websocket provider: {url}"</span>);
+<a href=#129 id=129 data-nosnippet>129</a>        <span class="macro">tracing::debug!</span>(<span class="string">"Connecting to websocket provider: {url}"</span>);
 <a href=#130 id=130 data-nosnippet>130</a>
 <a href=#131 id=131 data-nosnippet>131</a>        <span class="kw">let </span>provider = ProviderBuilder::new()
 <a href=#132 id=132 data-nosnippet>132</a>            .connect_ws(WsConnect::new(url.clone()))
 <a href=#133 id=133 data-nosnippet>133</a>            .<span class="kw">await</span><span class="question-mark">?
 <a href=#134 id=134 data-nosnippet>134</a>            </span>.erased();
 <a href=#135 id=135 data-nosnippet>135</a>
-<a href=#136 id=136 data-nosnippet>136</a>        <span class="macro">log::info!</span>(<span class="string">"Connected to websocket provider: {url}"</span>);
+<a href=#136 id=136 data-nosnippet>136</a>        <span class="macro">tracing::info!</span>(<span class="string">"Connected to websocket provider: {url}"</span>);
 <a href=#137 id=137 data-nosnippet>137</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{ provider })
 <a href=#138 id=138 data-nosnippet>138</a>    }
 <a href=#139 id=139 data-nosnippet>139</a>

@@ -164,7 +164,7 @@
 <a href=#164 id=164 data-nosnippet>164</a>                nm.base_nonce = on_chain_nonce;
 <a href=#165 id=165 data-nosnippet>165</a>            }
 <a href=#166 id=166 data-nosnippet>166</a>            <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#167 id=167 data-nosnippet>167</a>                <span class="macro">log::warn!</span>(<span class="string">"Failed to fetch on-chain nonce: {e}"</span>);
+<a href=#167 id=167 data-nosnippet>167</a>                <span class="macro">tracing::warn!</span>(<span class="string">"Failed to fetch on-chain nonce: {e}"</span>);
 <a href=#168 id=168 data-nosnippet>168</a>            }
 <a href=#169 id=169 data-nosnippet>169</a>        }
 <a href=#170 id=170 data-nosnippet>170</a>        nm.next_nonce().<span class="kw">await
@@ -176,9 +176,9 @@
 <a href=#176 id=176 data-nosnippet>176</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#177 id=177 data-nosnippet>177</a>        payload: GolemBaseTransaction,
 <a href=#178 id=178 data-nosnippet>178</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;TransactionReceipt, Error&gt; {
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="macro">log::debug!</span>(<span class="string">"payload: {payload:?}"</span>);
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="macro">tracing::debug!</span>(<span class="string">"payload: {payload:?}"</span>);
 <a href=#180 id=180 data-nosnippet>180</a>        <span class="kw">let </span>encoded = payload.encoded();
-<a href=#181 id=181 data-nosnippet>181</a>        <span class="macro">log::debug!</span>(<span class="string">"buffer: {encoded:?}"</span>);
+<a href=#181 id=181 data-nosnippet>181</a>        <span class="macro">tracing::debug!</span>(<span class="string">"buffer: {encoded:?}"</span>);
 <a href=#182 id=182 data-nosnippet>182</a>
 <a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">let </span>nonce = <span class="self">self</span>.next_nonce().<span class="kw">await</span>;
 <a href=#184 id=184 data-nosnippet>184</a>
@@ -194,7 +194,7 @@
 <a href=#194 id=194 data-nosnippet>194</a>            nonce: <span class="prelude-val">Some</span>(nonce),
 <a href=#195 id=195 data-nosnippet>195</a>            ..Default::default()
 <a href=#196 id=196 data-nosnippet>196</a>        };
-<a href=#197 id=197 data-nosnippet>197</a>        <span class="macro">log::debug!</span>(<span class="string">"transaction: {tx:?}"</span>);
+<a href=#197 id=197 data-nosnippet>197</a>        <span class="macro">tracing::debug!</span>(<span class="string">"transaction: {tx:?}"</span>);
 <a href=#198 id=198 data-nosnippet>198</a>
 <a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">let </span>gas_limit = <span class="kw">if let </span><span class="prelude-val">Some</span>(gas_limit) = payload.gas_limit {
 <a href=#200 id=200 data-nosnippet>200</a>            gas_limit
@@ -219,12 +219,12 @@
 <a href=#219 id=219 data-nosnippet>219</a>            .send_transaction(tx.clone())
 <a href=#220 id=220 data-nosnippet>220</a>            .<span class="kw">await
 <a href=#221 id=221 data-nosnippet>221</a>            </span>.map_err(|e| Error::TransactionSendError(e.to_string()))<span class="question-mark">?</span>;
-<a href=#222 id=222 data-nosnippet>222</a>        <span class="macro">log::debug!</span>(<span class="string">"pending transaction: {pending_tx:?}"</span>);
+<a href=#222 id=222 data-nosnippet>222</a>        <span class="macro">tracing::debug!</span>(<span class="string">"pending transaction: {pending_tx:?}"</span>);
 <a href=#223 id=223 data-nosnippet>223</a>        <span class="kw">let </span>receipt = pending_tx
 <a href=#224 id=224 data-nosnippet>224</a>            .get_receipt()
 <a href=#225 id=225 data-nosnippet>225</a>            .<span class="kw">await
 <a href=#226 id=226 data-nosnippet>226</a>            </span>.map_err(|e| Error::TransactionReceiptError(e.to_string()))<span class="question-mark">?</span>;
-<a href=#227 id=227 data-nosnippet>227</a>        <span class="macro">log::debug!</span>(<span class="string">"receipt: {receipt:?}"</span>);
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="macro">tracing::debug!</span>(<span class="string">"receipt: {receipt:?}"</span>);
 <a href=#228 id=228 data-nosnippet>228</a>        {
 <a href=#229 id=229 data-nosnippet>229</a>            <span class="kw">let </span><span class="kw-2">mut </span>nm = <span class="self">self</span>.nonce_manager.lock().<span class="kw">await</span>;
 <a href=#230 id=230 data-nosnippet>230</a>            nm.complete().<span class="kw">await</span>;

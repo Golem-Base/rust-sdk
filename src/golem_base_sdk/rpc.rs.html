@@ -85,12 +85,12 @@
 <a href=#85 id=85 data-nosnippet>85</a>        params: S,
 <a href=#86 id=86 data-nosnippet>86</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;R, Error&gt; {
 <a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">let </span>method = method.into();
-<a href=#88 id=88 data-nosnippet>88</a>        <span class="macro">log::debug!</span>(<span class="string">"RPC Call - Method: {method}, Params: {params:?}"</span>);
+<a href=#88 id=88 data-nosnippet>88</a>        <span class="macro">tracing::debug!</span>(<span class="string">"RPC Call - Method: {method}, Params: {params:?}"</span>);
 <a href=#89 id=89 data-nosnippet>89</a>        <span class="self">self</span>.provider
 <a href=#90 id=90 data-nosnippet>90</a>            .client()
 <a href=#91 id=91 data-nosnippet>91</a>            .request(method.clone(), params)
 <a href=#92 id=92 data-nosnippet>92</a>            .<span class="kw">await
-<a href=#93 id=93 data-nosnippet>93</a>            </span>.inspect(|res| <span class="macro">log::debug!</span>(<span class="string">"RPC Response: {res:?}"</span>))
+<a href=#93 id=93 data-nosnippet>93</a>            </span>.inspect(|res| <span class="macro">tracing::debug!</span>(<span class="string">"RPC Response: {res:?}"</span>))
 <a href=#94 id=94 data-nosnippet>94</a>            .map_err(|e| <span class="kw">match </span>e {
 <a href=#95 id=95 data-nosnippet>95</a>                RpcError::ErrorResp(err) =&gt; {
 <a href=#96 id=96 data-nosnippet>96</a>                    <span class="macro">anyhow!</span>(<span class="string">"Error response from RPC service: {err}"</span>)
@@ -99,7 +99,7 @@
 <a href=#99 id=99 data-nosnippet>99</a>                    <span class="macro">anyhow!</span>(<span class="string">"Serialization error: {err}"</span>)
 <a href=#100 id=100 data-nosnippet>100</a>                }
 <a href=#101 id=101 data-nosnippet>101</a>                RpcError::DeserError { err, text } =&gt; {
-<a href=#102 id=102 data-nosnippet>102</a>                    <span class="macro">log::debug!</span>(<span class="string">"Deserialization error: {err}, response text: {text}"</span>);
+<a href=#102 id=102 data-nosnippet>102</a>                    <span class="macro">tracing::debug!</span>(<span class="string">"Deserialization error: {err}, response text: {text}"</span>);
 <a href=#103 id=103 data-nosnippet>103</a>                    <span class="macro">anyhow!</span>(<span class="string">"Deserialization error: {err}"</span>)
 <a href=#104 id=104 data-nosnippet>104</a>                }
 <a href=#105 id=105 data-nosnippet>105</a>                <span class="kw">_ </span>=&gt; <span class="macro">anyhow!</span>(<span class="string">"{e}"</span>),
