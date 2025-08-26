@@ -9,7 +9,7 @@ use alloy::providers::PendingTransactionConfig;
 use alloy::rpc::types::eth::TransactionRequest;
 use alloy::rpc::types::TransactionReceipt;
 use alloy_rlp::{Decodable, Encodable};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 use bigdecimal::BigDecimal;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -474,11 +474,6 @@ pub async fn get_receipt(
     confirmations: u64,
 ) -> anyhow::Result<Option<TransactionReceipt>> {
     let start_time = std::time::Instant::now();
-
-    if let None = provider.get_transaction_by_hash(tx_hash).await? {
-        log::debug!("Transaction {tx_hash} wasn't send to seqencer properly. Caller should retry.");
-        return Ok(None);
-    }
     let _ = provider.wait_for_indexing(tx_hash, timeout_duration).await;
 
     loop {
@@ -515,18 +510,6 @@ pub async fn get_receipt(
             }
             None => {
                 log::trace!("Getting receipt returned None for transaction: {tx_hash}");
-
-                if let Some(tx) = provider.get_transaction_by_hash(tx_hash).await? {
-                    if tx.block_hash.is_some() {
-                        log::debug!(
-                        "Transaction {tx_hash} was already included in a block {:?} ({:?}), but receipt is not available.",
-                        tx.block_number,
-                        tx.block_hash.map(|b| hex::encode(b))
-                    );
-                        bail!("Transaction {tx_hash} was already included in a block, but we are not able to get the receipt.");
-                    }
-                }
-
                 tokio::time::sleep(Duration::from_millis(100)).await;
                 continue;
             }
