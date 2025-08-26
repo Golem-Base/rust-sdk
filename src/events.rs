@@ -126,14 +126,14 @@ impl EventsClient {
     /// Creates a new `EventsClient` by connecting to the given websocket `Url`.
     /// Establishes a connection to the blockchain node for event streaming.
     pub async fn new(url: Url) -> anyhow::Result<Self> {
-        log::debug!("Connecting to websocket provider: {url}");
+        tracing::debug!("Connecting to websocket provider: {url}");
 
         let provider = ProviderBuilder::new()
             .connect_ws(WsConnect::new(url.clone()))
             .await?
             .erased();
 
-        log::info!("Connected to websocket provider: {url}");
+        tracing::info!("Connected to websocket provider: {url}");
         Ok(Self { provider })
     }
 

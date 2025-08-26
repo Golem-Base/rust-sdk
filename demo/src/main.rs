@@ -7,7 +7,7 @@ use golem_base_sdk::events::EventsClient;
 use golem_base_sdk::{
     Address, Annotation, GolemBaseClient, GolemBaseRoClient, PrivateKeySigner, Url,
 };
-use log::info;
+use tracing::info;
 
 async fn log_num_of_entities_owned(client: &GolemBaseRoClient, owner_address: Address) {
     let n = client
@@ -20,7 +20,12 @@ async fn log_num_of_entities_owned(client: &GolemBaseRoClient, owner_address: Ad
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    let subscriber = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stdout)
+        .pretty()
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).expect("Could not set up global logger");
 
     let keypath = config_dir()
         .ok_or("Failed to get config directory")?

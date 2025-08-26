@@ -11,8 +11,10 @@ resolver = "2"
 
 # This is available as a feature in the alloy crate, however,
 # the macro expansion is broken as it doesn't rexport the crate
-# name correctly and references `alloy_rlp` directly. Once this
-# is fixed, this can be removed and "rlp" can be added to features.
+# name correctly and references `alloy_rlp` directly. It doesn't
+# seem that they plan to fix it, so this must be locked at the
+# version found in the Cargo.toml of the alloy crate to maintain
+# compatibility.
 # 
 # https://github.com/alloy-rs/rlp/issues/40
 [dependencies.alloy-rlp]
@@ -34,10 +36,10 @@ dirs = "6.0"
 displaydoc = "0.2"
 futures = "0.3"
 hex = "0.4"
-log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2.0"
-tokio = { version = "1.45", features = ["full"] }
+tokio = { version = "1.45", features = ["macros", "rt-multi-thread"] }
+tracing = { version = "0.1" }
 url = "2.5"
 
 [workspace.dependencies]
@@ -45,9 +47,5 @@ golem-base-sdk = { path = "." }
 golem-base-test-utils = { path = "test-utils" }
 
 [dev-dependencies]
-clap = { version = "4.5", features = ["derive"] }
-env_logger = "0.11"
-serde_json = "1.0"
 serial_test = "3.2"
-
 golem-base-test-utils = { workspace = true }
