@@ -479,7 +479,7 @@ pub async fn get_receipt(
         log::debug!("Transaction {tx_hash} wasn't send to seqencer properly. Caller should retry.");
         return Ok(None);
     }
-    let _ = wait_for_indexing(provider, tx_hash, timeout_duration).await;
+    let _ = provider.wait_for_indexing(tx_hash, timeout_duration).await;
 
     loop {
         // Recalculate timeout in case it decreased during retries
@@ -530,44 +530,6 @@ pub async fn get_receipt(
                 tokio::time::sleep(Duration::from_millis(100)).await;
                 continue;
             }
-        }
-    }
-}
-
-/// Waits for transaction indexing to complete by retrying get_transaction_receipt calls.
-/// This function is workaround for problem with local GolemBase setup, which sometimes returns this
-/// error on the beginning. After initial period we shouldn't get this error again.
-async fn wait_for_indexing(
-    provider: &ResilientProvider,
-    tx_hash: Hash,
-    timeout_duration: Option<Duration>,
-) -> anyhow::Result<Option<TransactionReceipt>> {
-    let start_time = std::time::Instant::now();
-
-    loop {
-        // Check timeout
-        if let Some(duration) = timeout_duration {
-            if start_time.elapsed() >= duration {
-                return Ok(None);
-            }
-        }
-
-        match provider.get_transaction_receipt(tx_hash).await {
-            Ok(Some(receipt)) => return Ok(Some(receipt)),
-            Ok(None) => {
-                // Receipt not available yet, wait and retry
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                continue;
-            }
-            Err(e)
-                if e.to_string()
-                    .contains("transaction indexing is in progress") =>
-            {
-                log::debug!("Ignoring `indexing is in progress` error for transaction: {tx_hash}");
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                continue;
-            }
-            Err(e) => return Err(anyhow!("Failed to get transaction receipt: {e}")),
         }
     }
 }

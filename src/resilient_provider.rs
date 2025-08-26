@@ -249,6 +249,46 @@ where
         pending_tx.await?;
         Ok(())
     }
+
+    /// Waits for transaction indexing to complete by retrying get_transaction_receipt calls.
+    /// This function is workaround for problem with local GolemBase setup, which sometimes returns this
+    /// error on the beginning. After initial period we shouldn't get this error again.
+    pub async fn wait_for_indexing(
+        &self,
+        tx_hash: alloy::primitives::B256,
+        timeout_duration: Option<Duration>,
+    ) -> Result<Option<N::ReceiptResponse>> {
+        let start_time = std::time::Instant::now();
+
+        loop {
+            // Check timeout
+            if let Some(duration) = timeout_duration {
+                if start_time.elapsed() >= duration {
+                    return Ok(None);
+                }
+            }
+
+            match self.get_transaction_receipt(tx_hash).await {
+                Ok(Some(receipt)) => return Ok(Some(receipt)),
+                Ok(None) => {
+                    // Receipt not available yet, wait and retry
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+                Err(e)
+                    if e.to_string()
+                        .contains("transaction indexing is in progress") =>
+                {
+                    log::debug!(
+                        "Ignoring `indexing is in progress` error for transaction: {tx_hash}"
+                    );
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+                Err(e) => return Err(anyhow!("Failed to get transaction receipt: {e}")),
+            }
+        }
+    }
 }
 
 impl<N> From<DynProvider<N>> for ResilientProvider<N>
