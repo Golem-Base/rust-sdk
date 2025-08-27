@@ -29,7 +29,7 @@ pub enum Error {
 
 /// Type representing metadata for an entity.
 /// Contains information such as expiration, payload, annotations, and owner.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EntityMetaData {
     /// The block number at which the entity expires.

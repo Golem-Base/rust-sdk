@@ -157,7 +157,7 @@ impl Create {
     }
 
     /// Creates a new `Create` request from any type that can be converted to `String`.
-    pub fn from_string<T: Into<String>>(payload: T, btl: u64) -> Self {
+    pub fn from_string(payload: impl Into<String>, btl: u64) -> Self {
         Self {
             btl,
             data: Bytes::from(payload.into().into_bytes()),

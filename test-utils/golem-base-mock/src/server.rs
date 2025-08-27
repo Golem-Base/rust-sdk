@@ -5,6 +5,7 @@ use std::net::SocketAddr;
 use url::Url;
 
 use crate::api::{EthRpcServer, GolemBaseRpcServer};
+use crate::controller::MockController;
 use crate::GolemBaseMock;
 
 /// GolemBase Mock Server
@@ -23,6 +24,10 @@ impl GolemBaseMockServer {
             url: Url::parse("http://127.0.0.1:8585").unwrap(),
             server: None,
         }
+    }
+
+    pub fn controller(&self) -> &MockController {
+        &self.state.controller
     }
 
     pub fn with_chain_id(mut self, chain_id: u64) -> Self {

@@ -10,6 +10,8 @@ use alloy::rpc::types::{
     Block, BlockId, BlockNumberOrTag, Log, Transaction, TransactionReceipt, TransactionRequest,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use golem_base_sdk::entity::Entity;
+use golem_base_sdk::rpc::{EntityMetaData, SearchResult};
 use jsonrpsee::core::{async_trait, RpcResult};
 use jsonrpsee::types::{ErrorCode, ErrorObject};
 use std::sync::Arc;
@@ -17,15 +19,16 @@ use tokio::sync::RwLock;
 
 use crate::api::{EthRpcServer, GolemBaseRpcServer};
 use crate::blockchain::Blockchain;
+use crate::controller::{should_fail, CallOverride, CallResponse, MockController, WithCallback};
 use crate::entity_db::EntityDb;
 use crate::execution::ExecutionEngine;
 use crate::managed_accounts::ManagedAccounts;
 use crate::transaction_pool::TransactionPool;
-use golem_base_sdk::rpc::{EntityMetaData, SearchResult};
 
 pub mod api;
 pub mod block;
 pub mod blockchain;
+pub mod controller;
 pub mod entity_db;
 pub mod execution;
 pub mod managed_accounts;
@@ -33,12 +36,47 @@ pub mod query_parser;
 pub mod server;
 pub mod transaction_pool;
 
-// Re-export server types for convenience
+// Re-export symbols for user of the library.
 pub use server::GolemBaseMockServer;
 
 /// Helper function to create ErrorObject with a typed ErrorCode and message
-fn create_error(code: ErrorCode, message: impl Into<String>) -> ErrorObject<'static> {
+pub fn create_error(code: ErrorCode, message: impl Into<String>) -> ErrorObject<'static> {
     ErrorObject::owned(code.code(), message.into(), None::<()>)
+}
+
+/// Macro to handle RPC overrides with custom response support.
+///
+/// This macro handles the CallResponse::Custom variant by extracting the response
+/// and returning it immediately, while keeping the override reference alive for other cases.
+#[macro_export]
+macro_rules! return_override {
+    ($override:ident, $return_type:ty) => {{
+        use jsonrpsee::core::RpcResult;
+        use jsonrpsee::types::ErrorCode;
+        use $crate::controller::{CallOverride, CallResponse};
+
+        if let Some(override_wrapper) = &$override {
+            let response = match &override_wrapper.response {
+                CallOverride::Once(resp) => resp,
+                CallOverride::Until { response: resp, .. } => resp,
+                CallOverride::NTimes { response: resp, .. } => resp,
+                CallOverride::Always(resp) => resp,
+            };
+
+            if let CallResponse::Custom(json_obj) = response {
+                // For custom responses, we need to decode and return the value
+                match json_obj.decode::<$return_type>() {
+                    Ok(value) => return RpcResult::Ok(value),
+                    Err(e) => {
+                        return RpcResult::Err($crate::create_error(
+                            ErrorCode::InternalError,
+                            format!("Failed to decode custom response: {e}"),
+                        ))
+                    }
+                }
+            }
+        }
+    }};
 }
 
 /// Mock implementation of RPC methods (both Ethereum and GolemBase)
@@ -50,6 +88,7 @@ pub struct GolemBaseMock {
     transaction_pool: TransactionPool,
     execution: ExecutionEngine,
     managed_accounts: ManagedAccounts,
+    controller: MockController,
 }
 
 impl GolemBaseMock {
@@ -69,6 +108,63 @@ impl GolemBaseMock {
             transaction_pool,
             execution: execution_engine,
             managed_accounts: ManagedAccounts::new(),
+            controller: MockController::new(),
+        }
+    }
+
+    /// Finds the next override for the given RPC name.
+    /// If override is expected to return error, it will be immediately returned.
+    /// Otherwise, the struct will be returned that will notify client on drop
+    ///
+    /// Note that this function must be used in very specific way to work correctly:
+    /// ```
+    /// # use golem_base_mock::{GolemBaseMock, return_override};
+    /// # use jsonrpsee::core::RpcResult;
+    ///
+    /// fn main() -> RpcResult<()> {
+    ///     let mock = GolemBaseMock::new();
+    ///
+    ///     let _override = mock.next_override("eth_getTransactionCount")?;
+    ///     return_override!(_override, ());
+    ///
+    ///     RpcResult::Ok(())
+    /// }
+    /// ```
+    /// Override must not be dropped before going out of the scope of RPC call.
+    /// Otherwise, it will send a notification to the client, before we will finish processing the call.
+    ///
+    /// On the other side, caller should never handle the error, but he should return immediately.
+    /// Otherwise the notification will be sent too early.
+    #[must_use]
+    pub fn next_override(
+        &self,
+        rpc_name: &str,
+    ) -> Result<Option<WithCallback<CallOverride>>, ErrorObject<'static>> {
+        match self.controller.take_next_override(rpc_name) {
+            Some(override_response) => match override_response.response().clone() {
+                // We found override that will return error, so we return it immediately.
+                // WithCallback struct will be dropped and send the notification.
+                // It will happen already in this function, so we expect that caller, won't do
+                // anything complicated afterwards.
+                CallResponse::Error(err) => {
+                    return Err(create_error(ErrorCode::InternalError, err.to_string()));
+                }
+                // FailEachNth response: return error based on frequency fraction
+                CallResponse::FailEachNth { error, frequency } => {
+                    if should_fail(frequency, override_response.call_count) {
+                        return Err(create_error(ErrorCode::InternalError, error));
+                    }
+                    Ok(Some(override_response))
+                }
+                // Caller should process normal logic, but we need to notify the client.
+                // We return WithCallback struct that will do this on drop.
+                CallResponse::Success => Ok(Some(override_response)),
+                // We return the custom response as is and regular logic won't be executed.
+                CallResponse::Custom(_) => Ok(Some(override_response)),
+            },
+            // No override found, so we don't need to do anything special. Caller
+            // will just process the normal logic.
+            None => Ok(None),
         }
     }
 }
@@ -80,6 +176,9 @@ impl EthRpcServer for GolemBaseMock {
         address: Address,
         _block: Option<BlockId>,
     ) -> RpcResult<U256> {
+        let _override = self.next_override("eth_getTransactionCount")?;
+        return_override!(_override, U256);
+
         // Get pending transactions from the pool
         let pending_count = self.transaction_pool.get_transaction_count(&address).await;
 
@@ -97,6 +196,7 @@ impl EthRpcServer for GolemBaseMock {
 
     async fn get_transaction_receipt(&self, hash: B256) -> RpcResult<Option<TransactionReceipt>> {
         log::debug!("Getting transaction receipt for hash: 0x{:x}", hash);
+        let _override = self.next_override("eth_getTransactionReceipt")?;
 
         // Get transaction from blockchain first, then from pool if not found
         let transaction = if let Some(tx) = self.blockchain.get_transaction(&hash).await {
@@ -190,19 +290,27 @@ impl EthRpcServer for GolemBaseMock {
     }
 
     async fn get_balance(&self, address: Address, _block: Option<BlockId>) -> RpcResult<U256> {
+        let _override = self.next_override("eth_getBalance")?;
+        return_override!(_override, U256);
         Ok(self.blockchain.get_balance(&address).await)
     }
 
     async fn accounts(&self) -> RpcResult<Vec<Address>> {
+        let _override = self.next_override("eth_accounts")?;
+        return_override!(_override, Vec<Address>);
         // Return list of managed accounts
         Ok(self.managed_accounts.get_all_accounts())
     }
 
     async fn get_accounts(&self) -> RpcResult<Vec<Address>> {
+        let _override = self.next_override("golem_getAccounts")?;
+        return_override!(_override, Vec<Address>);
         Ok(self.blockchain.get_accounts().await)
     }
 
     async fn send_transaction(&self, transaction: TransactionRequest) -> RpcResult<B256> {
+        let _override = self.next_override("eth_sendTransaction")?;
+
         // Log the transaction data
         log::info!(
             "Received transaction: {}",
@@ -285,6 +393,8 @@ impl EthRpcServer for GolemBaseMock {
     }
 
     async fn send_raw_transaction(&self, data: Bytes) -> RpcResult<B256> {
+        let _override = self.next_override("eth_sendRawTransaction")?;
+
         // Use the bytes directly since input is already Bytes
         let tx_bytes = data.to_vec();
 
@@ -313,10 +423,14 @@ impl EthRpcServer for GolemBaseMock {
     }
 
     async fn chain_id(&self) -> RpcResult<U256> {
+        let _override = self.next_override("eth_chainId")?;
+        return_override!(_override, U256);
         Ok(self.chain_id)
     }
 
     async fn get_transaction_by_hash(&self, hash: B256) -> RpcResult<Option<Transaction>> {
+        let _override = self.next_override("eth_getTransactionByHash")?;
+
         // First check the blockchain for mined transactions (to get block info)
         if let Some(tx) = self.blockchain.get_transaction(&hash).await {
             // Since block is added to chain, we need to find in which exact block it is.
@@ -374,6 +488,8 @@ impl EthRpcServer for GolemBaseMock {
     }
 
     async fn syncing(&self) -> RpcResult<bool> {
+        let _override = self.next_override("eth_syncing")?;
+        return_override!(_override, bool);
         Ok(false) // Mock implementation - always false
     }
 
@@ -404,6 +520,8 @@ impl EthRpcServer for GolemBaseMock {
     }
 
     async fn estimate_gas(&self, _call_request: serde_json::Value) -> RpcResult<U256> {
+        let _override = self.next_override("eth_estimateGas")?;
+        return_override!(_override, U256);
         // Mock implementation - return a reasonable gas estimate
         // In a real implementation, this would simulate the transaction and estimate gas
         Ok(U256::from(21000))
@@ -415,6 +533,8 @@ impl EthRpcServer for GolemBaseMock {
         _newest_block: BlockId,
         _reward_percentiles: Option<Vec<f64>>,
     ) -> RpcResult<serde_json::Value> {
+        let _override = self.next_override("eth_feeHistory")?;
+        return_override!(_override, serde_json::Value);
         // Mock implementation - return empty fee history
         // In a real implementation, this would return actual fee history data
         Ok(serde_json::json!({
@@ -426,12 +546,16 @@ impl EthRpcServer for GolemBaseMock {
     }
 
     async fn gas_price(&self) -> RpcResult<U256> {
+        let _override = self.next_override("eth_gasPrice")?;
+        return_override!(_override, U256);
         // Mock implementation - return a reasonable gas price
         // In a real implementation, this would return the current gas price from the network
         Ok(U256::from(20_000_000_000u64)) // 20 gwei
     }
 
     async fn block_number(&self) -> RpcResult<U256> {
+        let _override = self.next_override("eth_blockNumber")?;
+        return_override!(_override, U256);
         match self.blockchain.get_latest_block_number().await {
             Ok(num) => Ok(U256::from(num)),
             Err(e) => Err(create_error(
@@ -444,54 +568,59 @@ impl EthRpcServer for GolemBaseMock {
 
 #[async_trait]
 impl GolemBaseRpcServer for GolemBaseMock {
-    async fn get_entity(&self, key: B256) -> RpcResult<Option<serde_json::Value>> {
+    async fn get_entity(&self, key: B256) -> RpcResult<Option<Entity>> {
+        let _override = self.next_override("golem_getEntity")?;
+        return_override!(_override, Option<Entity>);
+
         Ok(self
             .entity_db
             .get_entity(&key)
             .await
-            .map(|entity| {
-                serde_json::to_value(entity).map_err(|e| {
+            .map(|local_entity| {
+                local_entity.try_into().map_err(|e| {
                     create_error(
                         ErrorCode::InternalError,
-                        format!("Failed to serialize entity: {}", e),
+                        format!("Failed to convert entity data to UTF-8: {}", e),
                     )
                 })
             })
             .transpose()?)
     }
 
-    async fn get_entity_metadata(&self, key: B256) -> RpcResult<Option<serde_json::Value>> {
+    async fn get_entity_metadata(&self, key: B256) -> RpcResult<Option<EntityMetaData>> {
+        let _override = self.next_override("golem_getEntityMetadata")?;
+        return_override!(_override, Option<EntityMetaData>);
+
         Ok(self
             .entity_db
             .get_entity(&key)
             .await
-            .map(|entity| {
-                let metadata = EntityMetaData::from(&entity);
-                serde_json::to_value(metadata).map_err(|e| {
-                    create_error(
-                        ErrorCode::InternalError,
-                        format!("Failed to serialize entity metadata: {}", e),
-                    )
-                })
-            })
-            .transpose()?)
+            .map(|entity| EntityMetaData::from(&entity)))
     }
 
     async fn get_entity_count(&self) -> RpcResult<u64> {
+        let _override = self.next_override("golem_getEntityCount")?;
+        return_override!(_override, u64);
         Ok(self.entity_db.count().await as u64)
     }
 
     async fn get_all_entity_keys(&self) -> RpcResult<Option<Vec<B256>>> {
+        let _override = self.next_override("golem_getAllEntityKeys")?;
+        return_override!(_override, Option<Vec<B256>>);
         Ok(Some(self.entity_db.get_all_keys().await))
     }
 
     async fn get_entities_of_owner(&self, address: Address) -> RpcResult<Option<Vec<B256>>> {
+        let _override = self.next_override("golem_getEntitiesOfOwner")?;
+        return_override!(_override, Option<Vec<B256>>);
         // Use the owner index to efficiently get entities by owner
         let keys = self.entity_db.get_entities_by_owner(&address).await;
         Ok(Some(keys))
     }
 
     async fn get_storage_value(&self, key: B256) -> RpcResult<String> {
+        let _override = self.next_override("golem_getStorageValue")?;
+        return_override!(_override, String);
         if let Some(entity) = self.entity_db.get_entity(&key).await {
             let encoded = BASE64.encode(&entity.data);
             Ok(encoded)
@@ -504,6 +633,8 @@ impl GolemBaseRpcServer for GolemBaseMock {
     }
 
     async fn query_entities(&self, query: String) -> RpcResult<Vec<SearchResult>> {
+        let _override = self.next_override("golem_queryEntities")?;
+        return_override!(_override, Vec<SearchResult>);
         let entities = self.entity_db.query_entities(&query).await.map_err(|e| {
             create_error(
                 ErrorCode::InvalidParams,
@@ -525,6 +656,8 @@ impl GolemBaseRpcServer for GolemBaseMock {
         &self,
         _block_number: u64,
     ) -> RpcResult<Option<Vec<B256>>> {
+        let _override = self.next_override("golem_getEntitiesToExpireAtBlock")?;
+        return_override!(_override, Option<Vec<B256>>);
         // For now, return empty list since the EntityDb doesn't track expiration blocks
         // In a real implementation, you'd want to add an expiration index to the EntityDb
         Ok(Some(vec![]))

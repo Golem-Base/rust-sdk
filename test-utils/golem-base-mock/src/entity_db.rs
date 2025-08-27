@@ -6,6 +6,7 @@ use golem_base_sdk::entity::{Create, NumericAnnotation, StringAnnotation, Update
 use golem_base_sdk::rpc::{serialize_base64, EntityMetaData, SearchResult};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::string::FromUtf8Error;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -109,6 +110,19 @@ impl From<&Entity> for EntityMetaData {
             numeric_annotations: entity.numeric_annotations.clone(),
             owner: entity.owner,
         }
+    }
+}
+
+impl TryFrom<Entity> for golem_base_sdk::entity::Entity {
+    type Error = FromUtf8Error;
+
+    fn try_from(local_entity: Entity) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data: String::from_utf8(local_entity.data.to_vec())?,
+            btl: local_entity.btl,
+            string_annotations: local_entity.string_annotations,
+            numeric_annotations: local_entity.numeric_annotations,
+        })
     }
 }
 

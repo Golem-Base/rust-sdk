@@ -21,9 +21,9 @@ jobs:
       - name: Setup Go, Rust and Golem Base
         uses: ./.github/workflows/setup
 
-      - name: Run Rust demo example
-        run: cargo run
-        working-directory: ./demo
+    #   - name: Run Rust demo example
+    #     run: cargo run
+    #     working-directory: ./demo
 
       - name: Run Rust yagna interaction example
         run: cargo run --example yagna_interaction

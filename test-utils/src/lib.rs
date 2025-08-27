@@ -2,6 +2,7 @@ use alloy::eips::BlockNumberOrTag;
 use alloy::primitives::{Address, B256};
 use anyhow::Result;
 use bigdecimal::BigDecimal;
+use std::env;
 
 use golem_base_sdk::client::GolemBaseClient;
 use golem_base_sdk::entity::Hash;
@@ -16,8 +17,22 @@ pub const TEST_TTL: u64 = 30;
 
 /// Initializes the logger for tests
 pub fn init_logger(should_init: bool) {
-    if should_init {
-        let _ = env_logger::try_init();
+    // Check if TEST_ENABLE_ALL_LOGS_OVERRIDE environment variable overrides the should_init parameter
+    let env_override = env::var("TEST_ENABLE_ALL_LOGS_OVERRIDE")
+        .map(|val| val.parse::<bool>().unwrap_or(false))
+        .unwrap_or(false);
+    let should_enable = should_init || env_override;
+
+    if should_enable {
+        if let Ok(_env) = env::var("RUST_LOG") {
+            env_logger::try_init_from_env(env_logger::Env::default()).ok();
+        } else {
+            env_logger::builder()
+                .filter_level(log::LevelFilter::Debug)
+                .format_timestamp(Some(env_logger::TimestampPrecision::Millis))
+                .try_init()
+                .ok();
+        }
     }
 }
 
@@ -35,8 +50,9 @@ pub async fn cleanup_entities(client: &GolemBaseClient, account: Address) -> Res
 pub async fn create_test_account(client: &GolemBaseClient) -> Result<Address> {
     let account = client.account_generate("test123").await?;
     let fund_tx = client.fund(account, BigDecimal::from(1)).await?;
+    let balance = client.get_balance(account).await?;
 
-    log::info!("Account {account} funded with transaction: {fund_tx}");
+    log::info!("Account {account} funded with transaction: {fund_tx} and balance {balance}");
     Ok(account)
 }
 

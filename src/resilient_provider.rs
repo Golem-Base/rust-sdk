@@ -1,6 +1,8 @@
+use std::time::Duration;
+
 use alloy::eips::BlockNumberOrTag;
 use alloy::network::{Ethereum, Network};
-use alloy::primitives::{Address, B256, U256};
+use alloy::primitives::{Address, U256};
 use alloy::providers::{
     DynProvider, PendingTransactionBuilder, PendingTransactionConfig, Provider,
 };
@@ -56,7 +58,7 @@ impl Default for ResilientProviderConfig {
         Self {
             max_retries: 3,
             retry_delay_ms: 100,
-            backend_health_timeout_secs: 60,
+            backend_health_timeout_secs: 30,
         }
     }
 }
@@ -135,7 +137,7 @@ where
                 {
                     let elapsed = start_time.elapsed();
                     let timeout_duration =
-                        std::time::Duration::from_secs(self.config.backend_health_timeout_secs);
+                        Duration::from_secs(self.config.backend_health_timeout_secs);
 
                     if elapsed >= timeout_duration {
                         return Err(RpcError::NoBackendHealthy {
@@ -150,10 +152,7 @@ where
                         elapsed.as_secs_f64(),
                         timeout_duration.as_secs_f64()
                     );
-                    tokio::time::sleep(tokio::time::Duration::from_millis(
-                        self.config.retry_delay_ms,
-                    ))
-                    .await;
+                    tokio::time::sleep(Duration::from_millis(self.config.retry_delay_ms)).await;
                     continue;
                 }
                 Err(e) => return Err(RpcError::Original(e)),
@@ -304,14 +303,7 @@ where
     }
 
     /// Watches a pending transaction and waits for the specified number of confirmations with retry logic.
-    pub async fn watch_for_confirmation(&self, tx_hash: B256, confirmations: u64) -> Result<()> {
-        if confirmations == 0 {
-            return Ok(());
-        }
-
-        let config =
-            PendingTransactionConfig::new(tx_hash).with_required_confirmations(confirmations);
-
+    pub async fn watch_for_confirmation(&self, config: PendingTransactionConfig) -> Result<()> {
         let pending_tx = self
             .retry("watch_pending_transaction", || async {
                 self.provider
@@ -323,6 +315,46 @@ where
         // Wait for the transaction to be confirmed with the specified number of confirmations
         pending_tx.await?;
         Ok(())
+    }
+
+    /// Waits for transaction indexing to complete by retrying get_transaction_receipt calls.
+    /// This function is workaround for problem with local GolemBase setup, which sometimes returns this
+    /// error on the beginning. After initial period we shouldn't get this error again.
+    pub async fn wait_for_indexing(
+        &self,
+        tx_hash: alloy::primitives::B256,
+        timeout_duration: Option<Duration>,
+    ) -> Result<Option<N::ReceiptResponse>> {
+        let start_time = std::time::Instant::now();
+
+        loop {
+            // Check timeout
+            if let Some(duration) = timeout_duration {
+                if start_time.elapsed() >= duration {
+                    return Ok(None);
+                }
+            }
+
+            match self.get_transaction_receipt(tx_hash).await {
+                Ok(Some(receipt)) => return Ok(Some(receipt)),
+                Ok(None) => {
+                    // Receipt not available yet, wait and retry
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+                Err(e)
+                    if e.to_string()
+                        .contains("transaction indexing is in progress") =>
+                {
+                    log::debug!(
+                        "Ignoring `indexing is in progress` error for transaction: {tx_hash}"
+                    );
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+                Err(e) => return Err(anyhow!("Failed to get transaction receipt: {e}")),
+            }
+        }
     }
 }
 
