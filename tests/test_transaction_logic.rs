@@ -1,3 +1,4 @@
+use alloy::primitives::U256;
 use golem_base_mock::{
     controller::{CallOverride, CallResponse},
     GolemBaseMockServer,
@@ -62,6 +63,41 @@ async fn test_transaction_indexing_in_progress() -> anyhow::Result<()> {
         .annotate_string("test_type", "Test")
         .annotate_number("test_timestamp", 1234567890);
 
+    let result = client.create_entry(account, create).await.unwrap();
+    log::info!("Created entity {result}...");
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_transaction_nonce_too_low() -> anyhow::Result<()> {
+    init_logger(false);
+
+    let mock = GolemBaseMockServer::create_test_mock_server().await?;
+    let ctrl = mock.controller();
+    let client = GolemBaseClient::new(mock.url().clone())?;
+    let account = create_test_account(&client).await.unwrap();
+
+    let create = Create::from_string("Hello, GolemBase!", 100);
+    let result = client.create_entry(account, create).await.unwrap();
+    log::info!("Created first entity {result}...");
+
+    let nonce = client
+        .get_rpc_client()
+        .get_transaction_count(account)
+        .await
+        .unwrap();
+
+    // Simulating situation when we have RPC switch and the new instance doesn't know about
+    // the previous transaction yet.
+    ctrl.override_rpc(
+        "eth_getTransactionCount",
+        CallOverride::Once(CallResponse::custom(&U256::from(nonce - 1)).unwrap()),
+    );
+
+    log::info!("Creating entity with nonce too low...");
+    let create = Create::from_string("Hello 2", 100);
     let result = client.create_entry(account, create).await.unwrap();
     log::info!("Created entity {result}...");
 

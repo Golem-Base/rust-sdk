@@ -1,8 +1,33 @@
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+
+/// Wrapper for JSON-serialized data that can be encoded and decoded.
+#[derive(Debug, Clone, derive_more::Display)]
+#[display("JSON object: {dtype}")]
+pub struct JsonObject {
+    dtype: String,
+    data: String,
+}
+
+impl JsonObject {
+    /// Create a JSON object from any serializable value.
+    pub fn from<T: Serialize + DeserializeOwned>(value: &T) -> Result<Self, serde_json::Error> {
+        Ok(JsonObject {
+            dtype: std::any::type_name::<T>().to_string(),
+            data: serde_json::to_string(value)?,
+        })
+    }
+
+    /// Deserialize the JSON data to a specific type.
+    pub fn decode<T: DeserializeOwned>(&self) -> Result<T, serde_json::Error> {
+        serde_json::from_str(&self.data)
+    }
+}
 
 /// Identifier for global overrides that apply to all RPC calls
 const GLOBAL_OVERRIDE_KEY: &str = "global";
@@ -93,7 +118,7 @@ impl<T: Display> Drop for WithCallback<T> {
             );
 
             if let Err(e) = sender.send(()) {
-                log::error!("Failed to send callback for {}: {}", self.endpoint_name, e);
+                log::warn!("Failed to send callback for {}: {}", self.endpoint_name, e);
             }
         }
     }
@@ -151,6 +176,16 @@ pub enum CallResponse {
     /// For example, frequency 3 means every 3rd request fails.
     #[display("FailEachNth: {error} every {frequency} requests")]
     FailEachNth { error: String, frequency: usize },
+    /// Return a custom non-error response with JSON-serialized data.
+    #[display("Custom JSON response")]
+    Custom(JsonObject),
+}
+
+impl CallResponse {
+    /// Create a custom response from any JSON-serializable type.
+    pub fn custom<T: Serialize + DeserializeOwned>(value: &T) -> Result<Self, serde_json::Error> {
+        Ok(CallResponse::Custom(JsonObject::from(value)?))
+    }
 }
 
 #[derive(Debug, derive_more::Display, Clone)]

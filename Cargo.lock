@@ -2468,6 +2468,7 @@ dependencies = [
  "derive_more",
  "golem-base-sdk",
  "golem-base-test-utils",
+ "hex",
  "humantime",
  "jsonrpsee",
  "log",
