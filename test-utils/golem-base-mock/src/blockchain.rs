@@ -58,16 +58,41 @@ struct BlockchainState {
 #[derive(Clone, Debug, Default)]
 pub struct Blockchain {
     state: Arc<RwLock<BlockchainState>>,
-    entity_db: Arc<EntityDb>,
+    entity_db: EntityDb,
 }
 
 impl Blockchain {
     /// Create a new empty mock blockchain
-    pub fn new(entity_db: Arc<EntityDb>) -> Self {
+    pub fn new(entity_db: EntityDb) -> Self {
         Self {
             state: Arc::new(RwLock::new(BlockchainState::default())),
             entity_db,
         }
+    }
+
+    /// Validate transaction nonce
+    pub async fn validate_transaction_nonce(
+        &self,
+        transaction: &Transaction,
+    ) -> anyhow::Result<()> {
+        let state = self.state.read().await;
+        let sender_account = state.accounts.get(&transaction.from);
+
+        let expected_nonce = if let Some(account) = sender_account {
+            account.nonce
+        } else {
+            U256::ZERO
+        };
+
+        if U256::from(transaction.nonce) < expected_nonce {
+            return Err(anyhow::anyhow!(
+                "nonce too low: next nonce {}, tx nonce {}",
+                expected_nonce,
+                transaction.nonce
+            ));
+        }
+
+        Ok(())
     }
 
     /// Add a block to the blockchain
@@ -334,6 +359,17 @@ impl Blockchain {
             .accounts
             .get(address)
             .map(|account| account.balance)
+            .unwrap_or(U256::ZERO)
+    }
+
+    /// Get nonce for an account
+    pub async fn get_nonce(&self, address: &Address) -> U256 {
+        self.state
+            .read()
+            .await
+            .accounts
+            .get(address)
+            .map(|account| account.nonce)
             .unwrap_or(U256::ZERO)
     }
 

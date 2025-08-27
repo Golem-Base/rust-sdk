@@ -103,3 +103,43 @@ async fn test_transaction_nonce_too_low() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+#[serial]
+async fn test_transaction_nonce_too_low_new_client() -> anyhow::Result<()> {
+    init_logger(false);
+
+    let mock = GolemBaseMockServer::create_test_mock_server().await?;
+    let ctrl = mock.controller();
+    let client = GolemBaseClient::new(mock.url().clone())?;
+    let account = create_test_account(&client).await.unwrap();
+
+    let create = Create::from_string("Hello, GolemBase!", 100);
+    let result = client.create_entry(account, create).await.unwrap();
+    log::info!("Created first entity {result}...");
+
+    let nonce = client
+        .get_rpc_client()
+        .get_transaction_count(account)
+        .await
+        .unwrap();
+
+    // Simulating situation when we have RPC switch and the new instance doesn't know about
+    // the previous transaction yet.
+    ctrl.override_rpc(
+        "eth_getTransactionCount",
+        CallOverride::Once(CallResponse::custom(&U256::from(nonce - 1)).unwrap()),
+    );
+
+    // New client doesn't have previous nonce stored, so it will get the error.
+    // This simulates scenario when application using the client is restarted.
+    let client2 = GolemBaseClient::new(mock.url().clone())?;
+    client2.account_load(account, "test123").await?;
+
+    log::info!("Creating entity with nonce too low...");
+    let create = Create::from_string("Hello 2", 100);
+    let result = client2.create_entry(account, create).await.unwrap();
+    log::info!("Created entity {result}...");
+
+    Ok(())
+}
