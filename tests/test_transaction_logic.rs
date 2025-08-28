@@ -3,7 +3,7 @@ use golem_base_mock::{
     controller::{CallOverride, CallResponse},
     GolemBaseMockServer,
 };
-use golem_base_sdk::{entity::Create, GolemBaseClient};
+use golem_base_sdk::{client::TransactionConfig, entity::Create, GolemBaseClient};
 use golem_base_test_utils::{create_test_account, init_logger};
 use serial_test::serial;
 
@@ -141,6 +141,24 @@ async fn test_transaction_nonce_too_low_new_client() -> anyhow::Result<()> {
     let result = client2.create_entry(account, create).await.unwrap();
     log::info!("Created entity {result}...");
 
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_transaction_non_0_confirmations() -> anyhow::Result<()> {
+    init_logger(false);
+
+    let mock = GolemBaseMockServer::create_test_mock_server().await?;
+    let client = GolemBaseClient::new(mock.url().clone())?.override_config(TransactionConfig {
+        required_confirmations: 1,
+        ..TransactionConfig::default()
+    });
+    let account = create_test_account(&client).await.unwrap();
+
+    let create = Create::from_string("Hello, GolemBase!", 100);
+    let result = client.create_entry(account, create).await.unwrap();
+    log::info!("Created first entity {result}...");
     Ok(())
 }
 
