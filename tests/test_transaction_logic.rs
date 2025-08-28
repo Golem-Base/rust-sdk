@@ -143,3 +143,9 @@ async fn test_transaction_nonce_too_low_new_client() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+// - Replacment transaction underpriced and gas bumping
+// - Pending transaction stacked in mempool
+// - How to react to chain id change (network re-deploy)
+// - Handle network re-deploy during client work (for example nonce is reset back to 0)
+// - Handle RPC downtime or inaccesibility
