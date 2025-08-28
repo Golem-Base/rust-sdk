@@ -250,8 +250,8 @@ impl TransactionQueue {
             let signed = self.sign_transaction(_request).await?;
             let encoded = self.encode_transaction(&signed)?;
 
-            // Send the transaction and register it for tracking.
             attempt += 1;
+
             let pending = match self.provider.send_raw_transaction(&encoded).await {
                 Ok(pending) => pending,
                 // Retry transaction with updated nonce.
@@ -322,9 +322,8 @@ impl TransactionQueue {
         let last_used_nonce = *self.last_used_nonce.lock().unwrap();
 
         // Get current blockchain nonce from get_nonce. This function includes only
-        // confirmed transactions.
-        //let account_nonce = self.provider.get_nonce(address).await?;
-        let account_nonce = 0;
+        // transaction included in the latest block.
+        let account_nonce = self.provider.get_nonce(address).await?;
 
         // Get next pending nonce from get_transaction_count. This function includes
         // pending transactions as well.

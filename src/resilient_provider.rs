@@ -191,11 +191,11 @@ where
     pub async fn get_nonce(&self, address: Address) -> Result<u64> {
         let address_clone = address;
         Ok(self
-            .retry("get_proof", move || async move {
-                match self.provider.get_proof(address_clone, vec![]).await {
-                    Ok(proof_response) => Ok(proof_response.nonce),
-                    Err(e) => Err(anyhow!("Failed to get proof: {}", e)),
-                }
+            .retry("get_nonce", move || async move {
+                self.provider
+                    .get_transaction_count(address_clone)
+                    .latest()
+                    .await
             })
             .await?)
     }
