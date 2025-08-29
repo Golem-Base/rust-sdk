@@ -306,7 +306,19 @@ impl TransactionQueue {
                         request,
                         response_tx,
                     } = msg;
-                    let result = queue.process_transaction(request).await;
+
+                    let result = match tokio::time::timeout(
+                        queue.tx_config.transaction_receipt_timeout,
+                        queue.process_transaction(request),
+                    )
+                    .await
+                    {
+                        Ok(result) => result,
+                        Err(e) => Err(anyhow!(
+                            "Transaction processing timed out (timeout: {}): {e}",
+                            humantime::format_duration(queue.tx_config.transaction_receipt_timeout)
+                        )),
+                    };
                     let _ = response_tx.send(result);
                 }
             });
