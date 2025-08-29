@@ -4,7 +4,11 @@ use golem_base_mock::{
     GolemBaseMockServer,
 };
 use golem_base_sdk::{client::TransactionConfig, entity::Create, GolemBaseClient};
-use golem_base_test_utils::{create_test_account, init_logger};
+use golem_base_test_utils::{
+    create_test_account,
+    golembase::{Config, GolemBaseContainer},
+    init_logger,
+};
 use serial_test::serial;
 
 const NUM_ITERATIONS: usize = 50;
@@ -146,7 +150,7 @@ async fn test_transaction_nonce_too_low_new_client() -> anyhow::Result<()> {
 
 #[tokio::test]
 #[serial]
-async fn test_transaction_non_0_confirmations() -> anyhow::Result<()> {
+async fn test_transaction_wait_for_confirmations() -> anyhow::Result<()> {
     init_logger(false);
 
     let mock = GolemBaseMockServer::create_test_mock_server().await?;
@@ -159,6 +163,66 @@ async fn test_transaction_non_0_confirmations() -> anyhow::Result<()> {
     let create = Create::from_string("Hello, GolemBase!", 100);
     let result = client.create_entry(account, create).await.unwrap();
     log::info!("Created first entity {result}...");
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_transaction_rpc_restart() -> anyhow::Result<()> {
+    init_logger(false);
+
+    let container = GolemBaseContainer::new(Config::default().with_port(33221)).await?;
+    let client = GolemBaseClient::new(container.get_url()?)?;
+    let account = create_test_account(&client).await.unwrap();
+
+    let create = Create::from_string("Hello, GolemBase!", 100);
+    let result = client.create_entry(account, create).await.unwrap();
+    log::info!("Created first entity {result}...");
+
+    // Restarting container to check if transaction logic will be able to handle the situation.
+    container.pause().await.unwrap();
+
+    log::info!("Creating entity when RPC is down... It should fail.");
+    let result = client
+        .create_entry(account, Create::from_string("Hello 2", 100))
+        .await;
+    assert!(result.is_err());
+    container.unpause().await.unwrap();
+
+    log::info!("Creating entity after RPC restart... It should succeed.");
+    let create = Create::from_string("Hello 3", 100);
+    let result = client.create_entry(account, create).await.unwrap();
+    log::info!("Created entity {result}...");
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_transaction_no_rpc_available() -> anyhow::Result<()> {
+    init_logger(false);
+
+    let container = GolemBaseContainer::new(Config::default()).await?;
+    let client = GolemBaseClient::new(container.get_url()?)?;
+    let account = create_test_account(&client).await.unwrap();
+
+    let create = Create::from_string("Hello, GolemBase!", 100);
+    let result = client.create_entry(account, create).await.unwrap();
+    log::info!("Created first entity {result}...");
+
+    // Stop the container to simulate RPC downtime
+    container.stop().await.unwrap();
+
+    log::info!("Test must ensure, that creating entity call won't hang in case of RPC downtime.");
+    log::info!("Creating entity when RPC is down... It should fail.");
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(120),
+        client.create_entry(account, Create::from_string("Hello 2", 100)),
+    )
+    .await
+    .expect("Call timed out - function should have failed internally before our timeout");
+    assert!(result.is_err());
+
     Ok(())
 }
 

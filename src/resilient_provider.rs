@@ -168,7 +168,7 @@ where
         params: S,
     ) -> std::result::Result<R, RpcError<AlloyRpcError<TransportErrorKind>>> {
         let method = method.into();
-        self.retry("rpc_request", || async {
+        self.retry(&format!("request: {method}"), || async {
             self.provider
                 .client()
                 .request(method.clone(), params.clone())
