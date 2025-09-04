@@ -83,6 +83,41 @@ impl GolemBaseContainer {
         &self.config
     }
 
+    /// Stop the container.
+    /// This stops all processes in the container.
+    pub async fn stop(&self) -> Result<(), anyhow::Error> {
+        Ok(self.container.stop().await?)
+    }
+
+    /// Restart the container with the same configuration.
+    /// This stops the current container and starts a new one.
+    pub async fn restart(&mut self) -> Result<(), anyhow::Error> {
+        // Stop the current container
+        self.stop().await?;
+
+        // Initialize a new container with the same configuration
+        let new_container = Self::init_golembase(&self.config).await?;
+        let new_mapped_port = new_container.get_host_port_ipv4(self.config.port).await?;
+
+        // Update the container and mapped port
+        self.container = new_container;
+        self.mapped_port = new_mapped_port;
+
+        Ok(())
+    }
+
+    /// Pause the container.
+    /// This suspends all processes in the container.
+    pub async fn pause(&self) -> Result<(), anyhow::Error> {
+        Ok(self.container.pause().await?)
+    }
+
+    /// Unpause the container.
+    /// This resumes all processes in the container.
+    pub async fn unpause(&self) -> Result<(), anyhow::Error> {
+        Ok(self.container.unpause().await?)
+    }
+
     /// Initialize the GolemBase container with the given configuration.
     async fn init_golembase(
         config: &Config,

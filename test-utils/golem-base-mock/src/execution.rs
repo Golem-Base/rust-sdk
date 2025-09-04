@@ -2,6 +2,7 @@ use crate::block::{Block, Transaction};
 use crate::blockchain::Blockchain;
 use crate::transaction_pool::TransactionPool;
 use alloy::primitives::{B256, U256};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
@@ -30,18 +31,15 @@ struct ExecutionEngineState {
 /// Execution engine that mines blocks and processes transactions
 #[derive(Clone, Debug, Default)]
 pub struct ExecutionEngine {
-    blockchain: Arc<RwLock<Blockchain>>,
-    transaction_pool: Arc<TransactionPool>,
+    blockchain: Blockchain,
+    transaction_pool: TransactionPool,
     state: Arc<RwLock<ExecutionEngineState>>,
     config: Arc<ExecutionConfig>,
 }
 
 impl ExecutionEngine {
     /// Create a new execution engine
-    pub fn new(
-        blockchain: Arc<RwLock<Blockchain>>,
-        transaction_pool: Arc<TransactionPool>,
-    ) -> Self {
+    pub fn new(blockchain: Blockchain, transaction_pool: TransactionPool) -> Self {
         Self {
             blockchain,
             transaction_pool,
@@ -109,7 +107,7 @@ impl ExecutionEngine {
             }
         }
 
-        // Remove processed transactions from pool
+        let transactions = self.filter_invalid_transactions(&transactions).await;
         for transaction in &transactions {
             self.transaction_pool
                 .remove_transaction(&transaction.hash)
@@ -119,8 +117,7 @@ impl ExecutionEngine {
         // Create and add block
         let block = self.create_block(block_number, transactions).await;
         let block_hash = block.header.block_hash;
-        let blockchain = self.blockchain.write().await;
-        blockchain.add_block(block).await;
+        self.blockchain.add_block(block).await;
 
         log::info!(
             "=== Block #{block_number} (0x{:x}) mined successfully with {} transactions ===",
@@ -135,8 +132,7 @@ impl ExecutionEngine {
             B256::ZERO
         } else {
             // Get the real previous block hash from the blockchain
-            let blockchain = self.blockchain.read().await;
-            if let Some(prev_block) = blockchain.get_block_by_number(block_number - 1).await {
+            if let Some(prev_block) = self.blockchain.get_block_by_number(block_number - 1).await {
                 prev_block.header.block_hash
             } else {
                 // Fallback to a deterministic hash if previous block not found
@@ -159,6 +155,55 @@ impl ExecutionEngine {
             gas_used,
             timestamp,
         )
+    }
+
+    /// Filter and order transactions by nonce for inclusion in a block
+    /// This handles multiple transactions from the same account with sequential nonces
+    async fn filter_invalid_transactions(
+        &self,
+        transactions: &[Arc<Transaction>],
+    ) -> Vec<Arc<Transaction>> {
+        let mut result = Vec::new();
+        let mut sender_txs = HashMap::new();
+
+        // Group transactions by sender
+        for tx in transactions {
+            sender_txs
+                .entry(tx.from)
+                .or_insert_with(Vec::new)
+                .push(tx.clone());
+        }
+
+        // For each sender, sort transactions by nonce and validate them
+        for (sender, txs) in sender_txs {
+            // Get current nonce for this sender from blockchain
+            let current_nonce = self.blockchain.get_nonce(&sender).await;
+            let mut expected_nonce = current_nonce;
+
+            // Sort transactions by nonce
+            let mut sorted_txs = txs;
+            sorted_txs.sort_by_key(|tx| tx.nonce);
+
+            // Add transactions in nonce order if they're valid
+            for tx in sorted_txs {
+                if U256::from(tx.nonce) == expected_nonce {
+                    // Nonce is correct, add to result and increment expected nonce
+                    result.push(tx);
+                    expected_nonce += U256::from(1);
+                } else {
+                    // Nonce is incorrect, log and skip
+                    log::warn!(
+                        "Transaction 0x{:x} from {} has invalid nonce: expected {}, got {}",
+                        tx.hash,
+                        sender,
+                        expected_nonce,
+                        tx.nonce
+                    );
+                }
+            }
+        }
+
+        result
     }
 
     /// Get current block number

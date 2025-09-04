@@ -35,6 +35,11 @@ impl GolemBaseMockServer {
         self
     }
 
+    pub fn with_url(mut self, url: Url) -> Self {
+        self.url = url;
+        self
+    }
+
     pub async fn create_test_account(&mut self, initial_balance: U256) -> Address {
         let address = self.state.create_account();
         self.state.blockchain.add_accounts(vec![address]).await;
@@ -76,6 +81,14 @@ impl GolemBaseMockServer {
         &self.url
     }
 
+    /// Resolve host name to IP address for localhost
+    fn resolve_host(host: &str) -> String {
+        match host {
+            "localhost" => "127.0.0.1".to_string(),
+            _ => host.to_string(),
+        }
+    }
+
     /// Convert URL to SocketAddr
     pub fn socket_addr(&self) -> anyhow::Result<SocketAddr> {
         let url = self.url.clone();
@@ -86,25 +99,26 @@ impl GolemBaseMockServer {
             .port()
             .ok_or_else(|| anyhow::anyhow!("URL has no port specified"))?;
 
-        let addr = format!("{}:{}", host, port);
+        let resolved_host = Self::resolve_host(host);
+        let addr = format!("{}:{}", resolved_host, port);
         addr.parse()
             .map_err(|e| anyhow::anyhow!("Failed to parse socket address: {}", e))
     }
 
     /// Create a test mock server with test accounts and balances
     pub async fn create_test_mock_server() -> anyhow::Result<Self> {
-        // Create server
-        let mut server = Self::new().with_chain_id(1337);
+        let server = Self::new().with_chain_id(1337);
+        server.default_start().await
+    }
 
-        // Create test accounts with initial balance
-        server
-            .create_test_account(U256::from(1000000000000000000000u128))
+    pub async fn default_start(mut self) -> anyhow::Result<Self> {
+        // Create test accounts with initial balance, to fund other accounts
+        self.create_test_account(U256::from(1000000000000000000000u128))
             .await;
 
         // Start the server
-        let socket_addr = server.socket_addr()?;
-        let server = server.start(socket_addr).await?;
-
+        let socket_addr = self.socket_addr()?;
+        let server = self.start(socket_addr).await?;
         Ok(server)
     }
 }

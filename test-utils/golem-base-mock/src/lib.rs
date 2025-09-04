@@ -15,7 +15,6 @@ use golem_base_sdk::rpc::{EntityMetaData, SearchResult};
 use jsonrpsee::core::{async_trait, RpcResult};
 use jsonrpsee::types::{ErrorCode, ErrorObject};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 use crate::api::{EthRpcServer, GolemBaseRpcServer};
 use crate::blockchain::Blockchain;
@@ -94,12 +93,9 @@ pub struct GolemBaseMock {
 impl GolemBaseMock {
     pub fn new() -> Self {
         let entity_db = EntityDb::new();
-        let blockchain = Blockchain::new(Arc::new(entity_db.clone()));
+        let blockchain = Blockchain::new(entity_db.clone());
         let transaction_pool = TransactionPool::new();
-        let execution_engine = ExecutionEngine::new(
-            Arc::new(RwLock::new(blockchain.clone())),
-            Arc::new(transaction_pool.clone()),
-        );
+        let execution_engine = ExecutionEngine::new(blockchain.clone(), transaction_pool.clone());
 
         Self {
             chain_id: U256::from(1337),
@@ -337,6 +333,18 @@ impl EthRpcServer for GolemBaseMock {
                 )
             })?;
 
+        let nonce = match transaction.nonce {
+            Some(tx_nonce) => tx_nonce,
+            None => {
+                // Get current nonce from blockchain if not specified
+                self.blockchain
+                    .get_nonce(&from_address)
+                    .await
+                    .try_into()
+                    .unwrap_or(0)
+            }
+        };
+
         let mut signed = transaction.clone().build_unsigned().map_err(|e| {
             create_error(
                 ErrorCode::InvalidParams,
@@ -373,7 +381,7 @@ impl EthRpcServer for GolemBaseMock {
             max_fee_per_gas: transaction.max_fee_per_gas.unwrap_or(20000000000),
             max_priority_fee_per_gas: transaction.max_priority_fee_per_gas.unwrap_or(1000000000),
             max_fee_per_blob_gas: 0, // No blob gas
-            nonce: transaction.nonce.unwrap_or(0),
+            nonce,
             data: transaction.input.into_input().unwrap_or_default(),
             chain_id: self.chain_id.try_into().unwrap_or(1337),
             signature: signature.clone(),
@@ -381,6 +389,13 @@ impl EthRpcServer for GolemBaseMock {
 
         // Add to transaction pool (reusing send_raw_transaction logic)
         let transaction = Arc::new(internal_transaction);
+
+        // Validate transaction nonce before adding to pool
+        self.blockchain
+            .validate_transaction_nonce(&transaction)
+            .await
+            .map_err(|e| create_error(ErrorCode::InvalidParams, e.to_string()))?;
+
         self.transaction_pool
             .add_transaction(transaction.clone())
             .await;
@@ -415,6 +430,13 @@ impl EthRpcServer for GolemBaseMock {
         })?;
 
         let transaction = Arc::new(transaction);
+
+        // Validate transaction nonce before adding to pool
+        self.blockchain
+            .validate_transaction_nonce(&transaction)
+            .await
+            .map_err(|e| create_error(ErrorCode::InvalidParams, e.to_string()))?;
+
         self.transaction_pool
             .add_transaction(transaction.clone())
             .await;

@@ -42,6 +42,32 @@ pub struct NonceInfo {
     pub account_nonce: u64,
 }
 
+impl NonceInfo {
+    /// Picks the appropriate nonce for the next transaction and logs relevant information.
+    /// Returns the maximum of next_pending_nonce and (last_used_nonce + 1).
+    pub fn pick_nonce(&self) -> u64 {
+        log::info!("Nonce info: {self}");
+
+        let nonce = match self.last_used_nonce {
+            Some(last_used) => std::cmp::max(self.next_pending_nonce, last_used + 1),
+            None => self.next_pending_nonce,
+        };
+
+        let pending = self.next_pending_nonce as i64 - (self.account_nonce as i64 + 1);
+        if pending > 0 {
+            log::debug!("Still processing {pending} pending transactions");
+        }
+
+        if let Some(last_used) = self.last_used_nonce {
+            if (last_used + 1) != self.next_pending_nonce {
+                log::warn!("Last used nonce is not equal to next pending nonce. Probably transaction was sent externally.");
+            }
+        }
+
+        nonce
+    }
+}
+
 /// The address of the GolemBase storage processor contract.
 /// All storage-related transactions are sent to this contract address.
 pub const GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS: Address =
@@ -202,26 +228,10 @@ impl TransactionQueue {
         // that it have full knowledge the returned nonces. At the same time tools outside of our
         // control can send transactions as well.
         let nonce_info = self.get_nonces(from).await?;
-        let nonce = match nonce_info.last_used_nonce {
-            Some(last_used) => std::cmp::max(nonce_info.next_pending_nonce, last_used + 1),
-            None => nonce_info.next_pending_nonce,
-        };
-
-        log::info!("Nonce info: {nonce_info}");
-
-        let pending = nonce_info.next_pending_nonce as i64 - (nonce_info.account_nonce as i64 + 1);
-        if pending > 0 {
-            log::debug!("Still processing {pending} pending transactions");
-        }
-
-        if let Some(last_used) = nonce_info.last_used_nonce {
-            if (last_used + 1) != nonce_info.next_pending_nonce {
-                log::warn!("Last used nonce is not equal to next pending nonce. Probably transaction was sent externally.");
-            }
-        }
+        let nonce = nonce_info.pick_nonce();
 
         // Update the request with the next pending nonce.
-        let request = request.with_nonce(nonce);
+        let mut request = request.with_nonce(nonce);
 
         let max_retries = self.tx_config.max_retries;
         let mut attempt: u32 = 0;
@@ -240,15 +250,21 @@ impl TransactionQueue {
             let signed = self.sign_transaction(_request).await?;
             let encoded = self.encode_transaction(&signed)?;
 
-            // Send the transaction and register it for tracking.
-            let pending = self
-                .provider
-                .send_raw_transaction(&encoded)
-                .await
-                .map_err(|e| anyhow!("Failed to send transaction: {e}"))?;
+            attempt += 1;
+
+            let pending = match self.provider.send_raw_transaction(&encoded).await {
+                Ok(pending) => pending,
+                // Retry transaction with updated nonce.
+                Err(e) if e.to_string().contains("nonce too low") => {
+                    let nonce_info = self.get_nonces(from).await?;
+                    let nonce = nonce_info.pick_nonce();
+                    request.set_nonce(nonce);
+                    continue;
+                }
+                Err(e) => return Err(anyhow!("Failed to send transaction: {e}")),
+            };
 
             let tx_hash = *pending.tx_hash();
-            attempt += 1;
 
             log::debug!("Transaction attempt {attempt} sent with hash: {tx_hash}");
 
@@ -290,7 +306,19 @@ impl TransactionQueue {
                         request,
                         response_tx,
                     } = msg;
-                    let result = queue.process_transaction(request).await;
+
+                    let result = match tokio::time::timeout(
+                        queue.tx_config.transaction_receipt_timeout,
+                        queue.process_transaction(request),
+                    )
+                    .await
+                    {
+                        Ok(result) => result,
+                        Err(e) => Err(anyhow!(
+                            "Transaction processing timed out (timeout: {}): {e}",
+                            humantime::format_duration(queue.tx_config.transaction_receipt_timeout)
+                        )),
+                    };
                     let _ = response_tx.send(result);
                 }
             });
@@ -306,9 +334,8 @@ impl TransactionQueue {
         let last_used_nonce = *self.last_used_nonce.lock().unwrap();
 
         // Get current blockchain nonce from get_nonce. This function includes only
-        // confirmed transactions.
-        //let account_nonce = self.provider.get_nonce(address).await?;
-        let account_nonce = 0;
+        // transaction included in the latest block.
+        let account_nonce = self.provider.get_nonce(address).await?;
 
         // Get next pending nonce from get_transaction_count. This function includes
         // pending transactions as well.
