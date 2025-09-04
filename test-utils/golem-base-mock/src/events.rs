@@ -93,6 +93,20 @@ struct SubscriptionInfo {
     filter: Option<EventFilter>,
 }
 
+impl SubscriptionInfo {
+    /// Send a log event to the subscription with logging
+    fn emit_event(&self, log_event: &LogEvent) {
+        let _ = self.sender.send(log_event.clone());
+        log::info!(
+            "Sent event to subscription: block={}, tx={}, log_index={}, entity_id={}",
+            log_event.block_number,
+            log_event.transaction_hash,
+            log_event.log_index,
+            log_event.entity_id
+        );
+    }
+}
+
 /// Inner state of the EventEmitter, wrapped in a single RwLock
 #[derive(Default)]
 struct EventEmitterState {
@@ -190,14 +204,13 @@ impl EventEmitter {
         let state = self.state.read().await;
         for (_, subscription_info) in state.subscriptions.iter() {
             // Check if event matches the subscription's filter
-            let should_send = if let Some(filter) = &subscription_info.filter {
-                self.log_event_matches_filter(&log_event, filter)
-            } else {
-                true // No filter, send all events
+            let should_send = match &subscription_info.filter {
+                Some(filter) => self.log_event_matches_filter(&log_event, filter),
+                None => true,
             };
 
             if should_send {
-                let _ = subscription_info.sender.send(log_event.clone());
+                subscription_info.emit_event(&log_event);
             }
         }
     }
@@ -231,14 +244,15 @@ impl EventEmitter {
         let mut state = self.state.write().await;
         state
             .subscriptions
-            .insert(subscription_id, subscription_info);
+            .insert(subscription_id, subscription_info.clone());
 
         log::info!("Created subscription for events with filter: {event_filter:?}");
 
         // Emit events from past blocks if they match the filter
         if let Some(filter) = &event_filter {
             log::info!("Emitting events from past blocks using filter: {filter:?}");
-            self.emit_past_blocks(&sender, filter, &state).await;
+            self.emit_past_blocks(&subscription_info, filter, &state)
+                .await;
         }
 
         Ok(receiver)
@@ -247,7 +261,7 @@ impl EventEmitter {
     /// Emit events from past blocks that match the filter
     async fn emit_past_blocks(
         &self,
-        sender: &broadcast::Sender<LogEvent>,
+        subscription_info: &SubscriptionInfo,
         filter: &EventFilter,
         state: &EventEmitterState,
     ) {
@@ -255,7 +269,7 @@ impl EventEmitter {
             // Emit logs that match the filter (which includes block range)
             for log_event in logs {
                 if self.log_event_matches_filter(log_event, filter) {
-                    let _ = sender.send(log_event.clone());
+                    subscription_info.emit_event(log_event);
                 }
             }
         }
