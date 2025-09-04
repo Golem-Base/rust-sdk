@@ -223,19 +223,21 @@ impl EventEmitter {
             None => None,
         };
 
-        let mut state = self.state.write().await;
-
         let subscription_info = SubscriptionInfo {
             sender: sender.clone(),
             filter: event_filter.clone(),
         };
 
+        let mut state = self.state.write().await;
         state
             .subscriptions
             .insert(subscription_id, subscription_info);
 
+        log::info!("Created subscription for events with filter: {event_filter:?}");
+
         // Emit events from past blocks if they match the filter
         if let Some(filter) = &event_filter {
+            log::info!("Emitting events from past blocks using filter: {filter:?}");
             self.emit_past_blocks(&sender, filter, &state).await;
         }
 

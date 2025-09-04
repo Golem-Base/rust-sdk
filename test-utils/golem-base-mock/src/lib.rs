@@ -607,8 +607,6 @@ impl EthRpcServer for GolemBaseMock {
                 .subscribe_to_events(filter.clone())
                 .await?;
 
-            log::info!("Created subscription for events with filter: {:?}", filter);
-
             // Accept the subscription and forward events to the sink
             let sink = subscription_sink.accept().await?;
 
