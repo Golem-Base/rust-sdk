@@ -1,6 +1,6 @@
 use alloy::primitives::{Address, B256, U256};
 use alloy::rlp::Decodable;
-
+use derive_more::Debug;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -16,6 +16,7 @@ use golem_base_sdk::utils::wei_to_eth;
 
 use crate::block::{Block, Transaction, TransactionLog};
 use crate::entity_db::{Entity, EntityDb};
+use crate::events::EntityEventHandler;
 
 /// Represents an account in the mock blockchain
 #[derive(Clone, Debug)]
@@ -55,18 +56,21 @@ struct BlockchainState {
 }
 
 /// Main mock blockchain structure
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Blockchain {
     state: Arc<RwLock<BlockchainState>>,
     entity_db: EntityDb,
+    #[debug(ignore)]
+    event_handler: Arc<dyn EntityEventHandler>,
 }
 
 impl Blockchain {
-    /// Create a new empty mock blockchain
-    pub fn new(entity_db: EntityDb) -> Self {
+    /// Create a new empty mock blockchain with an event handler
+    pub fn new(entity_db: EntityDb, event_handler: Arc<dyn EntityEventHandler>) -> Self {
         Self {
             state: Arc::new(RwLock::new(BlockchainState::default())),
             entity_db,
+            event_handler,
         }
     }
 
@@ -131,6 +135,12 @@ impl Blockchain {
         let block = Arc::new(block);
         state.blocks_by_number.insert(block_number, block.clone());
         state.blocks_by_hash.insert(block_hash, block.clone());
+
+        // Finish processing the block and emit all collected events.
+        // At this point Blockchain must be ready to return block if caller asks,
+        // so emit events outside of lock and never move this earlier
+        drop(state);
+        self.event_handler.finish_block(block_number).await;
     }
 
     /// Update account state based on a transaction
@@ -203,6 +213,11 @@ impl Blockchain {
                     );
                     logs.push(create_log);
 
+                    // Emit event
+                    self.event_handler
+                        .on_entity_created(&entity, &block, transaction)
+                        .await;
+
                     log::info!(
                         "Entity created: 0x{:x}, owner: 0x{:x}, tx: 0x{:x}",
                         entity.key,
@@ -225,6 +240,13 @@ impl Blockchain {
                         entity_key,
                     );
                     logs.push(update_log);
+
+                    // Emit event
+                    if let Some(entity) = self.entity_db.get_entity(&entity_key).await {
+                        self.event_handler
+                            .on_entity_updated(&entity, &block, transaction)
+                            .await;
+                    }
 
                     log::info!(
                         "Entity updated: 0x{:x}, tx: 0x{:x}",
@@ -270,6 +292,11 @@ impl Blockchain {
                             key,
                         );
                         logs.push(delete_log);
+
+                        // Emit event
+                        self.event_handler
+                            .on_entity_removed(&entity, &block, transaction)
+                            .await;
 
                         log::info!(
                             "Entity deleted: 0x{:x}, owner: 0x{:x}, tx: 0x{:x}",

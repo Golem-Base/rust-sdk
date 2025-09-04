@@ -1,6 +1,5 @@
 use alloy::primitives::{Address, U256};
-use anyhow;
-use jsonrpsee::server::{RpcModule, Server};
+use jsonrpsee::server::{RpcModule, ServerBuilder};
 use std::net::SocketAddr;
 use url::Url;
 
@@ -58,7 +57,7 @@ impl GolemBaseMockServer {
         module.merge(EthRpcServer::into_rpc(rpc_impl.clone()))?;
         module.merge(GolemBaseRpcServer::into_rpc(rpc_impl))?;
 
-        let server = Server::builder().build(addr).await?;
+        let server = ServerBuilder::default().build(addr).await?;
 
         let actual_addr = server.local_addr()?;
         log::info!("GolemBase Mock Server listening on {}", actual_addr);

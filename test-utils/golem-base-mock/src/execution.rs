@@ -29,7 +29,7 @@ struct ExecutionEngineState {
 }
 
 /// Execution engine that mines blocks and processes transactions
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ExecutionEngine {
     blockchain: Blockchain,
     transaction_pool: TransactionPool,

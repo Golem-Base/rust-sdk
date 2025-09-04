@@ -7,19 +7,22 @@ use alloy::primitives::TxKind;
 use alloy::primitives::{Address, Bloom, Bytes, B256, U256};
 use alloy::rlp::Decodable;
 use alloy::rpc::types::{
-    Block, BlockId, BlockNumberOrTag, Log, Transaction, TransactionReceipt, TransactionRequest,
+    Block, BlockId, BlockNumberOrTag, Filter, Log, Transaction, TransactionReceipt,
+    TransactionRequest,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use golem_base_sdk::entity::Entity;
 use golem_base_sdk::rpc::{EntityMetaData, SearchResult};
-use jsonrpsee::core::{async_trait, RpcResult};
+use jsonrpsee::core::{async_trait, RpcResult, StringError, SubscriptionResult};
 use jsonrpsee::types::{ErrorCode, ErrorObject};
+use jsonrpsee::{PendingSubscriptionSink, SubscriptionMessage};
 use std::sync::Arc;
 
 use crate::api::{EthRpcServer, GolemBaseRpcServer};
 use crate::blockchain::Blockchain;
 use crate::controller::{should_fail, CallOverride, CallResponse, MockController, WithCallback};
 use crate::entity_db::EntityDb;
+use crate::events::EventEmitter;
 use crate::execution::ExecutionEngine;
 use crate::managed_accounts::ManagedAccounts;
 use crate::transaction_pool::TransactionPool;
@@ -29,6 +32,7 @@ pub mod block;
 pub mod blockchain;
 pub mod controller;
 pub mod entity_db;
+pub mod events;
 pub mod execution;
 pub mod managed_accounts;
 pub mod query_parser;
@@ -79,7 +83,7 @@ macro_rules! return_override {
 }
 
 /// Mock implementation of RPC methods (both Ethereum and GolemBase)
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct GolemBaseMock {
     chain_id: U256,
     blockchain: Blockchain,
@@ -88,12 +92,14 @@ pub struct GolemBaseMock {
     execution: ExecutionEngine,
     managed_accounts: ManagedAccounts,
     controller: MockController,
+    event_emitter: Arc<EventEmitter>,
 }
 
 impl GolemBaseMock {
     pub fn new() -> Self {
         let entity_db = EntityDb::new();
-        let blockchain = Blockchain::new(entity_db.clone());
+        let events = Arc::new(EventEmitter::new());
+        let blockchain = Blockchain::new(entity_db.clone(), events.clone());
         let transaction_pool = TransactionPool::new();
         let execution_engine = ExecutionEngine::new(blockchain.clone(), transaction_pool.clone());
 
@@ -105,6 +111,7 @@ impl GolemBaseMock {
             execution: execution_engine,
             managed_accounts: ManagedAccounts::new(),
             controller: MockController::new(),
+            event_emitter: events,
         }
     }
 
@@ -584,6 +591,42 @@ impl EthRpcServer for GolemBaseMock {
                 ErrorCode::InternalError,
                 format!("Error getting block: {e}"),
             )),
+        }
+    }
+
+    async fn subscribe(
+        &self,
+        subscription_sink: PendingSubscriptionSink,
+        subscription_type: String,
+        filter: Option<Filter>,
+    ) -> SubscriptionResult {
+        if subscription_type == "logs" {
+            // Subscribe to the event emitter
+            let mut event_receiver = self
+                .event_emitter
+                .subscribe_to_events(filter.clone())
+                .await?;
+
+            log::info!("Created subscription for events with filter: {:?}", filter);
+
+            // Accept the subscription and forward events to the sink
+            let sink = subscription_sink.accept().await?;
+
+            // Spawn a task to forward events from the receiver to the sink
+            tokio::spawn(async move {
+                while let Ok(log_event) = event_receiver.recv().await {
+                    let log: Log = log_event.into();
+                    if let Ok(msg) = SubscriptionMessage::from_json(&log) {
+                        sink.send(msg).await.ok();
+                    }
+                }
+            });
+
+            Ok(())
+        } else {
+            Err(StringError::from(format!(
+                "Unsupported subscription type: {subscription_type}",
+            )))
         }
     }
 }
