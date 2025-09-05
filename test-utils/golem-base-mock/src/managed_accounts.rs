@@ -4,9 +4,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 /// Manages accounts with their private key signers
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ManagedAccounts {
     accounts: Arc<Mutex<HashMap<Address, PrivateKeySigner>>>,
+    internal_account: PrivateKeySigner,
 }
 
 impl Default for ManagedAccounts {
@@ -19,6 +20,7 @@ impl ManagedAccounts {
     pub fn new() -> Self {
         Self {
             accounts: Arc::new(Mutex::new(HashMap::new())),
+            internal_account: PrivateKeySigner::random(),
         }
     }
 
@@ -41,5 +43,11 @@ impl ManagedAccounts {
     pub fn get_all_accounts(&self) -> Vec<Address> {
         let accounts = self.accounts.lock().unwrap();
         accounts.keys().cloned().collect()
+    }
+
+    /// Gets the internal account for housekeeping transactions
+    /// This account is not accessible to outside users
+    pub fn get_internal_account(&self) -> PrivateKeySigner {
+        self.internal_account.clone()
     }
 }

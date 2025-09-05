@@ -1,10 +1,10 @@
 use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::rpc::types::{
-    Block, BlockId, BlockNumberOrTag, Transaction, TransactionReceipt, TransactionRequest,
+    Block, BlockId, BlockNumberOrTag, Filter, Transaction, TransactionReceipt, TransactionRequest,
 };
 use golem_base_sdk::entity::Entity;
 use golem_base_sdk::rpc::{EntityMetaData, SearchResult};
-use jsonrpsee::core::RpcResult;
+use jsonrpsee::core::{RpcResult, SubscriptionResult};
 use jsonrpsee::proc_macros::rpc;
 
 /// Mock implementation of Ethereum RPC methods
@@ -75,6 +75,13 @@ pub trait EthRpc {
 
     #[method(name = "blockNumber")]
     async fn block_number(&self) -> RpcResult<U256>;
+
+    #[subscription(name = "subscribe", item = Event)]
+    async fn subscribe(
+        &self,
+        subscription_type: String,
+        filter: Option<Filter>,
+    ) -> SubscriptionResult;
 }
 
 /// Mock implementation of GolemBase RPC methods

@@ -1,21 +1,32 @@
 use alloy::primitives::{Address, B256, U256};
 use alloy::rlp::Decodable;
-
+use anyhow;
+use derive_more::Debug;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
 use golem_base_sdk::account::GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS;
 use golem_base_sdk::entity::GolemBaseTransaction;
-use golem_base_sdk::events::{
-    golem_base_storage_entity_created, golem_base_storage_entity_deleted,
-    golem_base_storage_entity_ttl_extended, golem_base_storage_entity_updated,
-};
 use golem_base_sdk::utils::wei_to_eth;
 
-use crate::block::{Block, Transaction, TransactionLog};
+use crate::block::{Block, Transaction};
+use crate::block_builder::BlockBuilder;
 use crate::entity_db::{Entity, EntityDb};
+use crate::events::EntityEventHandler;
+
+/// Chain configuration containing chain ID
+#[derive(Debug, Clone)]
+pub struct ChainConfig {
+    pub chain_id: u64,
+}
+
+impl ChainConfig {
+    pub fn new(chain_id: u64) -> Self {
+        Self { chain_id }
+    }
+}
 
 /// Represents an account in the mock blockchain
 #[derive(Clone, Debug)]
@@ -55,18 +66,27 @@ struct BlockchainState {
 }
 
 /// Main mock blockchain structure
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Blockchain {
     state: Arc<RwLock<BlockchainState>>,
     entity_db: EntityDb,
+    pub config: Arc<Mutex<ChainConfig>>,
+    #[debug(ignore)]
+    event_handler: Arc<dyn EntityEventHandler>,
 }
 
 impl Blockchain {
-    /// Create a new empty mock blockchain
-    pub fn new(entity_db: EntityDb) -> Self {
+    /// Create a new empty mock blockchain with an event handler
+    pub fn new(
+        entity_db: EntityDb,
+        event_handler: Arc<dyn EntityEventHandler>,
+        chain_id: u64,
+    ) -> Self {
         Self {
             state: Arc::new(RwLock::new(BlockchainState::default())),
             entity_db,
+            config: Arc::new(Mutex::new(ChainConfig::new(chain_id))),
+            event_handler,
         }
     }
 
@@ -95,42 +115,92 @@ impl Blockchain {
         Ok(())
     }
 
+    /// Process expired entity removal transaction and remove entities
+    async fn process_expired_entities(
+        &self,
+        transaction: &Arc<Transaction>,
+        block_builder: &mut BlockBuilder,
+    ) -> anyhow::Result<()> {
+        // Validate this is a housekeeping transaction
+        if transaction.to != GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS {
+            anyhow::bail!("Transaction is not sent to housekeeping processor address");
+        }
+
+        // Validate transaction data is not empty
+        if transaction.data.is_empty() {
+            anyhow::bail!("Housekeeping transaction has empty data");
+        }
+
+        // Decode the entity IDs from the transaction data
+        let expired_ids = Vec::<B256>::decode(&mut transaction.data.as_ref()).map_err(|e| {
+            anyhow::anyhow!("Failed to decode entity IDs from housekeeping transaction data: {e}")
+        })?;
+
+        log::debug!(
+            "Processing {} expired entities for removal",
+            expired_ids.len()
+        );
+
+        // Remove the entities and create individual logs for each
+        for entity_id in expired_ids {
+            if let Some(entity) = self.entity_db.remove_entity(&entity_id).await {
+                block_builder.log_entity_expired(transaction, &entity).await;
+            } else {
+                log::warn!("Entity 0x{entity_id:x} not found for removal");
+            }
+        }
+
+        Ok(())
+    }
+
     /// Add a block to the blockchain
     pub async fn add_block(&self, block: Block) {
         let mut state = self.state.write().await;
         let block_number = block.header.block_number;
         let block_hash = block.header.block_hash;
+        let mut builder = BlockBuilder::new(self.event_handler.clone(), block);
 
-        // Process all transactions in the block
-        let mut all_logs = Vec::new();
-        for transaction in &block.transactions {
-            let transaction_hash = transaction.hash;
+        // First transaction is always the housekeeping transaction for expired entities
+        let transactions = builder.block.transactions.clone();
+        if !transactions.is_empty() {
+            if let Err(e) = self
+                .process_expired_entities(&transactions[0], &mut builder)
+                .await
+            {
+                log::error!("Failed to process expired entities: {e}");
+            }
 
-            // Add transaction to transactions map
-            state
-                .transactions
-                .insert(transaction_hash, transaction.clone());
+            // Process all transactions in the block
+            for transaction in transactions[1..].iter() {
+                let transaction_hash = transaction.hash;
 
-            // Update accounts
-            Self::update_account_for_transaction(&mut state, &transaction);
+                // Add transaction to transactions map
+                state
+                    .transactions
+                    .insert(transaction_hash, transaction.clone());
 
-            // Extract and add entities from transaction data, collect logs
-            let transaction_logs = self
-                .extract_entity_from_transaction(transaction, &block)
-                .await;
-            all_logs.extend(transaction_logs);
+                // Update accounts
+                Self::update_account_for_transaction(&mut state, &transaction);
+
+                // Extract and add entities from transaction data, collect logs
+                if let Err(e) = self
+                    .extract_entity_from_transaction(transaction, &mut builder)
+                    .await
+                {
+                    log::error!("Failed to extract entities from transaction: {e}");
+                }
+            }
         }
 
-        // Create a new block with logs and add it to the state
-        let block = Block {
-            header: block.header.clone(),
-            transactions: block.transactions.clone(),
-            transaction_logs: all_logs,
-        };
-
-        let block = Arc::new(block);
+        let block = builder.build();
         state.blocks_by_number.insert(block_number, block.clone());
         state.blocks_by_hash.insert(block_hash, block.clone());
+
+        // Finish processing the block and emit all collected events.
+        // At this point Blockchain must be ready to return block if caller asks,
+        // so emit events outside of lock and never move this earlier
+        drop(state);
+        self.event_handler.finish_block(block_number).await;
     }
 
     /// Update account state based on a transaction
@@ -169,17 +239,15 @@ impl Blockchain {
 
     /// Extract entity from transaction data and modify entity database state
     /// Checks if transaction is to storage contract and decodes GolemBase entity operations
-    /// Returns transaction logs for the block
+    /// Modifies the block using BlockBuilder
     async fn extract_entity_from_transaction(
         &self,
         transaction: &Arc<Transaction>,
-        block: &Block,
-    ) -> Vec<TransactionLog> {
-        let mut logs = Vec::new();
-
+        builder: &mut BlockBuilder,
+    ) -> anyhow::Result<()> {
         // Check if transaction is to the GolemBase storage processor contract
         if transaction.to != GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS {
-            return logs;
+            return Ok(());
         }
 
         // Try to decode the transaction data as a GolemBaseTransaction
@@ -189,26 +257,14 @@ impl Blockchain {
                 // Process creates
                 for (idx, create) in golem_tx.creates.into_iter().enumerate() {
                     let entity = Entity::create(create, transaction.from).with_hash(
-                        block.header.block_number,
+                        builder.block.header.block_number,
                         idx,
                         transaction.hash,
                     );
                     self.entity_db.add_entity(entity.clone()).await;
 
-                    // Create log for entity creation
-                    let create_log = TransactionLog::create_entity_log(
-                        transaction,
-                        golem_base_storage_entity_created(),
-                        entity.key,
-                    );
-                    logs.push(create_log);
-
-                    log::info!(
-                        "Entity created: 0x{:x}, owner: 0x{:x}, tx: 0x{:x}",
-                        entity.key,
-                        entity.owner,
-                        transaction.hash
-                    );
+                    // Add log and emit event using BlockBuilder
+                    builder.log_entity_created(transaction, &entity).await;
                 }
 
                 // Process updates
@@ -218,19 +274,10 @@ impl Blockchain {
                     // Update the entity directly in the database
                     self.entity_db.update_entity(&entity_key, update).await;
 
-                    // Create log for entity update
-                    let update_log = TransactionLog::create_entity_log(
-                        transaction,
-                        golem_base_storage_entity_updated(),
-                        entity_key,
-                    );
-                    logs.push(update_log);
-
-                    log::info!(
-                        "Entity updated: 0x{:x}, tx: 0x{:x}",
-                        entity_key,
-                        transaction.hash
-                    );
+                    // Add log and emit event
+                    if let Some(entity) = self.entity_db.get_entity(&entity_key).await {
+                        builder.log_entity_updated(transaction, &entity).await;
+                    }
                 }
 
                 // Process extensions
@@ -243,40 +290,16 @@ impl Blockchain {
                         .update_entity_btl(&entity_key, number_of_blocks)
                         .await;
 
-                    // Create log for entity extension
-                    let extend_log = TransactionLog::create_entity_log(
-                        transaction,
-                        golem_base_storage_entity_ttl_extended(),
-                        entity_key,
-                    );
-                    logs.push(extend_log);
-
-                    log::info!(
-                        "Entity extended: 0x{:x}, new BTL: {}, tx: 0x{:x}",
-                        entity_key,
-                        number_of_blocks,
-                        transaction.hash
-                    );
+                    // Add log using BlockBuilder (no event for TTL extension)
+                    builder.log_entity_ttl_extended(transaction, entity_key, number_of_blocks);
                 }
 
                 // Process deletes
                 for delete in &golem_tx.deletes {
                     let key = *delete;
                     if let Some(entity) = self.entity_db.remove_entity(&key).await {
-                        // Create log for entity deletion
-                        let delete_log = TransactionLog::create_entity_log(
-                            transaction,
-                            golem_base_storage_entity_deleted(),
-                            key,
-                        );
-                        logs.push(delete_log);
-
-                        log::info!(
-                            "Entity deleted: 0x{:x}, owner: 0x{:x}, tx: 0x{:x}",
-                            entity.key,
-                            entity.owner,
-                            transaction.hash
-                        );
+                        // Add log and emit event
+                        builder.log_entity_removed(transaction, &entity).await;
                     } else {
                         log::warn!(
                             "Entity not found for deletion: 0x{:x}, tx: 0x{:x}",
@@ -291,7 +314,7 @@ impl Blockchain {
             }
         }
 
-        logs
+        Ok(())
     }
 
     /// Get a block by its number
@@ -416,6 +439,21 @@ impl Blockchain {
             .entry(address)
             .or_insert_with(|| Account::new(address));
         account.balance = balance;
+    }
+
+    /// Get a reference to the entity database
+    pub fn entity_db(&self) -> &EntityDb {
+        &self.entity_db
+    }
+
+    /// Get the chain ID
+    pub fn chain_id(&self) -> u64 {
+        self.config.lock().unwrap().chain_id
+    }
+
+    /// Set the chain ID
+    pub fn set_chain_id(&self, chain_id: u64) {
+        self.config.lock().unwrap().chain_id = chain_id;
     }
 
     /// Create and add genesis block

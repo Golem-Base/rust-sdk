@@ -6,6 +6,7 @@ use alloy::rpc::types::Log;
 use alloy::transports::http::reqwest::Url;
 use anyhow::Result;
 use futures::{Stream, StreamExt};
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::pin::Pin;
 
@@ -38,7 +39,7 @@ pub fn golem_base_storage_entity_ttl_extended() -> B256 {
 
 /// Represents a GolemBase event parsed from the blockchain log.
 /// Used to distinguish between entity creation, update, and removal events.
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Event {
     /// Entity was created.
     /// Contains the entity ID, block number, and transaction hash.

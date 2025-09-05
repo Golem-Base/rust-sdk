@@ -8,3 +8,4 @@ alwaysApply: true
 - Prefer resusing functions instead of generating and duplicating code
 - When modifying code, always consider my selection over general context
 - Don't write junior comments. Don't describe what next line does, what can be directly understood from code. Comments should explain why the specific solution was chosen.
+- Never implement Default, Clone, Debug, Display unless asked. Never remove existing derives on structs.

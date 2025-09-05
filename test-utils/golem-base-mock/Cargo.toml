@@ -10,7 +10,7 @@ anyhow = "1.0"
 async-trait = "0.1"
 base64 = "0.21"
 bytes = "1.0"
-derive_more = "2.0.1"
+derive_more = { version = "2.0", features = ["full"] }
 hex = "0.4"
 humantime = "2.2"
 jsonrpsee = { version = "0.24", features = ["server", "macros"] }
@@ -19,6 +19,8 @@ rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.0", features = ["full"] }
+tokio-stream = "0.1"
+futures-util = "0.3"
 url = "2.5"
 
 golem-base-sdk = { workspace = true }
@@ -27,4 +29,5 @@ golem-base-sdk = { workspace = true }
 golem-base-sdk = { workspace = true }
 golem-base-test-utils = { workspace = true }
 bigdecimal = "0.4"
+futures = "0.3"
 serial_test = "3.2"

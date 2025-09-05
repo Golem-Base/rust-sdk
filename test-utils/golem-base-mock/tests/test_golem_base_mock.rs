@@ -1,12 +1,17 @@
 use std::time::Duration;
 
 use bigdecimal::BigDecimal;
+use futures::StreamExt;
 use golem_base_mock::{
     controller::{CallOverride, CallResponse, CallbackResult},
     GolemBaseMockServer,
 };
-use golem_base_sdk::{entity::Create, GolemBaseClient};
-use golem_base_test_utils::{create_test_account, init_logger};
+use golem_base_sdk::{
+    entity::{Create, Update},
+    events::Event,
+    GolemBaseClient,
+};
+use golem_base_test_utils::{create_test_account, init_logger, TEST_TTL};
 use serial_test::serial;
 
 /// Comprehensive integration test that demonstrates using the GolemBase mock server with GolemBaseClient
@@ -138,5 +143,94 @@ async fn test_golem_base_mock_once_callback_waiting() -> anyhow::Result<()> {
         .unwrap();
     matches!(result2, CallbackResult::ChannelDropped);
 
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_golem_base_mock_event_listening() -> anyhow::Result<()> {
+    init_logger(false);
+
+    let mock = GolemBaseMockServer::create_test_mock_server().await?;
+    let client = GolemBaseClient::new(mock.url().clone())?;
+    let account = create_test_account(&client).await?;
+
+    // Start listening for events, before we create the entity to avoid missing the event.
+    let events = client.events_client().await.unwrap();
+    let mut event_stream = events.events_stream().await.unwrap();
+
+    // Create a test entity
+    let create = Create::from_string("test payload", TEST_TTL);
+    let entity_id = client.create_entry(account, create).await.unwrap();
+
+    // Wait for and verify EntityCreated event
+    let event = event_stream.next().await.unwrap().unwrap();
+    log::info!("Event: {:?}", event);
+    match event {
+        Event::EntityCreated { entity_id: id, .. } => {
+            assert_eq!(id, entity_id);
+        }
+        _ => panic!("Expected EntityCreated event"),
+    }
+
+    // Update the entity
+    let update = Update::from_string(entity_id, "test payload", TEST_TTL);
+    client.update_entry(account, update).await.unwrap();
+
+    // Wait for and verify EntityUpdated event
+    let event = event_stream.next().await.unwrap().unwrap();
+    match event {
+        Event::EntityUpdated { entity_id: id, .. } => {
+            assert_eq!(id, entity_id);
+        }
+        _ => panic!("Expected EntityUpdated event"),
+    }
+
+    // Delete the entity
+    client
+        .remove_entries(account, vec![entity_id])
+        .await
+        .unwrap();
+
+    // Wait for and verify EntityRemoved event
+    let event = event_stream.next().await.unwrap().unwrap();
+    match event {
+        Event::EntityRemoved { entity_id: id, .. } => {
+            assert_eq!(id, entity_id);
+        }
+        _ => panic!("Expected EntityRemoved event"),
+    }
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_golem_base_mock_expiration() -> anyhow::Result<()> {
+    init_logger(false);
+
+    let mock = GolemBaseMockServer::create_test_mock_server().await?;
+    let client = GolemBaseClient::new(mock.url().clone())?;
+    let account = create_test_account(&client).await?;
+
+    let events = client.events_client().await.unwrap();
+    let mut event_stream = events.events_stream().await.unwrap();
+
+    let entity = Create::new(b"test payload".to_vec(), 1);
+    let entity_id = client.create_entry(account, entity).await?;
+
+    // Ignore EntityCreated event.
+    event_stream.next().await.unwrap().unwrap();
+    let event = tokio::time::timeout(Duration::from_secs(5), event_stream.next())
+        .await
+        .expect("Expected Entity to be removed within 2 seconds due to expiration")
+        .unwrap()
+        .unwrap();
+    match event {
+        Event::EntityRemoved { entity_id: id, .. } => {
+            assert_eq!(id, entity_id);
+        }
+        Event::EntityCreated { .. } => panic!("Expected EntityRemoved event, got EntityCreated"),
+        Event::EntityUpdated { .. } => panic!("Expected EntityRemoved event, got EntityUpdated"),
+    }
     Ok(())
 }
