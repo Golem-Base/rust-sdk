@@ -21,7 +21,7 @@ pub struct ExecutionConfig {
 impl Default for ExecutionConfig {
     fn default() -> Self {
         Self {
-            block_frequency: Duration::from_secs(1),
+            block_frequency: Duration::from_secs(2),
         }
     }
 }
