@@ -13,8 +13,11 @@ use golem_base_sdk::events::{
     golem_base_storage_entity_updated,
 };
 
-use crate::block::{Block, Transaction};
-use crate::entity_db::Entity;
+use crate::{
+    block::{Block, Transaction},
+    display::EnableDisplay,
+};
+use crate::{display::display_topics, entity_db::Entity};
 
 /// Event structure that stores all information needed to recreate an alloy Log
 #[derive(Debug, Clone)]
@@ -65,7 +68,8 @@ impl Into<Log> for LogEvent {
 }
 
 /// Simple filter for event subscriptions
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_more::Display)]
+#[display("EventFilter(topics: {}, from_block: {}, to_block: {})", display_topics(topics), from_block.display(), to_block.display())]
 pub struct EventFilter {
     /// Contract addresses to filter by
     pub addresses: FilterSet<Address>,
@@ -246,11 +250,14 @@ impl EventEmitter {
             .subscriptions
             .insert(subscription_id, subscription_info.clone());
 
-        log::info!("Created subscription for events with filter: {event_filter:?}");
+        log::info!(
+            "Created subscription for events with filter: {}",
+            event_filter.display()
+        );
 
         // Emit events from past blocks if they match the filter
         if let Some(filter) = &event_filter {
-            log::info!("Emitting events from past blocks using filter: {filter:?}");
+            log::info!("Emitting events from past blocks using filter: {filter}");
             self.emit_past_blocks(&subscription_info, filter, &state)
                 .await;
         }

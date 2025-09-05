@@ -29,8 +29,8 @@ impl GolemBaseMockServer {
         &self.state.controller
     }
 
-    pub fn with_chain_id(mut self, chain_id: u64) -> Self {
-        self.state.chain_id = U256::from(chain_id);
+    pub fn with_chain_id(self, chain_id: u64) -> Self {
+        self.state.set_chain_id(chain_id);
         self
     }
 

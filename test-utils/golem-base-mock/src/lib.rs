@@ -2,8 +2,6 @@ use alloy::consensus::{
     Eip658Value, EthereumTxEnvelope, Receipt, ReceiptEnvelope, ReceiptWithBloom, TxEip4844,
     TxEip4844Variant,
 };
-use alloy::network::{TransactionBuilder, TxSigner};
-use alloy::primitives::TxKind;
 use alloy::primitives::{Address, Bloom, Bytes, B256, U256};
 use alloy::rlp::Decodable;
 use alloy::rpc::types::{
@@ -19,6 +17,7 @@ use jsonrpsee::{PendingSubscriptionSink, SubscriptionMessage};
 use std::sync::Arc;
 
 use crate::api::{EthRpcServer, GolemBaseRpcServer};
+use crate::block::Transaction as InternalTransaction;
 use crate::blockchain::Blockchain;
 use crate::controller::{should_fail, CallOverride, CallResponse, MockController, WithCallback};
 use crate::entity_db::EntityDb;
@@ -29,8 +28,10 @@ use crate::transaction_pool::TransactionPool;
 
 pub mod api;
 pub mod block;
+pub mod block_builder;
 pub mod blockchain;
 pub mod controller;
+pub mod display;
 pub mod entity_db;
 pub mod events;
 pub mod execution;
@@ -45,6 +46,10 @@ pub use server::GolemBaseMockServer;
 /// Helper function to create ErrorObject with a typed ErrorCode and message
 pub fn create_error(code: ErrorCode, message: impl Into<String>) -> ErrorObject<'static> {
     ErrorObject::owned(code.code(), message.into(), None::<()>)
+}
+
+pub fn invalid_param(message: impl Into<String>) -> ErrorObject<'static> {
+    create_error(ErrorCode::InvalidParams, message)
 }
 
 /// Macro to handle RPC overrides with custom response support.
@@ -85,7 +90,6 @@ macro_rules! return_override {
 /// Mock implementation of RPC methods (both Ethereum and GolemBase)
 #[derive(Clone)]
 pub struct GolemBaseMock {
-    chain_id: U256,
     blockchain: Blockchain,
     entity_db: EntityDb,
     transaction_pool: TransactionPool,
@@ -99,20 +103,29 @@ impl GolemBaseMock {
     pub fn new() -> Self {
         let entity_db = EntityDb::new();
         let events = Arc::new(EventEmitter::new());
-        let blockchain = Blockchain::new(entity_db.clone(), events.clone());
+        let chain_id = 1337u64;
+        let blockchain = Blockchain::new(entity_db.clone(), events.clone(), chain_id);
         let transaction_pool = TransactionPool::new();
-        let execution_engine = ExecutionEngine::new(blockchain.clone(), transaction_pool.clone());
+        let managed_accounts = ManagedAccounts::new();
+        let execution_engine = ExecutionEngine::new(
+            blockchain.clone(),
+            transaction_pool.clone(),
+            managed_accounts.clone(),
+        );
 
         Self {
-            chain_id: U256::from(1337),
             blockchain,
             entity_db,
             transaction_pool,
             execution: execution_engine,
-            managed_accounts: ManagedAccounts::new(),
+            managed_accounts,
             controller: MockController::new(),
             event_emitter: events,
         }
+    }
+
+    pub fn set_chain_id(&self, chain_id: u64) {
+        self.blockchain.set_chain_id(chain_id);
     }
 
     /// Finds the next override for the given RPC name.
@@ -322,22 +335,18 @@ impl EthRpcServer for GolemBaseMock {
         );
 
         // Get the sender address
-        let from_address = transaction.from.ok_or_else(|| {
-            create_error(
-                ErrorCode::InvalidParams,
-                "Missing 'from' field in transaction".to_string(),
-            )
-        })?;
+        let from_address = transaction
+            .from
+            .ok_or_else(|| invalid_param("Missing 'from' field in transaction".to_string()))?;
 
         // Get the account for the sender address
         let signer = self
             .managed_accounts
             .get_account(from_address)
             .ok_or_else(|| {
-                create_error(
-                    ErrorCode::InvalidParams,
-                    format!("Account {from_address} is not managed by this node.",),
-                )
+                invalid_param(format!(
+                    "Account {from_address} is not managed by this node.",
+                ))
             })?;
 
         let nonce = match transaction.nonce {
@@ -351,57 +360,25 @@ impl EthRpcServer for GolemBaseMock {
                     .unwrap_or(0)
             }
         };
+        let transaction = transaction.nonce(nonce);
 
-        let mut signed = transaction.clone().build_unsigned().map_err(|e| {
-            create_error(
-                ErrorCode::InvalidParams,
-                format!("Failed to build transaction: {e:?}"),
-            )
-        })?;
+        let (signature, signed) = InternalTransaction::sign_request(transaction.clone(), &signer)
+            .await
+            .map_err(|e| invalid_param(format!("Error signing transaction: {e}")))?;
 
-        let signature = signer.sign_transaction(&mut signed).await.map_err(|e| {
-            create_error(
-                ErrorCode::InvalidParams,
-                format!("Failed to sign transaction: {e:?}"),
-            )
-        })?;
-
-        let internal_transaction = crate::block::Transaction {
-            hash: signed.tx_hash(&signature),
-            from: from_address,
-            to: match transaction.to.ok_or_else(|| {
-                create_error(
-                    ErrorCode::InvalidParams,
-                    "Missing 'to' field in transaction".to_string(),
-                )
-            })? {
-                TxKind::Call(addr) => addr,
-                TxKind::Create => {
-                    return Err(create_error(
-                        ErrorCode::InvalidParams,
-                        "Contract creation not supported in this mock".to_string(),
-                    ))
-                }
-            },
-            value: transaction.value.unwrap_or(U256::ZERO),
-            gas_limit: transaction.gas.unwrap_or(21000),
-            max_fee_per_gas: transaction.max_fee_per_gas.unwrap_or(20000000000),
-            max_priority_fee_per_gas: transaction.max_priority_fee_per_gas.unwrap_or(1000000000),
-            max_fee_per_blob_gas: 0, // No blob gas
-            nonce,
-            data: transaction.input.into_input().unwrap_or_default(),
-            chain_id: self.chain_id.try_into().unwrap_or(1337),
-            signature: signature.clone(),
-        };
-
-        // Add to transaction pool (reusing send_raw_transaction logic)
-        let transaction = Arc::new(internal_transaction);
+        let transaction = Arc::new(
+            InternalTransaction::from_signed(transaction, &signature, &signed).map_err(|e| {
+                invalid_param(format!(
+                    "Error converting to internal transaction representation: {e}"
+                ))
+            })?,
+        );
 
         // Validate transaction nonce before adding to pool
         self.blockchain
             .validate_transaction_nonce(&transaction)
             .await
-            .map_err(|e| create_error(ErrorCode::InvalidParams, e.to_string()))?;
+            .map_err(|e| invalid_param(e.to_string()))?;
 
         self.transaction_pool
             .add_transaction(transaction.clone())
@@ -454,7 +431,7 @@ impl EthRpcServer for GolemBaseMock {
     async fn chain_id(&self) -> RpcResult<U256> {
         let _override = self.next_override("eth_chainId")?;
         return_override!(_override, U256);
-        Ok(self.chain_id)
+        Ok(U256::from(self.blockchain.chain_id()))
     }
 
     async fn get_transaction_by_hash(&self, hash: B256) -> RpcResult<Option<Transaction>> {

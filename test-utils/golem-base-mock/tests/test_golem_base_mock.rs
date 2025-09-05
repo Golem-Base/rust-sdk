@@ -11,7 +11,7 @@ use golem_base_sdk::{
     events::Event,
     GolemBaseClient,
 };
-use golem_base_test_utils::{cleanup_entities, create_test_account, init_logger, TEST_TTL};
+use golem_base_test_utils::{create_test_account, init_logger, TEST_TTL};
 use serial_test::serial;
 
 /// Comprehensive integration test that demonstrates using the GolemBase mock server with GolemBaseClient
@@ -154,7 +154,6 @@ async fn test_golem_base_mock_event_listening() -> anyhow::Result<()> {
     let mock = GolemBaseMockServer::create_test_mock_server().await?;
     let client = GolemBaseClient::new(mock.url().clone())?;
     let account = create_test_account(&client).await?;
-    cleanup_entities(&client, account).await?;
 
     // Start listening for events, before we create the entity to avoid missing the event.
     let events = client.events_client().await.unwrap();
@@ -200,6 +199,38 @@ async fn test_golem_base_mock_event_listening() -> anyhow::Result<()> {
             assert_eq!(id, entity_id);
         }
         _ => panic!("Expected EntityRemoved event"),
+    }
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_golem_base_mock_expiration() -> anyhow::Result<()> {
+    init_logger(false);
+
+    let mock = GolemBaseMockServer::create_test_mock_server().await?;
+    let client = GolemBaseClient::new(mock.url().clone())?;
+    let account = create_test_account(&client).await?;
+
+    let events = client.events_client().await.unwrap();
+    let mut event_stream = events.events_stream().await.unwrap();
+
+    let entity = Create::new(b"test payload".to_vec(), 1);
+    let entity_id = client.create_entry(account, entity).await?;
+
+    // Ignore EntityCreated event.
+    event_stream.next().await.unwrap().unwrap();
+    let event = tokio::time::timeout(Duration::from_secs(5), event_stream.next())
+        .await
+        .expect("Expected Entity to be removed within 2 seconds due to expiration")
+        .unwrap()
+        .unwrap();
+    match event {
+        Event::EntityRemoved { entity_id: id, .. } => {
+            assert_eq!(id, entity_id);
+        }
+        Event::EntityCreated { .. } => panic!("Expected EntityRemoved event, got EntityCreated"),
+        Event::EntityUpdated { .. } => panic!("Expected EntityRemoved event, got EntityUpdated"),
     }
     Ok(())
 }

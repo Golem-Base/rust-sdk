@@ -60,9 +60,11 @@ impl Entity {
     }
 
     /// Set the entity key to a hash based on block number, index and transaction hash
+    /// Also sets the expiration block number based on current block + BTL
     /// This modifies the entity in place and returns self for chaining
     pub fn with_hash(mut self, block_number: u64, idx: usize, transaction_hash: B256) -> Self {
         self.key = self.calculate_hash(block_number, idx, transaction_hash);
+        self.expires_at = Some(block_number + self.btl);
         self
     }
 
@@ -259,6 +261,7 @@ impl EntityDb {
         let key = entity.key;
         let mut state = self.state.write().await;
 
+        log::info!("Creating entity: key={}", key);
         // Add to main entities map
         state.entities.insert(key, entity.clone());
 
@@ -284,6 +287,7 @@ impl EntityDb {
         let mut state = self.state.write().await;
 
         if let Some(entity) = state.entities.get_mut(entity_key) {
+            log::info!("Updating entity: key={}", entity_key);
             // Update the entity using the existing update method
             entity.update(update);
 
@@ -402,6 +406,7 @@ impl EntityDb {
     pub async fn remove_entity(&self, key: &B256) -> Option<Entity> {
         let mut state = self.state.write().await;
         if let Some(entity) = state.entities.remove(key) {
+            log::info!("Removing entity: key={}, owner={}", key, entity.owner);
             // Remove from owner index
             if let Some(keys) = state.entities_by_owner.get_mut(&entity.owner) {
                 keys.retain(|&k| k != entity.key);
@@ -450,6 +455,21 @@ impl EntityDb {
     pub async fn query_entities(&self, query: &str) -> Result<Vec<Entity>> {
         let state = self.state.read().await;
         state.query_entities(query)
+    }
+
+    /// Get entities that expire at the given block number
+    pub async fn get_entities_expiring_at_block(&self, block_number: u64) -> Vec<B256> {
+        let state = self.state.read().await;
+        state
+            .entities
+            .values()
+            .filter_map(|entity| {
+                entity
+                    .expires_at
+                    .filter(|&expires_at| expires_at == block_number)
+                    .map(|_| entity.key)
+            })
+            .collect()
     }
 }
 

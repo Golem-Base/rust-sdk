@@ -1,10 +1,14 @@
-use alloy::consensus::{EthereumTxEnvelope, Signed, TxEip4844, TxEip4844Variant};
-use alloy::consensus::{Header as ConsensusHeader, Transaction as _};
-use alloy::primitives::{Address, Bloom, Bytes, Log, Signature, B256, B64, U256};
-use alloy::rpc::types::{
-    AccessList, Block as AlloyBlock, BlockTransactions, Header as AlloyHeader,
+use alloy::consensus::{
+    EthereumTxEnvelope, EthereumTypedTransaction, Signed, TxEip4844, TxEip4844Variant,
 };
-use anyhow::anyhow;
+use alloy::consensus::{Header as ConsensusHeader, Transaction as _};
+use alloy::network::{TransactionBuilder, TxSigner};
+use alloy::primitives::{Address, Bloom, Bytes, Log, Signature, TxKind, B256, B64, U256};
+use alloy::rpc::types::{
+    AccessList, Block as AlloyBlock, BlockTransactions, Header as AlloyHeader, TransactionRequest,
+};
+use alloy::signers::local::PrivateKeySigner;
+use anyhow::{anyhow, Result};
 use std::sync::Arc;
 
 /// Represents a transaction log entry
@@ -266,5 +270,68 @@ impl Into<EthereumTxEnvelope<TxEip4844Variant>> for Transaction {
             self.signature,
             self.hash,
         ))
+    }
+}
+
+impl Transaction {
+    /// Sign a TransactionRequest
+    pub async fn sign_request(
+        transaction_request: TransactionRequest,
+        signer: &PrivateKeySigner,
+    ) -> Result<(Signature, EthereumTypedTransaction<TxEip4844Variant>)> {
+        let mut signed = transaction_request
+            .build_unsigned()
+            .map_err(|e| anyhow!("Failed to build unsigned transaction: {e}"))?;
+
+        let signature = signer
+            .sign_transaction(&mut signed)
+            .await
+            .map_err(|e| anyhow!("Failed to sign transaction: {e}"))?;
+
+        Ok((signature, signed))
+    }
+
+    /// Convert a signed TransactionRequest to internal Transaction
+    pub fn from_signed(
+        transaction_request: TransactionRequest,
+        signature: &Signature,
+        signed: &EthereumTypedTransaction<TxEip4844Variant>,
+    ) -> Result<Self> {
+        let from = transaction_request
+            .from
+            .ok_or_else(|| anyhow!("Missing 'from' field"))?;
+
+        let to = match transaction_request.to {
+            Some(TxKind::Call(addr)) => addr,
+            Some(TxKind::Create) => return Err(anyhow!("Contract creation not supported")),
+            None => return Err(anyhow!("Missing 'to' field")),
+        };
+
+        Ok(Transaction {
+            hash: signed.tx_hash(&signature),
+            from,
+            to,
+            value: transaction_request
+                .value
+                .ok_or_else(|| anyhow!("Missing 'value' field"))?,
+            gas_limit: transaction_request
+                .gas
+                .ok_or_else(|| anyhow!("Missing 'gas' field"))?,
+            max_fee_per_gas: transaction_request
+                .max_fee_per_gas
+                .ok_or_else(|| anyhow!("Missing 'max_fee_per_gas' field"))?,
+            max_priority_fee_per_gas: transaction_request
+                .max_priority_fee_per_gas
+                .ok_or_else(|| anyhow!("Missing 'max_priority_fee_per_gas' field"))?,
+            max_fee_per_blob_gas: transaction_request.max_fee_per_blob_gas.unwrap_or(0),
+            nonce: transaction_request
+                .nonce
+                .ok_or_else(|| anyhow!("Missing 'nonce' field"))?,
+            data: transaction_request.input.into_input().unwrap_or_default(),
+            chain_id: transaction_request
+                .chain_id
+                .ok_or_else(|| anyhow!("Missing 'chain_id' field"))?,
+            signature: signature.clone(),
+        })
     }
 }

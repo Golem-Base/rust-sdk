@@ -1,7 +1,12 @@
 use crate::block::{Block, Transaction};
 use crate::blockchain::Blockchain;
+use crate::managed_accounts::ManagedAccounts;
 use crate::transaction_pool::TransactionPool;
+
 use alloy::primitives::{B256, U256};
+use alloy::rlp::Encodable;
+use alloy::rpc::types::TransactionRequest;
+use golem_base_sdk::account::GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -16,7 +21,7 @@ pub struct ExecutionConfig {
 impl Default for ExecutionConfig {
     fn default() -> Self {
         Self {
-            block_frequency: Duration::from_secs(1), // Default: 1 block per second
+            block_frequency: Duration::from_secs(1),
         }
     }
 }
@@ -33,16 +38,22 @@ struct ExecutionEngineState {
 pub struct ExecutionEngine {
     blockchain: Blockchain,
     transaction_pool: TransactionPool,
+    managed_accounts: ManagedAccounts,
     state: Arc<RwLock<ExecutionEngineState>>,
     config: Arc<ExecutionConfig>,
 }
 
 impl ExecutionEngine {
     /// Create a new execution engine
-    pub fn new(blockchain: Blockchain, transaction_pool: TransactionPool) -> Self {
+    pub fn new(
+        blockchain: Blockchain,
+        transaction_pool: TransactionPool,
+        managed_accounts: ManagedAccounts,
+    ) -> Self {
         Self {
             blockchain,
             transaction_pool,
+            managed_accounts,
             state: Arc::new(RwLock::new(ExecutionEngineState {
                 current_block_number: 0,
                 running: false,
@@ -107,11 +118,24 @@ impl ExecutionEngine {
             }
         }
 
-        let transactions = self.filter_invalid_transactions(&transactions).await;
+        let mut transactions = self.filter_invalid_transactions(&transactions).await;
         for transaction in &transactions {
             self.transaction_pool
                 .remove_transaction(&transaction.hash)
                 .await;
+        }
+
+        // Try to add housekeeping transaction (for expired entity removal)
+        match self.create_housekeeping_transaction(block_number).await {
+            Ok(housekeeping_tx) => {
+                transactions.insert(0, housekeeping_tx); // Insert at the beginning
+            }
+            // Continue without housekeeping transaction
+            Err(e) => {
+                log::error!(
+                    "Failed to create housekeeping transaction for block {block_number}: {e}"
+                );
+            }
         }
 
         // Create and add block
@@ -124,6 +148,54 @@ impl ExecutionEngine {
             block_hash,
             transaction_count
         );
+    }
+
+    /// Create a transaction for expired entity removal
+    async fn create_housekeeping_transaction(
+        &self,
+        block_number: u64,
+    ) -> anyhow::Result<Arc<Transaction>> {
+        // Get entity IDs that expire at this block number
+        let expiring = self
+            .blockchain
+            .entity_db()
+            .get_entities_expiring_at_block(block_number)
+            .await;
+
+        // Get the internal account for housekeeping transactions
+        let signer = self.managed_accounts.get_internal_account();
+        let signer_address = signer.address();
+
+        // Encode the entity IDs in the data field (always create transaction even if empty)
+        let mut data = Vec::new();
+        expiring.encode(&mut data);
+
+        // Create a transaction request like in the example
+        let transaction_request = TransactionRequest {
+            from: Some(signer_address),
+            to: Some(alloy::primitives::TxKind::Call(
+                GOLEM_BASE_STORAGE_PROCESSOR_ADDRESS,
+            )),
+            value: Some(U256::ZERO),
+            gas: Some(0),
+            max_fee_per_gas: Some(0u128),
+            max_priority_fee_per_gas: Some(0u128),
+            input: data.into(),
+            nonce: Some(0),
+            chain_id: Some(self.blockchain.chain_id()),
+            ..Default::default()
+        };
+
+        // Build and sign the transaction using unified functions
+        let (signature, signed) = Transaction::sign_request(transaction_request.clone(), &signer)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to sign housekeeping transaction: {e}"))?;
+
+        let internal_transaction =
+            Transaction::from_signed(transaction_request, &signature, &signed)
+                .map_err(|e| anyhow::anyhow!("Failed to convert to internal transaction: {e}"))?;
+
+        Ok(Arc::new(internal_transaction))
     }
 
     /// Create a block with the given transactions
