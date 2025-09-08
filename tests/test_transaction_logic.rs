@@ -226,6 +226,78 @@ async fn test_transaction_no_rpc_available() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+#[serial]
+async fn test_transaction_wrong_chain_id() -> anyhow::Result<()> {
+    init_logger(false);
+
+    let mock = GolemBaseMockServer::new()
+        .with_chain_id(5555)
+        .default_start()
+        .await?;
+
+    // Create client with a different chain ID (137 for Polygon)
+    let client = GolemBaseClient::new(mock.url().clone())?.override_config(TransactionConfig {
+        chain_id: Some(137), // Wrong chain ID - mock returns 5555, but we configure 137
+        ..TransactionConfig::default()
+    });
+
+    // Attempting to create an account with wrong chain ID should fail
+    let result = client.account_generate("test123").await;
+    assert!(result.is_err());
+
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("Chain ID mismatch"));
+    log::info!(
+        "✅ Correctly rejected account creation with wrong chain ID: {}",
+        error_msg
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_transaction_chain_id_change() -> anyhow::Result<()> {
+    init_logger(false);
+
+    // Create mock server with chain ID 5555
+    let mock = GolemBaseMockServer::new()
+        .with_chain_id(5555)
+        .default_start()
+        .await?;
+
+    // Create client with correct chain ID initially
+    let client = GolemBaseClient::new(mock.url().clone())?.override_config(TransactionConfig {
+        chain_id: Some(5555), // Correct chain ID initially
+        ..TransactionConfig::default()
+    });
+
+    // Account creation should succeed with correct chain ID
+    let account = client.account_generate("test123").await?;
+    log::info!("✅ Successfully created account with correct chain ID: {account}");
+
+    // First transaction should succeed
+    let create = Create::from_string("Hello, GolemBase!", 100);
+    let result = client.create_entry(account, create).await?;
+    log::info!("✅ Successfully created first entity {result} with correct chain ID");
+
+    // Now simulate chain ID change by changing the mock server's chain ID.
+    // This could be an attack attempting to redirect traffic to a different chain.
+    mock.state.set_chain_id(9999);
+
+    // Attempting to send another transaction should fail due to chain ID mismatch
+    let create2 = Create::from_string("Hello again!", 100);
+    let result2 = client.create_entry(account, create2).await;
+    assert!(result2.is_err());
+
+    let error_msg = result2.unwrap_err().to_string();
+    assert!(error_msg.contains("Chain ID mismatch"));
+    log::info!("✅ Correctly rejected transaction after chain ID change: {error_msg}");
+
+    Ok(())
+}
+
 // - Replacment transaction underpriced and gas bumping
 // - Pending transaction stacked in mempool
 // - How to react to chain id change (network re-deploy)
