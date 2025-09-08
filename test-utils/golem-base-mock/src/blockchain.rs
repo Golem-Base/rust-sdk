@@ -462,7 +462,7 @@ impl Blockchain {
         let actual_chain_id = self.chain_id();
         if tx_chain_id != actual_chain_id {
             return Err(anyhow::anyhow!(
-                "Chain ID mismatch: transaction chain ID {tx_chain_id} does not match network chain ID {actual_chain_id}"
+                "chainId does not match node's (have={tx_chain_id}, want={actual_chain_id})"
             ));
         }
         Ok(())

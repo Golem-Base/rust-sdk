@@ -292,7 +292,7 @@ async fn test_transaction_chain_id_change() -> anyhow::Result<()> {
     assert!(result2.is_err());
 
     let error_msg = result2.unwrap_err().to_string();
-    assert!(error_msg.contains("Chain ID mismatch"));
+    assert!(error_msg.contains("chainId does not match node's "));
     log::info!("✅ Correctly rejected transaction after chain ID change: {error_msg}");
 
     Ok(())
