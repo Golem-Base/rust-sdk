@@ -38,7 +38,7 @@ jobs:
         uses: ./.github/workflows/setup
 
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo test --workspace -- --test-threads=1
 
       - name: Build docs
         run: cargo doc --no-deps --workspace
