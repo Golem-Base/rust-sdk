@@ -168,7 +168,7 @@ async fn test_transaction_wait_for_confirmations() -> anyhow::Result<()> {
 
 #[tokio::test]
 #[serial]
-async fn test_transaction_rpc_restart() -> anyhow::Result<()> {
+async fn test_transaction_rpc_pause() -> anyhow::Result<()> {
     init_logger(false);
 
     let container = GolemBaseContainer::new(Config::default().with_port(33221)).await?;
@@ -188,6 +188,41 @@ async fn test_transaction_rpc_restart() -> anyhow::Result<()> {
         .await;
     assert!(result.is_err());
     container.unpause().await.unwrap();
+
+    log::info!("Creating entity after RPC restart... It should succeed.");
+    let create = Create::from_string("Hello 3", 100);
+    let result = client.create_entry(account, create).await.unwrap();
+    log::info!("Created entity {result}...");
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_transaction_rpc_restart() -> anyhow::Result<()> {
+    init_logger(false);
+
+    let mut container =
+        GolemBaseContainer::new(Config::default().with_port(33221).preserve_volume()).await?;
+    let client = GolemBaseClient::new(container.get_url()?)?;
+    let account = create_test_account(&client).await.unwrap();
+
+    let create = Create::from_string("Hello, GolemBase!", 100);
+    let result = client.create_entry(account, create).await.unwrap();
+    log::info!("Created first entity {result}...");
+
+    // Restarting container to check if transaction logic will be able to handle the situation.
+    log::info!("Stopping container...");
+    container.stop().await.unwrap();
+
+    log::info!("Creating entity when RPC is down... It should fail.");
+    let result = client
+        .create_entry(account, Create::from_string("Hello 2", 100))
+        .await;
+    assert!(result.is_err());
+
+    log::info!("Restarting container...");
+    container.restart().await.unwrap();
 
     log::info!("Creating entity after RPC restart... It should succeed.");
     let create = Create::from_string("Hello 3", 100);

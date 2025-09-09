@@ -3,8 +3,9 @@
 //! This module provides utilities for running GolemBase in containers for testing purposes.
 
 use std::time::Duration;
+use tempfile::TempDir;
 use testcontainers::core::logs::LogFrame;
-use testcontainers::core::{ContainerPort, WaitFor};
+use testcontainers::core::{ContainerPort, ContainerRequest, Mount, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use url::Url;
@@ -19,6 +20,8 @@ pub struct Config {
     pub image: String,
     /// Container tag to use
     pub tag: String,
+    /// Temporary directory for volume preservation (None if not preserving volumes)
+    pub data_dir: Option<TempDir>,
 }
 
 impl Default for Config {
@@ -28,6 +31,7 @@ impl Default for Config {
             timeout: Duration::from_secs(120), // Increased timeout for stability
             image: "quay.io/golemnetwork/gb-op-geth".to_string(),
             tag: "latest".to_string(),
+            data_dir: None,
         }
     }
 }
@@ -43,6 +47,51 @@ impl Config {
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
+    }
+
+    /// Enable volume preservation between restarts.
+    /// This will generate a unique temporary directory and mount it to preserve:
+    /// - geth_data: Ethereum node data
+    /// - golembase_wal: GolemBase write-ahead log
+    /// - config: GolemBase configuration
+    pub fn preserve_volume(mut self) -> Self {
+        self.data_dir = Some(Self::generate_temp_data_dir());
+        self
+    }
+
+    /// Generate a unique temporary directory for GolemBase data.
+    fn generate_temp_data_dir() -> TempDir {
+        tempfile::Builder::new()
+            .prefix("golembase-data-")
+            .tempdir()
+            .expect("Failed to create temporary directory")
+    }
+
+    /// Apply volume mounts to a container request if volume preservation is enabled.
+    pub fn apply_volume_mounts(
+        &self,
+        mut container_request: ContainerRequest<GenericImage>,
+    ) -> anyhow::Result<ContainerRequest<GenericImage>> {
+        if let Some(data_dir) = &self.data_dir {
+            let dir = data_dir.path();
+            let geth_data = dir.join("geth_data");
+            let config = dir.join("config");
+
+            log::info!("Mounting data directory: {}", dir.display());
+
+            std::fs::create_dir_all(&geth_data)?;
+            std::fs::create_dir_all(&config)?;
+
+            // Mount geth_data directory as named volume
+            let geth_data_mount = Mount::bind_mount(geth_data.display().to_string(), "/geth_data");
+            container_request = container_request.with_mount(geth_data_mount);
+
+            // Mount golembase config directory as named volume
+            let config_mount =
+                Mount::bind_mount(config.display().to_string(), "/root/.config/golembase");
+            container_request = container_request.with_mount(config_mount);
+        }
+        Ok(container_request)
     }
 }
 
@@ -125,7 +174,7 @@ impl GolemBaseContainer {
         let port = config.port;
         let timeout = config.timeout;
 
-        let container_future = GenericImage::new(&config.image, &config.tag)
+        let mut container_request = GenericImage::new(&config.image, &config.tag)
             .with_wait_for(WaitFor::message_on_stderr("HTTP server started"))
             .with_mapped_port(port, ContainerPort::Tcp(port))
             .with_log_consumer(|line: &LogFrame| {
@@ -151,10 +200,16 @@ impl GolemBaseContainer {
                 "0.0.0.0",
                 "--ws.port",
                 &port.to_string(),
+                "--datadir",
+                "/geth_data",
             ])
             .with_env_var("GITHUB_ACTIONS", "true")
-            .with_env_var("CI", "true")
-            .start();
+            .with_env_var("CI", "true");
+
+        // Apply volume mounts if volume preservation is enabled
+        container_request = config.apply_volume_mounts(container_request)?;
+
+        let container_future = container_request.start();
 
         let container = match tokio::time::timeout(timeout, container_future).await {
             Ok(Ok(container)) => container,
