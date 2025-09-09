@@ -334,6 +334,15 @@ impl EthRpcServer for GolemBaseMock {
                 .unwrap_or_else(|_| "Invalid JSON".to_string())
         );
 
+        // Validate chain ID - it's required
+        let tx_chain_id = transaction
+            .chain_id
+            .ok_or_else(|| invalid_param("Missing chain ID in transaction"))?;
+
+        self.blockchain
+            .validate_chain_id(tx_chain_id)
+            .map_err(|e| invalid_param(e.to_string()))?;
+
         // Get the sender address
         let from_address = transaction
             .from
@@ -412,6 +421,11 @@ impl EthRpcServer for GolemBaseMock {
                 format!("Failed to convert transaction: {e}"),
             )
         })?;
+
+        // Validate chain ID - it's required
+        self.blockchain
+            .validate_chain_id(transaction.chain_id)
+            .map_err(|e| invalid_param(e.to_string()))?;
 
         let transaction = Arc::new(transaction);
 

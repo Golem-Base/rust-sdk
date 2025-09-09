@@ -66,6 +66,8 @@ pub struct TransactionConfig {
     pub price_bump_percent: u128,
     /// Number of confirmations to wait for when watching pending transactions.
     pub required_confirmations: u64,
+    /// Optional chain ID for validation. If None, SDK will query chain ID from chain.
+    pub chain_id: Option<u64>,
 }
 
 impl Default for TransactionConfig {
@@ -78,6 +80,7 @@ impl Default for TransactionConfig {
             max_retries: 3,
             price_bump_percent: 100,
             required_confirmations: 0,
+            chain_id: None,
         }
     }
 }
@@ -179,6 +182,21 @@ impl GolemBaseClient {
             .map_err(|e| anyhow::anyhow!("Failed to get chain ID: {}", e))
     }
 
+    /// Validates the configured chain ID against the actual chain ID.
+    /// If no chain ID is configured in TransactionConfig, this method does nothing.
+    /// Returns the actual chain ID and an error if the configured chain ID doesn't match.
+    pub async fn validate_chain_id(&self) -> anyhow::Result<u64> {
+        let actual = self.get_chain_id().await?;
+        if let Some(configured) = self.tx_config.chain_id {
+            if configured != actual {
+                return Err(anyhow::anyhow!(
+                    "Chain ID mismatch: configured {configured} but actual chain ID is {actual}"
+                ));
+            }
+        }
+        Ok(actual)
+    }
+
     /// Checks chain ID and syncs accounts with the GolemBase node.
     /// Waits until the node is synced or the timeout is reached.
     pub async fn sync_node(&self, timeout: Duration) -> anyhow::Result<()> {
@@ -195,7 +213,8 @@ impl GolemBaseClient {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
-        let chain_id = self.get_chain_id().await?;
+        // Validate chain ID if configured and get the actual chain ID
+        let chain_id = self.validate_chain_id().await?;
         self.sync_golem_base_accounts(chain_id).await?;
         Ok(())
     }
@@ -206,8 +225,9 @@ impl GolemBaseClient {
         &self,
         signer: impl TransactionSigner + 'static,
     ) -> anyhow::Result<Address> {
+        // Validate chain ID if configured and get the actual chain ID
+        let chain_id = self.validate_chain_id().await?;
         let address = signer.address();
-        let chain_id = self.get_chain_id().await?;
         let mut accounts = self.accounts.write().unwrap();
         accounts.insert(
             address,
@@ -284,7 +304,8 @@ impl GolemBaseClient {
     /// Synchronizes accounts with GolemBase, adding any new accounts to local state.
     /// Returns a vector of all available account addresses.
     pub async fn account_sync(&self) -> anyhow::Result<Vec<Address>> {
-        let chain_id = self.get_chain_id().await?;
+        // Validate chain ID if configured and get the actual chain ID
+        let chain_id = self.validate_chain_id().await?;
 
         // Sync GolemBase accounts
         self.sync_golem_base_accounts(chain_id).await?;

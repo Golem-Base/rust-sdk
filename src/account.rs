@@ -412,11 +412,30 @@ impl Account {
         self.signer.address()
     }
 
+    /// Validates the configured chain ID against the actual chain ID.
+    /// If no chain ID is configured in TransactionConfig, this method does nothing.
+    /// Returns the actual chain ID and an error if the configured chain ID doesn't match.
+    pub async fn validate_chain_id(&self) -> Result<u64> {
+        if let Some(configured_chain_id) = self.tx_config.chain_id {
+            if configured_chain_id != self.chain_id {
+                return Err(anyhow::anyhow!(
+                    "Chain ID mismatch: configured {} but actual chain ID is {}",
+                    configured_chain_id,
+                    self.chain_id
+                ));
+            }
+        }
+        Ok(self.chain_id)
+    }
+
     /// Sends a transaction with common fields filled in (from, chain_id).
     /// Queues the transaction for signing and submission, and awaits the receipt.
     pub async fn send_transaction(&self, mut tx: TransactionRequest) -> Result<TransactionReceipt> {
+        // Validate chain ID if configured and get the actual chain ID
+        let chain_id = self.validate_chain_id().await?;
+
         // Fill in common fields
-        tx = tx.with_from(self.address()).with_chain_id(self.chain_id);
+        tx = tx.with_from(self.address()).with_chain_id(chain_id);
 
         // Queue the raw transaction (unsigned)
         let channel = self.transaction_queue.queue_transaction(tx).await?;

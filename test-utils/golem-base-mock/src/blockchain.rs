@@ -456,6 +456,18 @@ impl Blockchain {
         self.config.lock().unwrap().chain_id = chain_id;
     }
 
+    /// Validate chain ID against the blockchain's chain ID
+    /// Returns an error if the provided chain ID doesn't match
+    pub fn validate_chain_id(&self, tx_chain_id: u64) -> anyhow::Result<()> {
+        let actual_chain_id = self.chain_id();
+        if tx_chain_id != actual_chain_id {
+            return Err(anyhow::anyhow!(
+                "chainId does not match node's (have={tx_chain_id}, want={actual_chain_id})"
+            ));
+        }
+        Ok(())
+    }
+
     /// Create and add genesis block
     pub async fn create_genesis_block(&self) {
         let genesis_block = Block::new(
