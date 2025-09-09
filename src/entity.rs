@@ -48,6 +48,9 @@ pub type Key = String;
 
 /// Type representing a create transaction in GolemBase.
 /// Used to define new entities, including their data, BTL, and annotations.
+///
+/// > Note: Each block represents ~2 seconds, eg. setting the BTL (blocks-to-live) to
+/// > `15u64` is equal to 30 seconds of life for the entity.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Deserialize)]
 #[rlp(trailing)]
 pub struct Create {
@@ -63,6 +66,9 @@ pub struct Create {
 
 /// Type representing an update transaction in GolemBase.
 /// Used to update existing entities, including their data, BTL, and annotations.
+///
+/// > Note: Each block represents ~2 seconds, eg. setting the BTL (blocks-to-live) to
+/// > `15u64` is equal to 30 seconds of life for the entity.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Deserialize)]
 #[rlp(trailing)]
 pub struct Update {
@@ -83,6 +89,9 @@ pub type GolemBaseDelete = Hash;
 
 /// Type representing an extend transaction in GolemBase.
 /// Used to extend the BTL of an entity by a number of blocks.
+///
+/// > Note: Each block represents ~2 seconds, eg. setting the BTL (blocks-to-live) to
+/// > `15u64` is equal to 30 seconds of life for the entity.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Deserialize)]
 pub struct Extend {
     /// The key of the entity to extend.
@@ -96,7 +105,6 @@ pub struct Extend {
 #[derive(Debug, Clone)]
 pub struct GolemBaseTransaction {
     pub encodable: EncodableGolemBaseTransaction,
-
     pub gas_limit: Option<u64>,
     pub max_priority_fee_per_gas: Option<u128>,
     pub max_fee_per_gas: Option<u128>,
@@ -117,6 +125,9 @@ pub struct EncodableGolemBaseTransaction {
 
 /// Represents an entity with data, BTL, and annotations.
 /// Used for reading entity state from the chain.
+///
+/// > Note: Each block represents ~2 seconds, eg. setting the BTL (blocks-to-live) to
+/// > `15u64` is equal to 30 seconds of life for the entity.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Serialize, Deserialize)]
 pub struct Entity {
     /// The data associated with the entity.

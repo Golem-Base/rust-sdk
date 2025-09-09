@@ -39,6 +39,29 @@ impl NonceManager {
 
 /// A client for interacting with the GolemBase system.
 /// Provides methods for account management, entity operations, balance queries, and event subscriptions.
+///
+/// # Example Usage
+///
+/// A client builder is provided for both [`GolemBaseClient`] and [`GolemBaseRoClient`],
+/// however, an instance of [`GolemBaseClient`] can be dereferenced to [`GolemBaseRoClient`] like so:
+///
+/// ```rs
+/// use golem_base_sdk::{GolemBaseClient, GolemBaseRoClient, PrivateKeySigner, Url};
+///
+/// let keypath = dirs::config_dir()
+///     .ok_or("Failed to get config directory")?
+///     .join("golembase")
+///     .join("wallet.json");
+/// let signer = PrivateKeySigner::decrypt_keystore(keypath, "password")?;
+/// let url = Url::parse("http://localhost:8545")?;
+///
+/// let client = GolemBaseClient::builder()
+///     .wallet(signer)
+///     .rpc_url(url)
+///     .build();
+///
+/// let ro_client: &GolemBaseRoClient = *client;
+/// ```
 #[derive(Clone)]
 pub struct GolemBaseRoClient {
     /// The underlying provider for making RPC calls.
@@ -63,6 +86,29 @@ impl GolemBaseRoClient {
 
 /// A client for interacting with the GolemBase system.
 /// Provides methods for account management, entity operations, balance queries, and event subscriptions.
+///
+/// # Example Usage
+///
+/// A client builder is provided for both [`GolemBaseClient`] and [`GolemBaseRoClient`],
+/// however, an instance of [`GolemBaseClient`] can be dereferenced to [`GolemBaseRoClient`] like so:
+///
+/// ```rs
+/// use golem_base_sdk::{GolemBaseClient, GolemBaseRoClient, PrivateKeySigner, Url};
+///
+/// let keypath = dirs::config_dir()
+///     .ok_or("Failed to get config directory")?
+///     .join("golembase")
+///     .join("wallet.json");
+/// let signer = PrivateKeySigner::decrypt_keystore(keypath, "password")?;
+/// let url = Url::parse("http://localhost:8545")?;
+///
+/// let client = GolemBaseClient::builder()
+///     .wallet(signer)
+///     .rpc_url(url)
+///     .build();
+///
+/// let ro_client: &GolemBaseRoClient = *client;
+/// ```
 #[derive(Clone)]
 pub struct GolemBaseClient {
     /// The underlying GolemBaseRoClient

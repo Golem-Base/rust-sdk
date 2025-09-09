@@ -102,8 +102,9 @@
         checks = self.checks.${system};
         packages = with pkgs; [
           pre-commit
-          nil
           nixpkgs-fmt
+        ] ++ lib.optionals (!pkgs.stdenv.isDarwin) [
+          nil # currently requires compiling the world
         ];
       };
 
