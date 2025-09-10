@@ -2585,6 +2585,7 @@ dependencies = [
  "golem-base-sdk",
  "humantime",
  "log",
+ "tempfile",
  "testcontainers",
  "tokio",
  "url",
