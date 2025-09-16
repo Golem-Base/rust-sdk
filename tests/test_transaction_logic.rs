@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use alloy::primitives::U256;
 use golem_base_mock::{
     controller::{CallOverride, CallResponse},
@@ -333,8 +335,67 @@ async fn test_transaction_chain_id_change() -> anyhow::Result<()> {
     Ok(())
 }
 
-// - Replacment transaction underpriced and gas bumping
-// - Pending transaction stacked in mempool
-// - How to react to chain id change (network re-deploy)
-// - Handle network re-deploy during client work (for example nonce is reset back to 0)
-// - Handle RPC downtime or inaccesibility
+#[tokio::test]
+#[serial]
+async fn test_transaction_stacked_pending() -> anyhow::Result<()> {
+    init_logger(false);
+
+    let mock = GolemBaseMockServer::create_test_mock_server().await?;
+    let client = GolemBaseClient::new(mock.url().clone())?.override_config(TransactionConfig {
+        required_confirmations: 1,
+        pending_transaction_timeout: Duration::from_secs(3),
+        transaction_receipt_timeout: Duration::from_secs(20),
+        ..TransactionConfig::default()
+    });
+    let account = create_test_account(&client).await.unwrap();
+
+    mock.transaction_pool()
+        .hold_transactions_for(Duration::from_secs(20))
+        .await;
+
+    let create = Create::from_string("E1", 100);
+    let result = client.create_entry(account, create).await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("timed out"));
+    log::info!("First entity creation timed out");
+
+    log::info!("Second entity will wait for previous pending transaction and will send a new one afterwards.");
+    let create = Create::from_string("E2", 100);
+    let result = client.create_entry(account, create).await.unwrap();
+    log::info!("Created second entity {result}...");
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_transaction_stacked_pending_for_infinity() -> anyhow::Result<()> {
+    init_logger(false);
+
+    let mock = GolemBaseMockServer::create_test_mock_server().await?;
+    let client = GolemBaseClient::new(mock.url().clone())?.override_config(TransactionConfig {
+        required_confirmations: 1,
+        pending_transaction_timeout: Duration::from_secs(3),
+        transaction_receipt_timeout: Duration::from_secs(17),
+        ..TransactionConfig::default()
+    });
+    let account = create_test_account(&client).await.unwrap();
+
+    mock.transaction_pool()
+        .hold_transactions_for(Duration::from_secs(120))
+        .await;
+
+    let create = Create::from_string("E1", 100);
+    let result = client.create_entry(account, create).await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("timed out"));
+    log::info!("First entity creation timed out");
+
+    log::info!("Second transaction should be rejected due to still pending transaction.");
+    let create = Create::from_string("E2", 100);
+    let result = client.create_entry(account, create).await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("pending"));
+
+    Ok(())
+}

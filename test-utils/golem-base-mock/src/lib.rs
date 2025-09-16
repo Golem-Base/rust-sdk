@@ -190,10 +190,12 @@ impl EthRpcServer for GolemBaseMock {
     async fn get_transaction_count(
         &self,
         address: Address,
-        _block: Option<BlockId>,
+        block: Option<BlockId>,
     ) -> RpcResult<U256> {
         let _override = self.next_override("eth_getTransactionCount")?;
         return_override!(_override, U256);
+
+        log::debug!("Getting transaction count for address {address} with block {block:?}");
 
         // Get pending transactions from the pool
         let pending_count = self.transaction_pool.get_transaction_count(&address).await;
@@ -205,8 +207,18 @@ impl EthRpcServer for GolemBaseMock {
             U256::ZERO
         };
 
-        // Total nonce = account nonce + pending transactions
-        let total_count = account_nonce + pending_count;
+        let total_count = match block {
+            Some(BlockId::Number(BlockNumberOrTag::Latest)) => account_nonce,
+            Some(BlockId::Number(BlockNumberOrTag::Safe)) => account_nonce,
+            Some(BlockId::Number(BlockNumberOrTag::Finalized)) => account_nonce,
+            Some(BlockId::Number(BlockNumberOrTag::Pending)) => account_nonce + pending_count,
+            _ => {
+                return Err(create_error(
+                    ErrorCode::InternalError,
+                    format!("Invalid block ID: {block:?}"),
+                ))
+            }
+        };
         Ok(total_count)
     }
 

@@ -181,7 +181,7 @@ where
     pub async fn get_transaction_count(&self, address: Address) -> Result<u64> {
         Ok(self
             .retry("get_transaction_count", || async {
-                self.provider.get_transaction_count(address).await
+                self.provider.get_transaction_count(address).pending().await
             })
             .await?)
     }

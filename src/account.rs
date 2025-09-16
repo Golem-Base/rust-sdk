@@ -9,7 +9,7 @@ use alloy::providers::PendingTransactionConfig;
 use alloy::rpc::types::eth::TransactionRequest;
 use alloy::rpc::types::TransactionReceipt;
 use alloy_rlp::{Decodable, Encodable};
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use bigdecimal::BigDecimal;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -53,7 +53,7 @@ impl NonceInfo {
             None => self.next_pending_nonce,
         };
 
-        let pending = self.next_pending_nonce as i64 - (self.account_nonce as i64 + 1);
+        let pending = self.pending_transactions_count();
         if pending > 0 {
             log::debug!("Still processing {pending} pending transactions");
         }
@@ -65,6 +65,13 @@ impl NonceInfo {
         }
 
         nonce
+    }
+
+    /// Returns the number of pending transactions for this account.
+    /// Returns the count of transactions that have been sent but not yet mined.
+    pub fn pending_transactions_count(&self) -> u64 {
+        let pending = self.next_pending_nonce as i64 - self.account_nonce as i64;
+        pending.max(0) as u64
     }
 }
 
@@ -195,6 +202,7 @@ impl TransactionQueue {
     }
 
     /// Returns a new TransactionRequest with bumped tip and fee cap by a percentage for replacement transactions.
+    #[allow(unused)]
     fn bump_fees(&self, request: &TransactionRequest, attempt: u32) -> TransactionRequest {
         let bump_percent = self.tx_config.price_bump_percent * attempt as u128;
         let tip = request
@@ -222,6 +230,16 @@ impl TransactionQueue {
             .from
             .ok_or_else(|| anyhow!("Transaction request missing 'from' address"))?;
 
+        // Wait for any pending transactions to be mined before proceeding.
+        // We allow only a single transaction to be pending at a time.
+        // If something goes wrong on blockchain and transaction can't pass, in most cases
+        // there is nothing we can do about it. We should avoid sending new transactions, because
+        // there will be more transactions stacked in the mempool.
+        // We shouldn't rather replace transactions, because bumping gas price introduces another
+        // layer of complexity.
+        self.wait_for_pending_transactions(from, self.tx_config.pending_transaction_timeout)
+            .await?;
+
         // We have 2 sources of nonces: our last used nonce and RPC.
         // RPC returns nonce of last pending transaction and nonce associated with the account.
         // Since we have no guarantee of sending requests to the same RPC, we can't trust fully
@@ -237,17 +255,8 @@ impl TransactionQueue {
         let mut attempt: u32 = 0;
 
         loop {
-            let _request = match attempt > 0 {
-                false => request.clone(),
-                // Bump both tip and fee cap by configured percent per attempt.
-                // Otherwise we will either get rejected due to sending exacly the same transaction
-                // (`already known` error) or we will get `replacement transaction underpriced` error
-                // if we don't bump gas prices enough.
-                true => self.bump_fees(&request, attempt),
-            };
-
             // Sign and encode the transaction.
-            let signed = self.sign_transaction(_request).await?;
+            let signed = self.sign_transaction(request.clone()).await?;
             let encoded = self.encode_transaction(&signed)?;
 
             attempt += 1;
@@ -367,6 +376,42 @@ impl TransactionQueue {
             .await
             .map_err(|e| anyhow!("Failed to queue transaction: {}", e))?;
         Ok(TransactionChannel { response_rx })
+    }
+
+    /// Checks if there are pending transactions and waits for them to be mined until timeout.
+    /// Returns an error if pending transactions won't be mined within the timeout.
+    pub async fn wait_for_pending_transactions(
+        &self,
+        address: Address,
+        timeout: Duration,
+    ) -> Result<()> {
+        let start_time = std::time::Instant::now();
+        let mut last_pending_count = 0u64;
+
+        loop {
+            let nonce_info = self.get_nonces(address).await?;
+
+            // Check if there are pending transactions using the same logic as pick_nonce
+            let pending = nonce_info.pending_transactions_count();
+            if pending == 0 {
+                log::debug!("No pending transactions found for address {address}");
+                return Ok(());
+            }
+
+            // Only log when the pending count changes
+            if pending != last_pending_count {
+                log::info!("Found {pending} pending transaction(s) (address {address}), waiting for them to be mined...");
+                last_pending_count = pending;
+            }
+
+            // Check if we've exceeded the timeout
+            if start_time.elapsed() >= timeout {
+                bail!("Timeout: {pending} transaction(s) are still pending (address {address})");
+            }
+
+            // Wait a bit before checking again
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
     }
 }
 
@@ -556,7 +601,7 @@ pub async fn get_receipt(
             }
             None => {
                 log::trace!("Getting receipt returned None for transaction: {tx_hash}");
-                tokio::time::sleep(Duration::from_millis(100)).await;
+                tokio::time::sleep(Duration::from_millis(200)).await;
                 continue;
             }
         }
