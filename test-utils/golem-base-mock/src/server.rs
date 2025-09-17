@@ -5,6 +5,7 @@ use url::Url;
 
 use crate::api::{EthRpcServer, GolemBaseRpcServer};
 use crate::controller::MockController;
+use crate::transaction_pool::TransactionPool;
 use crate::GolemBaseMock;
 
 /// GolemBase Mock Server
@@ -27,6 +28,10 @@ impl GolemBaseMockServer {
 
     pub fn controller(&self) -> &MockController {
         &self.state.controller
+    }
+
+    pub fn transaction_pool(&self) -> &TransactionPool {
+        &self.state.transaction_pool
     }
 
     pub fn with_chain_id(self, chain_id: u64) -> Self {

@@ -60,6 +60,8 @@ pub struct TransactionConfig {
     pub max_fee_per_gas: u128,
     /// Timeout for waiting for transaction receipts.
     pub transaction_receipt_timeout: Duration,
+    /// Timeout for waiting for pending transactions to be mined.
+    pub pending_transaction_timeout: Duration,
     /// Maximum number of retries for transaction receipt polling.
     pub max_retries: u32,
     /// Percentage bump for replacement transactions (e.g. 10 for 10%).
@@ -77,6 +79,7 @@ impl Default for TransactionConfig {
             max_priority_fee_per_gas: 1,
             max_fee_per_gas: 2_000_000,
             transaction_receipt_timeout: Duration::from_secs(60),
+            pending_transaction_timeout: Duration::from_secs(10),
             max_retries: 3,
             price_bump_percent: 100,
             required_confirmations: 0,
