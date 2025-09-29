@@ -1,9 +1,9 @@
-# GolemBase SDK
+# Arkiv SDK for Rust
 
 This is part of the [Golem Base](https://github.com/Golem-Base) project, which is designed as a Layer2 Network deployed on Ethereum, acting as a gateway to various Layer 3 Database Chains (DB-Chains).
 For an overview of Golem Base, **check out our [Litepaper](https://golem-base.io/wp-content/uploads/2025/03/GolemBase-Litepaper.pdf)**.
 
-This SDK allows you to use [GolemBase](https://github.com/Golem-Base) from Rust, it is available on [crates.io](https://crates.io/crates/golem-base-sdk), alng with its [generated documentation](https://docs.rs/golem-base-sdk). We provide an [example application](https://github.com/Golem-Base/rust-sdk/tree/main/demo) to showcase how you can use this SDK.
+This SDK allows you to use [Arkiv](https://github.com/Golem-Base) from Rust, it is available on [crates.io](https://crates.io/crates/golem-base-sdk), alng with its [generated documentation](https://docs.rs/golem-base-sdk). We provide an [example application](https://github.com/Golem-Base/rust-sdk/tree/main/demo) to showcase how you can use this SDK.
 
 ## Getting started
 
@@ -21,7 +21,7 @@ You will also need to fund the account, you can do it with: `golembase-demo-cli 
 ## Overview
 
 This SDK provides multiple layers for sending transactions:
-- Use `GolemBaseClient` for high-level operations such as creating, updating, or deleting entities.
+- Use `ArkivClient` for high-level operations such as creating, updating, or deleting entities.
 - Use `Account` for account-centric and lower-level transaction control.
 - Advanced users can construct and submit raw Ethereum transactions directly using the types and helpers re-exported from `Alloy`.
 

@@ -1,8 +1,8 @@
 [package]
-name = "golem-base-sdk"
+name = "arkiv-sdk"
 version = "0.4.0"
 edition = "2024"
-description = "A Rust SDK for interacting with GolemBase."
+description = "A Rust SDK for interacting with Arkiv."
 license = "GPL-3.0-or-later"
 
 [workspace]
@@ -15,7 +15,7 @@ resolver = "2"
 # seem that they plan to fix it, so this must be locked at the
 # version found in the Cargo.toml of the alloy crate to maintain
 # compatibility.
-# 
+#
 # https://github.com/alloy-rs/rlp/issues/40
 [dependencies.alloy-rlp]
 features = ["derive"]
@@ -23,9 +23,9 @@ version = "0.3.12"
 
 [dependencies]
 alloy = { version = "1.0.24", features = [
-  "provider-ws",
-  "json-rpc",
-  "signer-keystore",
+    "provider-ws",
+    "json-rpc",
+    "signer-keystore",
 ] }
 anyhow = "1.0"
 base64 = "0.22"
@@ -43,9 +43,9 @@ tracing = { version = "0.1" }
 url = "2.5"
 
 [workspace.dependencies]
-golem-base-sdk = { path = "." }
-golem-base-test-utils = { path = "test-utils" }
+arkiv-sdk = { path = "." }
+arkiv-test-utils = { path = "test-utils" }
 
 [dev-dependencies]
 serial_test = "3.2"
-golem-base-test-utils = { workspace = true }
+arkiv-test-utils = { workspace = true }

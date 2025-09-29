@@ -11,9 +11,9 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use thiserror::Error;
 
-use crate::{GolemBaseRoClient, Hash, NumericAnnotation, StringAnnotation};
+use crate::{ArkivRoClient, Hash, NumericAnnotation, StringAnnotation};
 
-/// Represents errors that can occur in the GolemBase RPC module.
+/// Represents errors that can occur in the Arkiv RPC module.
 /// Used to wrap and describe errors from RPC requests, decoding, or deserialization.
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -72,12 +72,12 @@ impl SearchResult {
     /// Returns an error if the value is not valid UTF-8.
     pub fn value_as_string(&self) -> anyhow::Result<String> {
         String::from_utf8(self.value.to_vec())
-            .map_err(|e| anyhow::anyhow!("Failed to decode search result to string: {}", e))
+            .map_err(|e| anyhow::anyhow!("Failed to decode search result to string: {e}"))
     }
 }
 
-impl GolemBaseRoClient {
-    /// Makes a JSON-RPC call to the GolemBase endpoint.
+impl ArkivRoClient {
+    /// Makes a JSON-RPC call to the Arkiv endpoint.
     /// Handles serialization, deserialization, and error mapping for RPC requests.
     pub(crate) async fn rpc_call<S: RpcSend, R: RpcRecv>(
         &self,
@@ -107,14 +107,14 @@ impl GolemBaseRoClient {
             .map_err(|e| Error::RpcRequestError(e.to_string()))
     }
 
-    /// Gets the total count of entities in GolemBase.
+    /// Gets the total count of entities in Arkiv.
     /// Returns the number of entities currently stored.
     pub async fn get_entity_count(&self) -> Result<u64, Error> {
         self.rpc_call::<(), u64>("golembase_getEntityCount", ())
             .await
     }
 
-    /// Gets the entity keys of all entities in GolemBase.
+    /// Gets the entity keys of all entities in Arkiv.
     /// Returns a vector of all entity keys.
     pub async fn get_all_entity_keys(&self) -> Result<Vec<Hash>, Error> {
         let result = self
@@ -147,18 +147,18 @@ impl GolemBaseRoClient {
         T::try_from(decoded).map_err(|e| Error::UnexpectedError(e.to_string()))
     }
 
-    /// Queries entities in GolemBase based on annotations.
+    /// Queries entities in Arkiv based on annotations.
     /// Returns a vector of `SearchResult` matching the query string.
     pub async fn query_entities(&self, query: &str) -> Result<Vec<SearchResult>, Error> {
         let results = self
             .rpc_call::<&[&str], Option<Vec<SearchResult>>>("golembase_queryEntities", &[query])
             .await?;
-        // GolemBase returns null if no entities are found. Option is used to correctly
+        // Arkiv returns null if no entities are found. Option is used to correctly
         // deserialize this value in Rust, since Vec<_> expects empty array [].
         Ok(results.unwrap_or_default())
     }
 
-    /// Queries entities in GolemBase based on annotations and returns only their keys.
+    /// Queries entities in Arkiv based on annotations and returns only their keys.
     /// Returns a vector of entity keys matching the query string.
     pub async fn query_entity_keys(&self, query: &str) -> Result<Vec<Hash>, Error> {
         let results = self.query_entities(query).await?;

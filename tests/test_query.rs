@@ -1,8 +1,8 @@
 use anyhow::Result;
 use serial_test::serial;
 
-use golem_base_sdk::entity::Create;
-use golem_base_test_utils::get_client;
+use arkiv_sdk::entity::Create;
+use arkiv_test_utils::get_client;
 
 #[tokio::test]
 #[serial]

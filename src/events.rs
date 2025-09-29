@@ -10,9 +10,9 @@ use std::convert::TryFrom;
 use std::pin::Pin;
 
 use crate::entity::Hash;
-use crate::eth::{self, GolemBaseABI};
+use crate::eth::{self, ArkivABI};
 
-/// Represents a GolemBase event parsed from the blockchain log.
+/// Represents a Arkiv event parsed from the blockchain log.
 /// Used to distinguish between entity creation, update, and removal events.
 #[derive(Debug)]
 pub enum Event {
@@ -78,9 +78,9 @@ impl TryFrom<Log> for Event {
         let transaction_hash = log
             .transaction_hash
             .ok_or_else(|| anyhow::anyhow!("Missing transaction hash"))?;
-        let parsed = GolemBaseABI::GolemBaseABIEvents::decode_log(&log.into())?;
+        let parsed = ArkivABI::ArkivABIEvents::decode_log(&log.into())?;
         match parsed.data {
-            GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityCreated(data) => {
+            ArkivABI::ArkivABIEvents::GolemBaseStorageEntityCreated(data) => {
                 Ok(Event::EntityCreated {
                     entity_id: data.entityKey.into(),
                     expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
@@ -88,7 +88,7 @@ impl TryFrom<Log> for Event {
                     transaction_hash,
                 })
             }
-            GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityUpdated(data) => {
+            ArkivABI::ArkivABIEvents::GolemBaseStorageEntityUpdated(data) => {
                 Ok(Event::EntityUpdated {
                     entity_id: data.entityKey.into(),
                     expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
@@ -96,14 +96,14 @@ impl TryFrom<Log> for Event {
                     transaction_hash,
                 })
             }
-            GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityDeleted(data) => {
+            ArkivABI::ArkivABIEvents::GolemBaseStorageEntityDeleted(data) => {
                 Ok(Event::EntityRemoved {
                     entity_id: data.entityKey.into(),
                     block_number,
                     transaction_hash,
                 })
             }
-            GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityBTLExtended(data) => {
+            ArkivABI::ArkivABIEvents::GolemBaseStorageEntityBTLExtended(data) => {
                 Ok(Event::EntityExtended {
                     entity_id: data.entityKey.into(),
                     old_expiration_block: data.oldExpirationBlock.try_into().unwrap_or_default(),
@@ -116,7 +116,7 @@ impl TryFrom<Log> for Event {
     }
 }
 
-/// Client for subscribing to and streaming GolemBase events from the blockchain.
+/// Client for subscribing to and streaming Arkiv events from the blockchain.
 /// Provides methods to connect to a node and receive event streams for entity changes.
 pub struct EventsClient {
     provider: DynProvider,
@@ -137,7 +137,7 @@ impl EventsClient {
         Ok(Self { provider })
     }
 
-    /// Listens for GolemBase events from the blockchain, starting from the latest block.
+    /// Listens for Arkiv events from the blockchain, starting from the latest block.
     /// Returns a stream of parsed `Event` items that can be processed asynchronously.
     pub async fn events_stream<'a>(
         &'a self,
@@ -146,7 +146,7 @@ impl EventsClient {
         self.create_stream_from_filter(filter).await
     }
 
-    /// Listens for GolemBase events starting from a specific block number.
+    /// Listens for Arkiv events starting from a specific block number.
     /// Returns a stream of parsed `Event` items from the given block onward.
     ///
     /// # Arguments
@@ -159,16 +159,16 @@ impl EventsClient {
         self.create_stream_from_filter(filter).await
     }
 
-    /// Creates a filter for GolemBase events, specifying the contract address and event signatures.
+    /// Creates a filter for Arkiv events, specifying the contract address and event signatures.
     fn create_event_filter(&self, block: BlockNumberOrTag) -> Filter {
         Filter::new()
             .address(eth::STORAGE_ADDRESS)
             .from_block(block)
             .events(vec![
-                GolemBaseABI::GolemBaseStorageEntityCreated::SIGNATURE,
-                GolemBaseABI::GolemBaseStorageEntityUpdated::SIGNATURE,
-                GolemBaseABI::GolemBaseStorageEntityDeleted::SIGNATURE,
-                GolemBaseABI::GolemBaseStorageEntityBTLExtended::SIGNATURE,
+                ArkivABI::GolemBaseStorageEntityCreated::SIGNATURE,
+                ArkivABI::GolemBaseStorageEntityUpdated::SIGNATURE,
+                ArkivABI::GolemBaseStorageEntityDeleted::SIGNATURE,
+                ArkivABI::GolemBaseStorageEntityBTLExtended::SIGNATURE,
             ])
     }
 

@@ -1,15 +1,13 @@
 use std::io::{self, IsTerminal, Read, Write};
 
+use arkiv_sdk::entity::{Create, EntityResult, Extend, Update};
+use arkiv_sdk::events::EventsClient;
+use arkiv_sdk::{Address, Annotation, ArkivClient, ArkivRoClient, PrivateKeySigner, Url};
 use dirs::config_dir;
 use futures::StreamExt;
-use golem_base_sdk::entity::{Create, EntityResult, Extend, Update};
-use golem_base_sdk::events::EventsClient;
-use golem_base_sdk::{
-    Address, Annotation, GolemBaseClient, GolemBaseRoClient, PrivateKeySigner, Url,
-};
 use tracing::info;
 
-async fn log_num_of_entities_owned(client: &GolemBaseRoClient, owner_address: Address) {
+async fn log_num_of_entities_owned(client: &ArkivRoClient, owner_address: Address) {
     let n = client
         .get_entities_of_owner(owner_address)
         .await
@@ -53,10 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let url = Url::parse("http://localhost:8545").unwrap();
-    let client = GolemBaseClient::builder()
-        .wallet(signer)
-        .rpc_url(url)
-        .build();
+    let client = ArkivClient::builder().wallet(signer).rpc_url(url).build();
 
     info!("Fetching owner address...");
     let owner_address = client.get_owner_address();

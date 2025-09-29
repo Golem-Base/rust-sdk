@@ -5,9 +5,9 @@ use std::future;
 use std::time::Duration;
 use url::Url;
 
-use golem_base_sdk::entity::{Create, Extend, Update};
-use golem_base_sdk::events::{Event, EventsClient};
-use golem_base_test_utils::{GOLEM_BASE_WS_URL, get_client};
+use arkiv_sdk::entity::{Create, Extend, Update};
+use arkiv_sdk::events::{Event, EventsClient};
+use arkiv_test_utils::{GOLEM_BASE_WS_URL, get_client};
 
 #[tokio::test]
 #[serial]

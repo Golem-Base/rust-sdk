@@ -7,7 +7,7 @@ pub use alloy::{
     transports::http::reqwest::Url,
 };
 
-pub use client::{GolemBaseClient, GolemBaseRoClient};
+pub use client::{ArkivClient, ArkivRoClient};
 pub use entity::{Annotation, Hash, NumericAnnotation, StringAnnotation};
 
 /// Module for Ethereum transaction-related functionality.
@@ -18,16 +18,16 @@ pub mod eth;
 /// Contains utilities for interacting with JSON-RPC endpoints, including request/response types.
 pub mod rpc;
 
-/// Module for GolemBase client functionality.
-/// Exposes the main client interface for interacting with the GolemBase network.
+/// Module for Arkiv client functionality.
+/// Exposes the main client interface for interacting with the Arkiv network.
 pub mod client;
 
-/// Module for GolemBase entities and data types.
+/// Module for Arkiv entities and data types.
 /// Defines core types such as annotations, hashes, and entity representations.
 pub mod entity;
 
 /// Module for event handling.
-/// Contains types and utilities for working with GolemBase events.
+/// Contains types and utilities for working with Arkiv events.
 pub mod events;
 
 /// Module with utility functions.

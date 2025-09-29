@@ -1,6 +1,6 @@
-use crate::GolemBaseClient;
+use crate::ArkivClient;
 use crate::entity::{
-    Create, DeleteResult, EntityResult, Extend, ExtendResult, GolemBaseTransaction, Update,
+    ArkivTransaction, Create, DeleteResult, EntityResult, Extend, ExtendResult, Update,
 };
 use crate::entity::{Hash, TransactionResult};
 
@@ -12,7 +12,7 @@ use displaydoc::Display;
 use thiserror::Error;
 
 alloy::sol! {
-    contract GolemBaseABI {
+    contract ArkivABI {
         event GolemBaseStorageEntityCreated(
             uint256 indexed entityKey,
             uint256 expirationBlock
@@ -35,7 +35,7 @@ alloy::sol! {
     }
 }
 
-/// Represents errors that can occur in the GolemBase ETH client.
+/// Represents errors that can occur in the Arkiv ETH client.
 /// Used for wrapping transaction, receipt, and log decoding errors.
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -47,24 +47,21 @@ pub enum Error {
     UnexpectedLogDataError(String),
 }
 
-/// The Ethereum address of the GolemBase storage contract.
+/// The Ethereum address of the Arkiv storage contract.
 /// All entity-related transactions are sent to this address.
 pub const STORAGE_ADDRESS: Address = address!("0x0000000000000000000000000000000060138453");
 
-impl GolemBaseClient {
-    pub async fn send_transaction(
-        &self,
-        tx: GolemBaseTransaction,
-    ) -> Result<TransactionResult, Error> {
+impl ArkivClient {
+    pub async fn send_transaction(&self, tx: ArkivTransaction) -> Result<TransactionResult, Error> {
         let receipt = self.create_raw_transaction(tx).await?;
         receipt.try_into()
     }
 
-    /// Creates one or more new entities in GolemBase and returns their results.
+    /// Creates one or more new entities in Arkiv and returns their results.
     /// Sends a transaction to the storage contract and parses the resulting logs.
     pub async fn create_entities(&self, creates: Vec<Create>) -> Result<Vec<EntityResult>, Error> {
         let result = self
-            .send_transaction(GolemBaseTransaction::builder().creates(creates).build())
+            .send_transaction(ArkivTransaction::builder().creates(creates).build())
             .await;
 
         result.and_then(|res| match res {
@@ -80,11 +77,11 @@ impl GolemBaseClient {
         })
     }
 
-    /// Updates one or more entities in GolemBase and returns their results.
+    /// Updates one or more entities in Arkiv and returns their results.
     /// Sends a transaction to the storage contract and parses the resulting logs.
     pub async fn update_entities(&self, updates: Vec<Update>) -> Result<Vec<EntityResult>, Error> {
         let result = self
-            .send_transaction(GolemBaseTransaction::builder().updates(updates).build())
+            .send_transaction(ArkivTransaction::builder().updates(updates).build())
             .await;
 
         result.and_then(|res| match res {
@@ -100,11 +97,11 @@ impl GolemBaseClient {
         })
     }
 
-    /// Deletes one or more entities in GolemBase and returns their results.
+    /// Deletes one or more entities in Arkiv and returns their results.
     /// Sends a transaction to the storage contract and parses the resulting logs.
     pub async fn delete_entities(&self, deletes: Vec<Hash>) -> Result<Vec<DeleteResult>, Error> {
         let result = self
-            .send_transaction(GolemBaseTransaction::builder().deletes(deletes).build())
+            .send_transaction(ArkivTransaction::builder().deletes(deletes).build())
             .await;
 
         result.and_then(|res| match res {
@@ -127,11 +124,7 @@ impl GolemBaseClient {
         extensions: Vec<Extend>,
     ) -> Result<Vec<ExtendResult>, Error> {
         let result = self
-            .send_transaction(
-                GolemBaseTransaction::builder()
-                    .extensions(extensions)
-                    .build(),
-            )
+            .send_transaction(ArkivTransaction::builder().extensions(extensions).build())
             .await;
 
         result.and_then(|res| match res {
@@ -170,11 +163,11 @@ impl GolemBaseClient {
         nm.next_nonce().await
     }
 
-    /// Creates and sends a raw transaction to the GolemBase storage contract.
+    /// Creates and sends a raw transaction to the Arkiv storage contract.
     /// Encodes the transaction payload and sends it to the contract address.
     pub async fn create_raw_transaction(
         &self,
-        payload: GolemBaseTransaction,
+        payload: ArkivTransaction,
     ) -> Result<TransactionReceipt, Error> {
         tracing::debug!("payload: {payload:?}");
         let encoded = payload.encoded();
