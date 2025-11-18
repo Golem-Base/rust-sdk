@@ -11,7 +11,7 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use thiserror::Error;
 
-use crate::{GolemBaseRoClient, Hash, NumericAnnotation, StringAnnotation};
+use crate::{GolemBaseRoClient, Hash, NumericAttribute, StringAttribute};
 
 /// Represents errors that can occur in the GolemBase RPC module.
 /// Used to wrap and describe errors from RPC requests, decoding, or deserialization.
@@ -37,9 +37,9 @@ pub struct EntityMetaData {
     /// The payload associated with the entity.
     pub payload: Option<String>,
     /// String annotations for the entity.
-    pub string_annotations: Vec<StringAnnotation>,
+    pub string_annotations: Vec<StringAttribute>,
     /// Numeric annotations for the entity.
-    pub numeric_annotations: Vec<NumericAnnotation>,
+    pub numeric_annotations: Vec<NumericAttribute>,
     /// The owner of the entity.
     pub owner: Address,
 }

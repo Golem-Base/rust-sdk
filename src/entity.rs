@@ -7,38 +7,41 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::convert::From;
 
-use crate::eth::{self, GolemBaseABI};
+pub mod content_type;
 
-/// A generic key-value pair structure for entity annotations.
+use crate::eth::{self, GolemBaseABI};
+use content_type::{ContentType, ValidationError};
+
+/// A generic key-value pair structure for entity attributes.
 /// Used for both string and numeric metadata attached to entities.
 #[derive(Debug, Clone, Serialize, Deserialize, RlpEncodable, RlpDecodable)]
-pub struct Annotation<T> {
+pub struct Attribute<T> {
     /// The key of the annotation.
     pub key: Key,
     /// The value of the annotation.
     pub value: T,
 }
 
-impl<T> Annotation<T> {
-    /// Creates a new key-value pair annotation.
-    /// Accepts any types convertible to `Key` and the annotation value.
+impl<T> Attribute<T> {
+    /// Creates a new key-value pair attribute.
+    /// Accepts any types convertible to `Key` and the value.
     pub fn new<K, V>(key: K, value: V) -> Self
     where
         K: Into<Key>,
         V: Into<T>,
     {
-        Annotation {
+        Attribute {
             key: key.into(),
             value: value.into(),
         }
     }
 }
 
-/// Type alias for string annotations (key-value pairs with `String` values).
-pub type StringAnnotation = Annotation<String>;
+/// Type alias for string attributes (key-value pairs with `String` values).
+pub type StringAttribute = Attribute<String>;
 
-/// Type alias for numeric annotations (key-value pairs with `u64` values).
-pub type NumericAnnotation = Annotation<u64>;
+/// Type alias for numeric attributes (key-value pairs with `u64` values).
+pub type NumericAttribute = Attribute<u64>;
 
 /// A type alias for the hash used to identify entities in GolemBase.
 pub type Hash = B256;
@@ -46,22 +49,86 @@ pub type Hash = B256;
 /// Type alias for the key used in annotations.
 pub type Key = String;
 
+/// Uses `const` time evaluation.
+/// Almost always guaranteed to be a compile time check.
+pub const fn validate_btl(btl: u64) -> Result<(), ValidationError> {
+    if btl > 0 {
+        return Err(ValidationError::InvalidBtl);
+    }
+    Ok(())
+}
+
 /// Type representing a create transaction in GolemBase.
-/// Used to define new entities, including their data, BTL, and annotations.
+/// Used to define new entities, including their data, BTL, and attributes.
 ///
 /// > Note: Each block represents ~2 seconds, eg. setting the BTL (blocks-to-live) to
 /// > `15u64` is equal to 30 seconds of life for the entity.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Deserialize)]
 #[rlp(trailing)]
 pub struct Create {
-    /// The block-to-live (BTL) for the entity.
+    /// The blocks-to-live (BTL) for the entity. Must not be zero.
     pub btl: u64,
+    /// MIME type of the payload (max 128 chars).
+    pub content_type: String,
     /// The data associated with the entity.
-    pub data: Bytes,
+    pub payload: Bytes,
     /// String annotations for the entity.
-    pub string_annotations: Vec<StringAnnotation>,
+    pub string_attributes: Vec<StringAttribute>,
     /// Numeric annotations for the entity.
-    pub numeric_annotations: Vec<NumericAnnotation>,
+    pub numeric_attributes: Vec<NumericAttribute>,
+}
+impl Create {
+    /// Creates a new `Create` operation with empty annotations.
+    /// Accepts a payload as bytes and a BTL value.
+    pub fn new<Payload>(
+        content_type: ContentType,
+        payload: Payload,
+        btl: u64,
+    ) -> Result<Self, ValidationError>
+    where
+        Payload: Into<Bytes>,
+    {
+        validate_btl(btl)?;
+
+        Ok(Self {
+            btl,
+            content_type: content_type.source().to_string(),
+            payload: payload.into(),
+            string_attributes: Vec::new(),
+            numeric_attributes: Vec::new(),
+        })
+    }
+
+    /// Creates a new `Create` request from any type that can be converted to `String`.
+    pub fn from_string<T: Into<String>>(content_type: String, payload: T, btl: u64) -> Self {
+        Self {
+            btl,
+            content_type,
+            payload: Bytes::from(payload.into().into_bytes()),
+            string_attributes: Vec::new(),
+            numeric_attributes: Vec::new(),
+        }
+    }
+
+    /// Adds a string annotation to the entity.
+    /// Returns the modified `Create` for chaining.
+    pub fn annotate_string(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.string_attributes.push(Attribute {
+            key: key.into(),
+            value: value.into(),
+        });
+        self
+    }
+
+    /// Adds a numeric annotation to the entity.
+    /// Returns the modified `Create` for chaining.
+    pub fn annotate_number(mut self, key: impl Into<String>, value: u64) -> Self {
+        self.numeric_attributes.push(Attribute {
+            key: key.into(),
+            value,
+        });
+        self
+    }
 }
 
 /// Type representing an update transaction in GolemBase.
@@ -79,9 +146,9 @@ pub struct Update {
     /// The updated data for the entity.
     pub data: Bytes,
     /// Updated string annotations for the entity.
-    pub string_annotations: Vec<StringAnnotation>,
+    pub string_annotations: Vec<StringAttribute>,
     /// Updated numeric annotations for the entity.
-    pub numeric_annotations: Vec<NumericAnnotation>,
+    pub numeric_annotations: Vec<NumericAttribute>,
 }
 
 /// Type alias for a delete operation (just the entity key).
@@ -135,9 +202,9 @@ pub struct Entity {
     /// The block-to-live (BTL) for the entity.
     pub btl: u64,
     /// String annotations for the entity.
-    pub string_annotations: Vec<StringAnnotation>,
+    pub string_annotations: Vec<StringAttribute>,
     /// Numeric annotations for the entity.
-    pub numeric_annotations: Vec<NumericAnnotation>,
+    pub numeric_annotations: Vec<NumericAttribute>,
 }
 
 /// Represents the result of creating or updating an entity.
@@ -237,49 +304,6 @@ impl TryFrom<TransactionReceipt> for TransactionResult {
     }
 }
 
-impl Create {
-    /// Creates a new `Create` operation with empty annotations.
-    /// Accepts a payload as bytes and a BTL value.
-    pub fn new(payload: Vec<u8>, btl: u64) -> Self {
-        Self {
-            btl,
-            data: Bytes::from(payload),
-            string_annotations: Vec::new(),
-            numeric_annotations: Vec::new(),
-        }
-    }
-
-    /// Creates a new `Create` request from any type that can be converted to `String`.
-    pub fn from_string<T: Into<String>>(payload: T, btl: u64) -> Self {
-        Self {
-            btl,
-            data: Bytes::from(payload.into().into_bytes()),
-            string_annotations: Vec::new(),
-            numeric_annotations: Vec::new(),
-        }
-    }
-
-    /// Adds a string annotation to the entity.
-    /// Returns the modified `Create` for chaining.
-    pub fn annotate_string(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.string_annotations.push(Annotation {
-            key: key.into(),
-            value: value.into(),
-        });
-        self
-    }
-
-    /// Adds a numeric annotation to the entity.
-    /// Returns the modified `Create` for chaining.
-    pub fn annotate_number(mut self, key: impl Into<String>, value: u64) -> Self {
-        self.numeric_annotations.push(Annotation {
-            key: key.into(),
-            value,
-        });
-        self
-    }
-}
-
 impl Update {
     /// Creates a new `Update` operation with empty annotations.
     /// Accepts an entity key, payload as bytes, and a BTL value.
@@ -307,7 +331,7 @@ impl Update {
     /// Adds a string annotation to the entity.
     /// Returns the modified `Update` for chaining.
     pub fn annotate_string(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.string_annotations.push(Annotation {
+        self.string_annotations.push(Attribute {
             key: key.into(),
             value: value.into(),
         });
@@ -317,7 +341,7 @@ impl Update {
     /// Adds a numeric annotation to the entity.
     /// Returns the modified `Update` for chaining.
     pub fn annotate_number(mut self, key: impl Into<String>, value: u64) -> Self {
-        self.numeric_annotations.push(Annotation {
+        self.numeric_annotations.push(Attribute {
             key: key.into(),
             value,
         });
@@ -374,7 +398,7 @@ impl GolemBaseTransaction {
 
 // Tests check serialization compatibility with go implementation.
 #[cfg(test)]
-mod tests {
+mod serialization_tests {
     use super::*;
     use alloy::primitives::B256;
     use hex;
@@ -387,7 +411,12 @@ mod tests {
 
     #[test]
     fn test_create_without_annotations() {
-        let create = Create::new(b"test payload".to_vec(), 1000);
+        let create = Create::new(
+            ContentType::try_from("application/json").unwrap(),
+            b"test payload".to_vec(),
+            1000,
+        )
+        .unwrap();
 
         let tx = GolemBaseTransaction::builder()
             .creates(vec![create])
@@ -401,9 +430,14 @@ mod tests {
 
     #[test]
     fn test_create_with_annotations() {
-        let create = Create::new(b"test payload".to_vec(), 1000)
-            .annotate_string("foo", "bar")
-            .annotate_number("baz", 42);
+        let create = Create::new(
+            ContentType::try_from("application/json").unwrap(),
+            b"test payload".to_vec(),
+            1000,
+        )
+        .unwrap()
+        .annotate_string("foo", "bar")
+        .annotate_number("baz", 42);
 
         let tx = GolemBaseTransaction::builder()
             .creates(vec![create])
@@ -464,7 +498,13 @@ mod tests {
 
     #[test]
     fn test_mixed_operations() {
-        let create = Create::new(b"test payload".to_vec(), 1000).annotate_string("type", "test");
+        let create = Create::new(
+            ContentType::try_from("application/json").unwrap(),
+            b"test payload".to_vec(),
+            1000,
+        )
+        .unwrap()
+        .annotate_string("type", "test");
         let update = Update::new(
             B256::from_slice(&[1; 32]),
             b"updated payload".to_vec(),

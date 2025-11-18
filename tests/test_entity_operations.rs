@@ -18,9 +18,14 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
     let test_payload = b"test payload".to_vec();
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
-    let create_tx = Create::new(test_payload.clone(), 1000)
-        .annotate_string("test_type", "Test")
-        .annotate_number("test_timestamp", timestamp);
+    let create_tx = Create::new(
+        "application/json".try_into().unwrap(),
+        test_payload.clone(),
+        1000,
+    )
+    .unwrap()
+    .annotate_string("test_type", "Test")
+    .annotate_number("test_timestamp", timestamp);
 
     let tx_results = client.create_entities(vec![create_tx]).await?;
     let entity_result = &tx_results[0];
@@ -51,9 +56,14 @@ async fn test_entity_operations() -> Result<()> {
     // Create first entity
     let payload1 = b"first entity".to_vec();
     let timestamp1 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let create1 = Create::new(payload1.clone(), 1000)
-        .annotate_string("test_type", "First")
-        .annotate_number("test_timestamp", timestamp1);
+    let create1 = Create::new(
+        "application/json".try_into().unwrap(),
+        payload1.clone(),
+        1000,
+    )
+    .unwrap()
+    .annotate_string("test_type", "First")
+    .annotate_number("test_timestamp", timestamp1);
 
     let tx1_results = client.create_entities(vec![create1]).await?;
     let entity1_result = &tx1_results[0];
@@ -62,9 +72,14 @@ async fn test_entity_operations() -> Result<()> {
     // Create second entity
     let payload2 = b"second entity".to_vec();
     let timestamp2 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let create2 = Create::new(payload2.clone(), 1000)
-        .annotate_string("test_type", "Second")
-        .annotate_number("test_timestamp", timestamp2);
+    let create2 = Create::new(
+        "application/json".try_into().unwrap(),
+        payload2.clone(),
+        1000,
+    )
+    .unwrap()
+    .annotate_string("test_type", "Second")
+    .annotate_number("test_timestamp", timestamp2);
 
     let tx2_results = client.create_entities(vec![create2]).await?;
     let entity2_result = &tx2_results[0];
@@ -154,7 +169,8 @@ async fn test_concurrent_entity_creation_batch() -> Result<()> {
             let mut creates = Vec::with_capacity(ENTITIES_PER_TASK);
             for i in 0..ENTITIES_PER_TASK {
                 let payload = format!("task1_entity_{i}").into_bytes();
-                let entry = Create::new(payload, 300)
+                let entry = Create::new("application/json".try_into().unwrap(), payload, 300)
+                    .unwrap()
                     .annotate_string("task", "task1")
                     .annotate_number("index", i as u64);
                 creates.push(entry);
@@ -170,7 +186,8 @@ async fn test_concurrent_entity_creation_batch() -> Result<()> {
             let mut creates = Vec::with_capacity(ENTITIES_PER_TASK);
             for i in 0..ENTITIES_PER_TASK {
                 let payload = format!("task2_entity_{i}").into_bytes();
-                let entry = Create::new(payload, 300)
+                let entry = Create::new("application/json".try_into().unwrap(), payload, 300)
+                    .unwrap()
                     .annotate_string("task", "task2")
                     .annotate_number("index", i as u64);
                 creates.push(entry);

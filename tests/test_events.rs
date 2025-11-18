@@ -22,7 +22,7 @@ async fn test_event_listening() -> Result<()> {
     let mut event_stream = events.events_stream().await.unwrap();
 
     // Create a test entity
-    let create = Create::from_string("test payload", 30);
+    let create = Create::from_string("application/json".to_string(), "test payload", 30);
     let entities = client.create_entities(vec![create]).await.unwrap();
     let entity = entities[0].clone();
 

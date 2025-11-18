@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serial_test::serial;
 
-use golem_base_sdk::entity::Create;
+use golem_base_sdk::entity::{Create, content_type::ContentType};
 use golem_base_test_utils::get_client;
 
 #[tokio::test]
@@ -11,15 +11,30 @@ async fn test_query_entities() -> Result<()> {
 
     if let [entity1, entity2, entity3] = &client
         .create_entities(vec![
-            Create::new(b"test1".to_vec(), 1000)
-                .annotate_string("type", "test")
-                .annotate_string("category", "alpha"),
-            Create::new(b"test2".to_vec(), 1000)
-                .annotate_string("type", "test")
-                .annotate_string("category", "beta"),
-            Create::new(b"test3".to_vec(), 1000)
-                .annotate_string("type", "demo")
-                .annotate_string("category", "alpha"),
+            Create::new(
+                ContentType::try_from("application/json").unwrap(),
+                b"test1".to_vec(),
+                1000,
+            )
+            .unwrap()
+            .annotate_string("type", "test")
+            .annotate_string("category", "alpha"),
+            Create::new(
+                ContentType::try_from("application/json").unwrap(),
+                b"test2".to_vec(),
+                1000,
+            )
+            .unwrap()
+            .annotate_string("type", "test")
+            .annotate_string("category", "beta"),
+            Create::new(
+                ContentType::try_from("application/json").unwrap(),
+                b"test3".to_vec(),
+                1000,
+            )
+            .unwrap()
+            .annotate_string("type", "demo")
+            .annotate_string("category", "alpha"),
         ])
         .await?[..]
     {
