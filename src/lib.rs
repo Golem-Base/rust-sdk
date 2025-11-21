@@ -8,7 +8,7 @@ pub use alloy::{
 };
 
 pub use client::{GolemBaseClient, GolemBaseRoClient};
-pub use entity::{Attribute, Hash, NumericAttribute, StringAttribute};
+pub use entity::{Attribute, EntityKey, NumericAttribute, StringAttribute};
 
 /// Module for Ethereum transaction-related functionality.
 /// Provides helpers for constructing, signing, and sending Ethereum transactions.

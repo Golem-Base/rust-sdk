@@ -2,7 +2,7 @@ use crate::GolemBaseClient;
 use crate::entity::{
     Create, DeleteResult, EntityResult, Extend, ExtendResult, GolemBaseTransaction, Update,
 };
-use crate::entity::{Hash, TransactionResult};
+use crate::entity::{EntityKey, TransactionResult};
 
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, TxKind, address};
@@ -102,7 +102,10 @@ impl GolemBaseClient {
 
     /// Deletes one or more entities in GolemBase and returns their results.
     /// Sends a transaction to the storage contract and parses the resulting logs.
-    pub async fn delete_entities(&self, deletes: Vec<Hash>) -> Result<Vec<DeleteResult>, Error> {
+    pub async fn delete_entities(
+        &self,
+        deletes: Vec<EntityKey>,
+    ) -> Result<Vec<DeleteResult>, Error> {
         let result = self
             .send_transaction(GolemBaseTransaction::builder().deletes(deletes).build())
             .await;

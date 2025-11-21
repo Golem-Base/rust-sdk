@@ -11,7 +11,8 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use thiserror::Error;
 
-use crate::{GolemBaseRoClient, Hash, NumericAttribute, StringAttribute};
+use crate::entity::types::attribute::Attribute;
+use crate::{EntityKey, GolemBaseRoClient, NumericAttribute, StringAttribute};
 
 /// Represents errors that can occur in the GolemBase RPC module.
 /// Used to wrap and describe errors from RPC requests, decoding, or deserialization.
@@ -37,9 +38,9 @@ pub struct EntityMetaData {
     /// The payload associated with the entity.
     pub payload: Option<String>,
     /// String annotations for the entity.
-    pub string_annotations: Vec<StringAttribute>,
+    pub string_annotations: Vec<Attribute<String>>,
     /// Numeric annotations for the entity.
-    pub numeric_annotations: Vec<NumericAttribute>,
+    pub numeric_annotations: Vec<Attribute<u64>>,
     /// The owner of the entity.
     pub owner: Address,
 }
@@ -49,7 +50,7 @@ pub struct EntityMetaData {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SearchResult {
     #[serde(rename = "key")]
-    pub key: Hash,
+    pub key: EntityKey,
     #[serde(rename = "value", deserialize_with = "deserialize_base64")]
     pub value: Bytes,
 }
@@ -116,30 +117,33 @@ impl GolemBaseRoClient {
 
     /// Gets the entity keys of all entities in GolemBase.
     /// Returns a vector of all entity keys.
-    pub async fn get_all_entity_keys(&self) -> Result<Vec<Hash>, Error> {
+    pub async fn get_all_entity_keys(&self) -> Result<Vec<EntityKey>, Error> {
         let result = self
-            .rpc_call::<(), Option<Vec<Hash>>>("golembase_getAllEntityKeys", ())
+            .rpc_call::<(), Option<Vec<EntityKey>>>("golembase_getAllEntityKeys", ())
             .await?;
         Ok(result.unwrap_or_default())
     }
 
     /// Gets the entity keys of all entities owned by the given address.
     /// Returns a vector of entity keys for the specified owner.
-    pub async fn get_entities_of_owner(&self, address: Address) -> Result<Vec<Hash>, Error> {
+    pub async fn get_entities_of_owner(&self, address: Address) -> Result<Vec<EntityKey>, Error> {
         let result = self
-            .rpc_call::<&[Address], Option<Vec<Hash>>>("golembase_getEntitiesOfOwner", &[address])
+            .rpc_call::<&[Address], Option<Vec<EntityKey>>>(
+                "golembase_getEntitiesOfOwner",
+                &[address],
+            )
             .await?;
         Ok(result.unwrap_or_default())
     }
 
     /// Gets the storage value associated with the given entity key.
     /// Decodes the value from base64 and attempts to convert it to the requested type.
-    pub async fn get_storage_value<T: TryFrom<Vec<u8>>>(&self, key: Hash) -> Result<T, Error>
+    pub async fn get_storage_value<T: TryFrom<Vec<u8>>>(&self, key: EntityKey) -> Result<T, Error>
     where
         <T as TryFrom<Vec<u8>>>::Error: std::fmt::Display,
     {
         let encoded_value = self
-            .rpc_call::<&[Hash], String>("golembase_getStorageValue", &[key])
+            .rpc_call::<&[EntityKey], String>("golembase_getStorageValue", &[key])
             .await?;
         let decoded = BASE64
             .decode(&encoded_value)
@@ -160,7 +164,7 @@ impl GolemBaseRoClient {
 
     /// Queries entities in GolemBase based on annotations and returns only their keys.
     /// Returns a vector of entity keys matching the query string.
-    pub async fn query_entity_keys(&self, query: &str) -> Result<Vec<Hash>, Error> {
+    pub async fn query_entity_keys(&self, query: &str) -> Result<Vec<EntityKey>, Error> {
         let results = self.query_entities(query).await?;
         Ok(results.into_iter().map(|result| result.key).collect())
     }
@@ -170,9 +174,9 @@ impl GolemBaseRoClient {
     pub async fn get_entities_to_expire_at_block(
         &self,
         block_number: u64,
-    ) -> Result<Vec<Hash>, Error> {
+    ) -> Result<Vec<EntityKey>, Error> {
         let result = self
-            .rpc_call::<u64, Option<Vec<Hash>>>(
+            .rpc_call::<u64, Option<Vec<EntityKey>>>(
                 "golembase_getEntitiesToExpireAtBlock",
                 block_number,
             )
@@ -182,8 +186,8 @@ impl GolemBaseRoClient {
 
     /// Gets metadata for a specific entity.
     /// Returns an `EntityMetaData` struct for the given entity key.
-    pub async fn get_entity_metadata(&self, key: Hash) -> Result<EntityMetaData, Error> {
-        self.rpc_call::<&[Hash], EntityMetaData>("golembase_getEntityMetaData", &[key])
+    pub async fn get_entity_metadata(&self, key: EntityKey) -> Result<EntityMetaData, Error> {
+        self.rpc_call::<&[EntityKey], EntityMetaData>("golembase_getEntityMetaData", &[key])
             .await
     }
 }

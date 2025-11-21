@@ -9,7 +9,7 @@ use futures::{Stream, StreamExt};
 use std::convert::TryFrom;
 use std::pin::Pin;
 
-use crate::entity::Hash;
+use crate::entity::EntityKey;
 use crate::eth::{self, GolemBaseABI};
 
 /// Represents a GolemBase event parsed from the blockchain log.
@@ -20,41 +20,41 @@ pub enum Event {
     /// Contains the entity ID, block number, and transaction hash.
     EntityCreated {
         /// The ID of the created entity
-        entity_id: Hash,
+        entity_id: EntityKey,
         /// The expiration block of the entity
         expiration_block: u64,
         /// The block number where the event occurred
         block_number: u64,
         /// The transaction hash that triggered the event
-        transaction_hash: Hash,
+        transaction_hash: EntityKey,
     },
     /// Entity was updated.
     /// Contains the entity ID, block number, and transaction hash.
     EntityUpdated {
         /// The ID of the updated entity
-        entity_id: Hash,
+        entity_id: EntityKey,
         /// The expiration block of the entity
         expiration_block: u64,
         /// The block number where the event occurred
         block_number: u64,
         /// The transaction hash that triggered the event
-        transaction_hash: Hash,
+        transaction_hash: EntityKey,
     },
     /// Entity was removed.
     /// Contains the entity ID, block number, and transaction hash.
     EntityRemoved {
         /// The ID of the removed entity
-        entity_id: Hash,
+        entity_id: EntityKey,
         /// The block number where the event occurred
         block_number: u64,
         /// The transaction hash that triggered the event
-        transaction_hash: Hash,
+        transaction_hash: EntityKey,
     },
     /// Entity was extended.
     /// Contains the entity ID, block number, and transaction hash.
     EntityExtended {
         /// The ID of the removed entity
-        entity_id: Hash,
+        entity_id: EntityKey,
         /// The old expiration block
         old_expiration_block: u64,
         /// The new expiration block
@@ -62,7 +62,7 @@ pub enum Event {
         /// The block number where the event occurred
         block_number: u64,
         /// The transaction hash that triggered the event
-        transaction_hash: Hash,
+        transaction_hash: EntityKey,
     },
 }
 

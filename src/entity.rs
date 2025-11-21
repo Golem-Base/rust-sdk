@@ -1,194 +1,17 @@
 use alloy::primitives::B256;
-use alloy::rpc::types::TransactionReceipt;
-use alloy::sol_types::SolEventInterface;
-use alloy_rlp::{Encodable, RlpDecodable, RlpEncodable};
-use bon::bon;
-use bytes::Bytes;
+use alloy_rlp::{RlpDecodable, RlpEncodable};
 use serde::{Deserialize, Serialize};
-use std::convert::From;
 
-pub mod content_type;
+pub mod chown;
+pub mod create;
+pub mod delete;
+pub mod error;
+pub mod extend;
+pub mod tx;
+pub mod types;
+pub mod update;
 
-use crate::eth::{self, GolemBaseABI};
-use content_type::{ContentType, ValidationError};
-
-/// A generic key-value pair structure for entity attributes.
-/// Used for both string and numeric metadata attached to entities.
-#[derive(Debug, Clone, Serialize, Deserialize, RlpEncodable, RlpDecodable)]
-pub struct Attribute<T> {
-    /// The key of the annotation.
-    pub key: Key,
-    /// The value of the annotation.
-    pub value: T,
-}
-
-impl<T> Attribute<T> {
-    /// Creates a new key-value pair attribute.
-    /// Accepts any types convertible to `Key` and the value.
-    pub fn new<K, V>(key: K, value: V) -> Self
-    where
-        K: Into<Key>,
-        V: Into<T>,
-    {
-        Attribute {
-            key: key.into(),
-            value: value.into(),
-        }
-    }
-}
-
-/// Type alias for string attributes (key-value pairs with `String` values).
-pub type StringAttribute = Attribute<String>;
-
-/// Type alias for numeric attributes (key-value pairs with `u64` values).
-pub type NumericAttribute = Attribute<u64>;
-
-/// A type alias for the hash used to identify entities in GolemBase.
-pub type Hash = B256;
-
-/// Type alias for the key used in annotations.
-pub type Key = String;
-
-/// Uses `const` time evaluation.
-/// Almost always guaranteed to be a compile time check.
-pub const fn validate_btl(btl: u64) -> Result<(), ValidationError> {
-    if btl > 0 {
-        return Err(ValidationError::InvalidBtl);
-    }
-    Ok(())
-}
-
-/// Type representing a create transaction in GolemBase.
-/// Used to define new entities, including their data, BTL, and attributes.
-///
-/// > Note: Each block represents ~2 seconds, eg. setting the BTL (blocks-to-live) to
-/// > `15u64` is equal to 30 seconds of life for the entity.
-#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Deserialize)]
-#[rlp(trailing)]
-pub struct Create {
-    /// The blocks-to-live (BTL) for the entity. Must not be zero.
-    pub btl: u64,
-    /// MIME type of the payload (max 128 chars).
-    pub content_type: String,
-    /// The data associated with the entity.
-    pub payload: Bytes,
-    /// String annotations for the entity.
-    pub string_attributes: Vec<StringAttribute>,
-    /// Numeric annotations for the entity.
-    pub numeric_attributes: Vec<NumericAttribute>,
-}
-impl Create {
-    /// Creates a new `Create` operation with empty annotations.
-    /// Accepts a payload as bytes and a BTL value.
-    pub fn new<Payload>(
-        content_type: ContentType,
-        payload: Payload,
-        btl: u64,
-    ) -> Result<Self, ValidationError>
-    where
-        Payload: Into<Bytes>,
-    {
-        validate_btl(btl)?;
-
-        Ok(Self {
-            btl,
-            content_type: content_type.source().to_string(),
-            payload: payload.into(),
-            string_attributes: Vec::new(),
-            numeric_attributes: Vec::new(),
-        })
-    }
-
-    /// Creates a new `Create` request from any type that can be converted to `String`.
-    pub fn from_string<T: Into<String>>(content_type: String, payload: T, btl: u64) -> Self {
-        Self {
-            btl,
-            content_type,
-            payload: Bytes::from(payload.into().into_bytes()),
-            string_attributes: Vec::new(),
-            numeric_attributes: Vec::new(),
-        }
-    }
-
-    /// Adds a string annotation to the entity.
-    /// Returns the modified `Create` for chaining.
-    pub fn annotate_string(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.string_attributes.push(Attribute {
-            key: key.into(),
-            value: value.into(),
-        });
-        self
-    }
-
-    /// Adds a numeric annotation to the entity.
-    /// Returns the modified `Create` for chaining.
-    pub fn annotate_number(mut self, key: impl Into<String>, value: u64) -> Self {
-        self.numeric_attributes.push(Attribute {
-            key: key.into(),
-            value,
-        });
-        self
-    }
-}
-
-/// Type representing an update transaction in GolemBase.
-/// Used to update existing entities, including their data, BTL, and annotations.
-///
-/// > Note: Each block represents ~2 seconds, eg. setting the BTL (blocks-to-live) to
-/// > `15u64` is equal to 30 seconds of life for the entity.
-#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Deserialize)]
-#[rlp(trailing)]
-pub struct Update {
-    /// The key of the entity to update.
-    pub entity_key: Hash,
-    /// The updated block-to-live (BTL) for the entity.
-    pub btl: u64,
-    /// The updated data for the entity.
-    pub data: Bytes,
-    /// Updated string annotations for the entity.
-    pub string_annotations: Vec<StringAttribute>,
-    /// Updated numeric annotations for the entity.
-    pub numeric_annotations: Vec<NumericAttribute>,
-}
-
-/// Type alias for a delete operation (just the entity key).
-pub type GolemBaseDelete = Hash;
-
-/// Type representing an extend transaction in GolemBase.
-/// Used to extend the BTL of an entity by a number of blocks.
-///
-/// > Note: Each block represents ~2 seconds, eg. setting the BTL (blocks-to-live) to
-/// > `15u64` is equal to 30 seconds of life for the entity.
-#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Deserialize)]
-pub struct Extend {
-    /// The key of the entity to extend.
-    pub entity_key: Hash,
-    /// The number of blocks to extend the BTL by.
-    pub number_of_blocks: u64,
-}
-
-/// Type representing a transaction in GolemBase, including creates, updates, deletes, and extensions.
-/// Used as the main payload for submitting entity changes to the chain.
-#[derive(Debug, Clone)]
-pub struct GolemBaseTransaction {
-    pub encodable: EncodableGolemBaseTransaction,
-    pub gas_limit: Option<u64>,
-    pub max_priority_fee_per_gas: Option<u128>,
-    pub max_fee_per_gas: Option<u128>,
-}
-
-// A transaction that can be encoded in RLP
-#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
-pub struct EncodableGolemBaseTransaction {
-    /// A list of entities to create.
-    pub creates: Vec<Create>,
-    /// A list of entities to update.
-    pub updates: Vec<Update>,
-    /// A list of entity keys to delete.
-    pub deletes: Vec<GolemBaseDelete>,
-    /// A list of entities to extend.
-    pub extensions: Vec<Extend>,
-}
+use crate::entity::types::attribute::Attribute;
 
 /// Represents an entity with data, BTL, and annotations.
 /// Used for reading entity state from the chain.
@@ -202,199 +25,23 @@ pub struct Entity {
     /// The block-to-live (BTL) for the entity.
     pub btl: u64,
     /// String annotations for the entity.
-    pub string_annotations: Vec<StringAttribute>,
+    pub string_attributes: Vec<Attribute<String>>,
     /// Numeric annotations for the entity.
-    pub numeric_annotations: Vec<NumericAttribute>,
+    pub numeric_attributes: Vec<Attribute<u64>>,
 }
 
 /// Represents the result of creating or updating an entity.
 /// Contains the entity key and its expiration block.
-#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Serialize)]
+#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Serialize, Deserialize)]
 pub struct EntityResult {
     /// The key of the entity.
-    pub entity_key: Hash,
+    pub entity_key: EntityKey,
     /// The block number at which the entity expires.
     pub expiration_block: u64,
 }
 
-/// Represents the result of extending an entity's BTL.
-/// Contains the entity key, old expiration block, and new expiration block.
-#[derive(Debug)]
-pub struct ExtendResult {
-    /// The key of the entity.
-    pub entity_key: Hash,
-    /// The old expiration block of the entity.
-    pub old_expiration_block: u64,
-    /// The new expiration block of the entity.
-    pub new_expiration_block: u64,
-}
-
-/// Represents the result of deleting an entity.
-/// Contains the key of the deleted entity.
-#[derive(Debug)]
-pub struct DeleteResult {
-    /// The key of the entity that was deleted.
-    pub entity_key: Hash,
-}
-
-#[derive(Debug, Default)]
-pub struct TransactionResult {
-    pub creates: Vec<EntityResult>,
-    pub updates: Vec<EntityResult>,
-    pub deletes: Vec<DeleteResult>,
-    pub extensions: Vec<ExtendResult>,
-}
-
-impl TryFrom<TransactionReceipt> for TransactionResult {
-    type Error = eth::Error;
-
-    fn try_from(receipt: TransactionReceipt) -> Result<Self, Self::Error> {
-        if !receipt.status() {
-            return Err(Self::Error::TransactionReceiptError(format!(
-                "Transaction {} failed: {:?}",
-                receipt.transaction_hash, receipt
-            )));
-        }
-
-        let mut txres = TransactionResult::default();
-        receipt.logs().iter().cloned().try_for_each(|log| {
-            let log: alloy::primitives::Log = log.into();
-            let parsed = GolemBaseABI::GolemBaseABIEvents::decode_log(&log).map_err(|e| {
-                Self::Error::UnexpectedLogDataError(format!("Error decoding event log: {e}"))
-            })?;
-            match parsed.data {
-                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityCreated(data) => {
-                    txres.creates.push(EntityResult {
-                        entity_key: data.entityKey.into(),
-                        expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
-                    });
-                    Ok(())
-                }
-                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityUpdated(data) => {
-                    txres.updates.push(EntityResult {
-                        entity_key: data.entityKey.into(),
-                        expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
-                    });
-                    Ok(())
-                }
-                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityDeleted(data) => {
-                    txres.deletes.push(DeleteResult {
-                        entity_key: data.entityKey.into(),
-                    });
-                    Ok(())
-                }
-                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityBTLExtended(data) => {
-                    txres.extensions.push(ExtendResult {
-                        entity_key: data.entityKey.into(),
-                        old_expiration_block: data
-                            .oldExpirationBlock
-                            .try_into()
-                            .unwrap_or_default(),
-                        new_expiration_block: data
-                            .newExpirationBlock
-                            .try_into()
-                            .unwrap_or_default(),
-                    });
-                    Ok(())
-                }
-            }
-        })?;
-
-        Ok(txres)
-    }
-}
-
-impl Update {
-    /// Creates a new `Update` operation with empty annotations.
-    /// Accepts an entity key, payload as bytes, and a BTL value.
-    pub fn new(entity_key: B256, payload: Vec<u8>, btl: u64) -> Self {
-        Self {
-            entity_key,
-            btl,
-            data: Bytes::from(payload),
-            string_annotations: Vec::new(),
-            numeric_annotations: Vec::new(),
-        }
-    }
-
-    /// Creates a new `Update` request from any type that can be converted to `String`.
-    pub fn from_string<T: Into<String>>(entity_key: B256, payload: T, btl: u64) -> Self {
-        Self {
-            entity_key,
-            btl,
-            data: Bytes::from(payload.into().into_bytes()),
-            string_annotations: Vec::new(),
-            numeric_annotations: Vec::new(),
-        }
-    }
-
-    /// Adds a string annotation to the entity.
-    /// Returns the modified `Update` for chaining.
-    pub fn annotate_string(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.string_annotations.push(Attribute {
-            key: key.into(),
-            value: value.into(),
-        });
-        self
-    }
-
-    /// Adds a numeric annotation to the entity.
-    /// Returns the modified `Update` for chaining.
-    pub fn annotate_number(mut self, key: impl Into<String>, value: u64) -> Self {
-        self.numeric_annotations.push(Attribute {
-            key: key.into(),
-            value,
-        });
-        self
-    }
-}
-
-impl Extend {
-    /// Creates a new `Update` operation with empty annotations.
-    /// Accepts an entity key, payload as bytes, and a BTL value.
-    pub fn new(entity_key: B256, number_of_blocks: u64) -> Self {
-        Self {
-            entity_key,
-            number_of_blocks,
-        }
-    }
-}
-
-#[bon]
-impl GolemBaseTransaction {
-    #[builder]
-    pub fn builder(
-        creates: Option<Vec<Create>>,
-        updates: Option<Vec<Update>>,
-        deletes: Option<Vec<GolemBaseDelete>>,
-        extensions: Option<Vec<Extend>>,
-        gas_limit: Option<u64>,
-        max_priority_fee_per_gas: Option<u128>,
-        max_fee_per_gas: Option<u128>,
-    ) -> Self {
-        Self {
-            encodable: EncodableGolemBaseTransaction {
-                creates: creates.unwrap_or_default(),
-                updates: updates.unwrap_or_default(),
-                deletes: deletes.unwrap_or_default(),
-                extensions: extensions.unwrap_or_default(),
-            },
-            gas_limit,
-            max_priority_fee_per_gas,
-            max_fee_per_gas,
-        }
-    }
-}
-
-impl GolemBaseTransaction {
-    /// Returns the RLP-encoded bytes of the transaction.
-    /// Useful for submitting the transaction to the chain.
-    pub fn encoded(&self) -> Vec<u8> {
-        let mut encoded = Vec::new();
-        self.encodable.encode(&mut encoded);
-        encoded
-    }
-}
+/// A type alias for the hash used to identify entities in GolemBase.
+pub type EntityKey = B256;
 
 // Tests check serialization compatibility with go implementation.
 #[cfg(test)]
