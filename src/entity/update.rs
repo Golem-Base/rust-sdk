@@ -1,72 +1,101 @@
-use alloy::primitives::B256;
 use alloy_rlp::{RlpDecodable, RlpEncodable};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
-use crate::entity::{
-    EntityKey,
-    types::attribute::{Attribute, NumericAttributeValue, StringAttributeValue, WithAttribute},
+use super::types::{
+    BlocksToLive, ContentType,
+    attribute::{NumericAttribute, StringAttribute, WithAttribute},
 };
+use crate::entity::EntityKey;
 
 /// Type representing an update transaction in GolemBase.
 /// Used to update existing entities, including their data, BTL, and annotations.
-///
-/// > Note: Each block represents ~2 seconds, eg. setting the BTL (blocks-to-live) to
-/// > `15u64` is equal to 30 seconds of life for the entity.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Serialize, Deserialize)]
 #[rlp(trailing)]
 pub struct Update {
     /// The key of the entity to update.
-    pub entity_key: EntityKey,
+    entity_key: EntityKey,
     /// The updated block-to-live (BTL) for the entity.
-    pub btl: u64,
+    btl: BlocksToLive,
+    /// MIME type of the payload.
+    content_type: String,
     /// The updated data for the entity.
-    pub data: Bytes,
+    payload: Bytes,
     /// Updated string annotations for the entity.
-    pub string_attributes: Vec<Attribute<String>>,
+    string_attributes: Vec<StringAttribute>,
     /// Updated numeric annotations for the entity.
-    pub numeric_attributes: Vec<Attribute<u64>>,
+    numeric_attributes: Vec<NumericAttribute>,
 }
 
-impl Update {
-    /// Creates a new `Update` operation with empty annotations.
-    /// Accepts an entity key, payload as bytes, and a BTL value.
-    pub fn new(entity_key: B256, payload: Vec<u8>, btl: u64) -> Self {
-        Self {
-            entity_key,
-            btl,
-            data: Bytes::from(payload),
-            string_attributes: Vec::new(),
-            numeric_attributes: Vec::new(),
+#[derive(Debug, Default)]
+pub struct UpdateBuilder<Payload: Into<Bytes> + Default> {
+    entity_key: Option<EntityKey>,
+    btl: Option<BlocksToLive>,
+    content_type: Option<ContentType>,
+    payload: Option<Payload>,
+    string_attributes: Vec<StringAttribute>,
+    numeric_attributes: Vec<NumericAttribute>,
+}
+
+impl<Payload: Into<Bytes> + Default> UpdateBuilder<Payload> {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn entity_key(mut self, entity_key: EntityKey) -> Self {
+        self.entity_key = Some(entity_key);
+        self
+    }
+
+    pub fn btl(mut self, btl: BlocksToLive) -> Self {
+        self.btl = Some(btl);
+        self
+    }
+
+    pub fn content_type(mut self, content_type: ContentType) -> Self {
+        self.content_type = Some(content_type);
+        self
+    }
+
+    pub fn payload(mut self, payload: Payload) -> Self {
+        self.payload = Some(payload);
+        self
+    }
+
+    pub fn build(self) -> Update {
+        Update {
+            entity_key: self.entity_key.unwrap(),
+            btl: self.btl.unwrap(),
+            content_type: self.content_type.unwrap().source().into(),
+            payload: self.payload.unwrap().into(),
+            string_attributes: self.string_attributes,
+            numeric_attributes: self.numeric_attributes,
         }
     }
 }
-impl<S> WithAttribute<StringAttributeValue<S>> for Update
-where
-    S: Into<String>,
-{
-    fn with_attribute<K: Into<String>, V: Into<StringAttributeValue<S>>>(
-        mut self,
-        key: K,
-        value: V,
-    ) -> Self {
-        self.string_attributes.push(Attribute {
-            key: key.into(),
-            value: value.into().0.into(),
-        });
+impl<Payload: Into<Bytes> + Default> WithAttribute<StringAttribute> for UpdateBuilder<Payload> {
+    fn with_attribute(mut self, attribute: StringAttribute) -> Self {
+        self.string_attributes.push(attribute);
+        self
+    }
+    fn extend_attributes<I>(mut self, iter: I) -> Self
+    where
+        I: IntoIterator<Item = StringAttribute>,
+    {
+        self.string_attributes.extend(iter);
         self
     }
 }
-impl WithAttribute<NumericAttributeValue> for Update {
-    fn with_attribute<K: Into<String>, V: Into<NumericAttributeValue>>(
-        mut self,
-        key: K,
-        value: V,
-    ) -> Self {
-        self.numeric_attributes.push(Attribute {
-            key: key.into(),
-            value: value.into().0,
-        });
+impl<Payload: Into<Bytes> + Default> WithAttribute<NumericAttribute> for UpdateBuilder<Payload> {
+    fn with_attribute(mut self, attribute: NumericAttribute) -> Self {
+        self.numeric_attributes.push(attribute);
+        self
+    }
+    fn extend_attributes<I>(mut self, iter: I) -> Self
+    where
+        I: IntoIterator<Item = NumericAttribute>,
+    {
+        self.numeric_attributes.extend(iter);
         self
     }
 }

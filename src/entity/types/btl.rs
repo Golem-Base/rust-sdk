@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 /// # Panics
 ///
 /// Panics if the value is `u64::MIN`, i.e. it must be non-zero.
-#[derive(Debug, Clone, RlpEncodable, RlpDecodable, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, RlpEncodable, RlpDecodable, Serialize, Deserialize)]
 pub struct BlocksToLive(u64);
 impl BlocksToLive {
     pub const fn new(btl: u64) -> Self {
@@ -33,6 +33,11 @@ impl Default for BlocksToLive {
     // a zero value, and anything less would be too short to be sane.
     fn default() -> Self {
         Self::new(15u64)
+    }
+}
+impl From<u64> for BlocksToLive {
+    fn from(value: u64) -> Self {
+        Self(value)
     }
 }
 

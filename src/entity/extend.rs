@@ -1,12 +1,15 @@
+use alloy::primitives::B256;
+use alloy_rlp::{RlpDecodable, RlpEncodable};
+use serde::{Deserialize, Serialize};
+
+use crate::entity::EntityKey;
+
 /// Type representing an extend transaction in GolemBase.
 /// Used to extend the BTL of an entity by a number of blocks.
-///
-/// > Note: Each block represents ~2 seconds, eg. setting the BTL (blocks-to-live) to
-/// > `15u64` is equal to 30 seconds of life for the entity.
-#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Deserialize)]
+#[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Serialize, Deserialize)]
 pub struct Extend {
     /// The key of the entity to extend.
-    pub entity_key: Hash,
+    pub entity_key: EntityKey,
     /// The number of blocks to extend the BTL by.
     pub number_of_blocks: u64,
 }
@@ -27,7 +30,7 @@ impl Extend {
 #[derive(Debug)]
 pub struct ExtendResult {
     /// The key of the entity.
-    pub entity_key: Hash,
+    pub entity_key: EntityKey,
     /// The old expiration block of the entity.
     pub old_expiration_block: u64,
     /// The new expiration block of the entity.

@@ -1,6 +1,7 @@
 use alloy::primitives::B256;
 use alloy_rlp::{RlpDecodable, RlpEncodable};
 use serde::{Deserialize, Serialize};
+use types::attribute::{NumericAttribute, StringAttribute};
 
 pub mod chown;
 pub mod create;
@@ -11,23 +12,20 @@ pub mod tx;
 pub mod types;
 pub mod update;
 
-use crate::entity::types::attribute::Attribute;
+use crate::entity::types::btl::BlocksToLive;
 
 /// Represents an entity with data, BTL, and annotations.
 /// Used for reading entity state from the chain.
-///
-/// > Note: Each block represents ~2 seconds, eg. setting the BTL (blocks-to-live) to
-/// > `15u64` is equal to 30 seconds of life for the entity.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Serialize, Deserialize)]
 pub struct Entity {
     /// The data associated with the entity.
     pub data: String,
     /// The block-to-live (BTL) for the entity.
-    pub btl: u64,
+    pub btl: BlocksToLive,
     /// String annotations for the entity.
-    pub string_attributes: Vec<Attribute<String>>,
+    pub string_attributes: Vec<StringAttribute>,
     /// Numeric annotations for the entity.
-    pub numeric_attributes: Vec<Attribute<u64>>,
+    pub numeric_attributes: Vec<NumericAttribute>,
 }
 
 /// Represents the result of creating or updating an entity.
@@ -46,9 +44,13 @@ pub type EntityKey = B256;
 // Tests check serialization compatibility with go implementation.
 #[cfg(test)]
 mod serialization_tests {
-    use super::*;
     use alloy::primitives::B256;
     use hex;
+
+    use crate::entity::{
+        create::Create, extend::Extend, tx::GolemBaseTransaction, types::attribute::WithAttribute,
+        update::Update,
+    };
 
     #[test]
     fn test_empty_transaction() {
@@ -58,10 +60,10 @@ mod serialization_tests {
 
     #[test]
     fn test_create_without_annotations() {
-        let create = Create::new(
-            ContentType::try_from("application/json").unwrap(),
+        let create = crate::entity::create::Create::new(
+            "application/json".try_into().unwrap(),
             b"test payload".to_vec(),
-            1000,
+            1000.into(),
         )
         .unwrap();
 
@@ -77,14 +79,14 @@ mod serialization_tests {
 
     #[test]
     fn test_create_with_annotations() {
-        let create = Create::new(
-            ContentType::try_from("application/json").unwrap(),
+        let create = crate::entity::create::Create::new(
+            "application/json".try_into().unwrap(),
             b"test payload".to_vec(),
-            1000,
+            1000.into(),
         )
         .unwrap()
-        .annotate_string("foo", "bar")
-        .annotate_number("baz", 42);
+        .with_attribute("foo", "bar")
+        .with_attribute("baz", 42);
 
         let tx = GolemBaseTransaction::builder()
             .creates(vec![create])
@@ -98,13 +100,13 @@ mod serialization_tests {
 
     #[test]
     fn test_update_with_annotations() {
-        let update = Update::new(
+        let update = crate::entity::update::Update::new(
             B256::from_slice(&[1; 32]),
             b"updated payload".to_vec(),
             2000,
         )
-        .annotate_string("status", "active")
-        .annotate_number("version", 2);
+        .with_attribute("status", "active")
+        .with_attribute("version", 2);
 
         let tx = GolemBaseTransaction::builder()
             .updates(vec![update])
@@ -119,7 +121,7 @@ mod serialization_tests {
     #[test]
     fn test_delete_operation() {
         let tx = GolemBaseTransaction::builder()
-            .deletes(vec![B256::from_slice(&[2; 32])])
+            .deletes(vec![B256::from_slice(&[2; 32]).into()])
             .build();
 
         assert_eq!(
@@ -146,12 +148,12 @@ mod serialization_tests {
     #[test]
     fn test_mixed_operations() {
         let create = Create::new(
-            ContentType::try_from("application/json").unwrap(),
+            "application/json".try_into().unwrap(),
             b"test payload".to_vec(),
-            1000,
+            1000.into(),
         )
         .unwrap()
-        .annotate_string("type", "test");
+        .with_attribute("type", "test");
         let update = Update::new(
             B256::from_slice(&[1; 32]),
             b"updated payload".to_vec(),
@@ -160,7 +162,7 @@ mod serialization_tests {
         let tx = GolemBaseTransaction::builder()
             .creates(vec![create])
             .updates(vec![update])
-            .deletes(vec![B256::from_slice(&[2; 32])])
+            .deletes(vec![B256::from_slice(&[2; 32]).into()])
             .extensions(vec![Extend {
                 entity_key: B256::from_slice(&[3; 32]),
                 number_of_blocks: 500,

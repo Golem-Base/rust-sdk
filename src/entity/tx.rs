@@ -2,7 +2,16 @@ use alloy::{rpc::types::TransactionReceipt, sol_types::SolEventInterface};
 use alloy_rlp::{Encodable, RlpDecodable, RlpEncodable};
 use bon::bon;
 
-use crate::eth::{self, GolemBaseABI};
+use crate::{
+    entity::{
+        EntityResult,
+        create::Create,
+        delete::{Delete, DeleteResult},
+        extend::{Extend, ExtendResult},
+        update::Update,
+    },
+    eth::{self, GolemBaseABI},
+};
 
 /// Type representing a transaction in GolemBase, including creates, updates, deletes, and extensions.
 /// Used as the main payload for submitting entity changes to the chain.
@@ -22,7 +31,7 @@ pub struct EncodableGolemBaseTransaction {
     /// A list of entities to update.
     pub updates: Vec<Update>,
     /// A list of entity keys to delete.
-    pub deletes: Vec<GolemBaseDelete>,
+    pub deletes: Vec<Delete>,
     /// A list of entities to extend.
     pub extensions: Vec<Extend>,
 }
@@ -100,7 +109,7 @@ impl GolemBaseTransaction {
     pub fn builder(
         creates: Option<Vec<Create>>,
         updates: Option<Vec<Update>>,
-        deletes: Option<Vec<GolemBaseDelete>>,
+        deletes: Option<Vec<Delete>>,
         extensions: Option<Vec<Extend>>,
         gas_limit: Option<u64>,
         max_priority_fee_per_gas: Option<u128>,

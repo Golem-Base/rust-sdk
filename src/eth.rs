@@ -1,8 +1,18 @@
-use crate::GolemBaseClient;
-use crate::entity::{
-    Create, DeleteResult, EntityResult, Extend, ExtendResult, GolemBaseTransaction, Update,
+// TODO: In general it's bad practice to expect heap allocated types like Vec when
+// you really just want an iterator or slice. We can be much more general to avoid
+// the overhead in situations when the expected type from an end user is really just
+// some B256 hash or other arbitrary string or numeric data.
+use crate::{
+    GolemBaseClient,
+    entity::{
+        EntityKey, EntityResult,
+        create::Create,
+        delete::{Delete, DeleteResult},
+        extend::{Extend, ExtendResult},
+        tx::{GolemBaseTransaction, TransactionResult},
+        update::Update,
+    },
 };
-use crate::entity::{EntityKey, TransactionResult};
 
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, TxKind, address};
@@ -107,7 +117,12 @@ impl GolemBaseClient {
         deletes: Vec<EntityKey>,
     ) -> Result<Vec<DeleteResult>, Error> {
         let result = self
-            .send_transaction(GolemBaseTransaction::builder().deletes(deletes).build())
+            .send_transaction(
+                GolemBaseTransaction::builder()
+                    // TODO: See mod comment
+                    .deletes(deletes.into_iter().map(From::from).collect::<Vec<Delete>>())
+                    .build(),
+            )
             .await;
 
         result.and_then(|res| match res {
