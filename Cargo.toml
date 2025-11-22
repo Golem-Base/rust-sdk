@@ -48,5 +48,6 @@ golem-base-sdk = { path = "." }
 golem-base-test-utils = { path = "test-utils" }
 
 [dev-dependencies]
+serde_json = "1"
 serial_test = "3.2"
 golem-base-test-utils = { workspace = true }

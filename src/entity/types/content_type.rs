@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use crate::entity::error::ValidationError;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ContentType {
     source: String,
     media_type: mime::Mime,

@@ -50,12 +50,19 @@ impl Create {
     }
 }
 
-#[derive(Debug)]
+/// Type representing a create transaction in GolemBase.
+/// Used to define new entities, including their data, BTL, and attributes.
+#[derive(Debug, Clone)]
 pub struct CreateBuilder<Payload: Into<Bytes>> {
+    /// The blocks-to-live (BTL) for the entity.
     btl: Option<BlocksToLive>,
+    /// MIME type of the payload.
     content_type: Option<ContentType>,
+    /// The data associated with the entity.
     payload: Option<Payload>,
+    /// String annotations of the entity.
     string_attributes: Vec<StringAttribute>,
+    /// Numeric annotations of the entity.
     numeric_attributes: Vec<NumericAttribute>,
 }
 
@@ -139,12 +146,17 @@ fn test_create_builder() {
     let create = CreateBuilder::default()
         .btl(1000.into())
         .content_type("application/json;mode=debug;version=1".try_into().unwrap())
-        .payload(r#"{ "key": "value" }"#)
-        // obviously not good, just pointing out that chaining maps is possible here
+        // TODO: We should probably also test other serialization formats, like bincode,
+        // if not just to have examples.
+        .payload(serde_json::json!({ "key": "value" }).to_string())
+        // Obviously not good, just pointing out that chaining maps is possible here
         // and testing that both methods compile.
         .with_attribute(MODE.map(StringAttribute::from).map_into::<String>())
         .with_attribute(VERS.map(NumericAttribute::from).map_into::<u64>())
-        .extend_attributes([StringAttribute::new("extend_str".into(), "value".into())])
+        .extend_attributes([
+            StringAttribute::new("extend_str".into(), "value".into()),
+            ("extend_str2".to_string(), "value2".to_string()).into(),
+        ])
         .extend_attributes([NumericAttribute::new("extend_num".into(), 2)])
         .build();
 

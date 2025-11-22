@@ -4,12 +4,17 @@ use serde::{Deserialize, Serialize};
 pub type StringAttribute = Attribute<String, String>;
 pub type NumericAttribute = Attribute<String, u64>;
 
-/// A trait for attaching an attribute to a transaction.
+/// A trait for attaching attributes to a transaction.
 ///
 /// Implementors provide distinct behavior depending on the wrapper type used
 /// (e.g. string attributes vs numeric attributes).
 pub trait WithAttribute<A> {
+    /// Add a single attribute to a transaction type.
     fn with_attribute(self, attribute: A) -> Self;
+
+    /// Extend attributes from any type which can produce an iterator.
+    /// This can be particularly useful for avoiding duplicate keys
+    /// using `std::collections::HashMap`.
     fn extend_attributes<I>(self, iter: I) -> Self
     where
         I: IntoIterator<Item = A>;
