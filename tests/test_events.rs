@@ -5,7 +5,7 @@ use std::future;
 use std::time::Duration;
 use url::Url;
 
-use golem_base_sdk::entity::{Create, Extend, Update};
+use golem_base_sdk::entity::{create::Create, extend::Extend, update::Update};
 use golem_base_sdk::events::{Event, EventsClient};
 use golem_base_test_utils::{GOLEM_BASE_WS_URL, get_client};
 
@@ -22,7 +22,12 @@ async fn test_event_listening() -> Result<()> {
     let mut event_stream = events.events_stream().await.unwrap();
 
     // Create a test entity
-    let create = Create::from_string("application/json".to_string(), "test payload", 30);
+    let create = Create::builder()
+        .content_type("plain/text")
+        .payload("test payload")
+        .btl(30)
+        .build()
+        .unwrap();
     let entities = client.create_entities(vec![create]).await.unwrap();
     let entity = entities[0].clone();
 
@@ -53,7 +58,13 @@ async fn test_event_listening() -> Result<()> {
     }
 
     // Update the entity
-    let update = Update::from_string(entity.entity_key, "test payload", 30);
+    let update = Update::builder()
+        .entity_key(entity.entity_key)
+        .content_type("plain/text")
+        .payload("test payload")
+        .btl(30)
+        .build()
+        .unwrap();
     client.update_entities(vec![update]).await.unwrap();
 
     event_stream = Box::pin(event_stream.skip_while(move |event| {

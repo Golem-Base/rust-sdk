@@ -45,77 +45,78 @@ pub type EntityKey = B256;
 #[cfg(test)]
 mod serialization_tests {
     use alloy::primitives::B256;
+    use expect_test::expect;
     use hex;
 
     use crate::entity::{
-        create::Create, extend::Extend, tx::GolemBaseTransaction, types::attribute::WithAttribute,
+        create::Create,
+        extend::Extend,
+        tx::GolemBaseTransaction,
+        types::attribute::{NumericAttribute, StringAttribute, WithAttribute},
         update::Update,
     };
+
+    pub fn expect_hex(hex: &str, expect: expect_test::Expect) {
+        expect.assert_eq(hex);
+    }
 
     #[test]
     fn test_empty_transaction() {
         let tx = GolemBaseTransaction::builder().build();
-        assert_eq!(hex::encode(tx.encoded()), "c4c0c0c0c0");
+        expect_hex(&hex::encode(tx.encoded()), expect!["c4c0c0c0c0"]);
     }
 
     #[test]
     fn test_create_without_annotations() {
-        let create = crate::entity::create::Create::new(
-            "application/json".try_into().unwrap(),
-            b"test payload".to_vec(),
-            1000.into(),
-        )
-        .unwrap();
+        let create = Create::builder()
+            .btl(1000)
+            .content_type("application/json")
+            .payload(serde_json::json!({ "test": "payload" }).to_string())
+            .build()
+            .unwrap();
 
         let tx = GolemBaseTransaction::builder()
             .creates(vec![create])
             .build();
 
-        assert_eq!(
-            hex::encode(tx.encoded()),
-            "d7d3d28203e88c74657374207061796c6f6164c0c0c0c0c0"
-        );
+        expect_hex(&hex::encode(tx.encoded()), expect!["efebeac38203e8906170706c69636174696f6e2f6a736f6e927b2274657374223a227061796c6f6164227dc0c0c0c0c0"]);
     }
 
     #[test]
     fn test_create_with_annotations() {
-        let create = crate::entity::create::Create::new(
-            "application/json".try_into().unwrap(),
-            b"test payload".to_vec(),
-            1000.into(),
-        )
-        .unwrap()
-        .with_attribute("foo", "bar")
-        .with_attribute("baz", 42);
+        let create = Create::builder()
+            .btl(1000)
+            .content_type("application/json")
+            .payload(serde_json::json!({ "test": "payload" }).to_string())
+            .with_attribute(StringAttribute::from(("foo", "bar")))
+            .with_attribute(NumericAttribute::from(("baz", 42u64)))
+            .build()
+            .unwrap();
 
         let tx = GolemBaseTransaction::builder()
             .creates(vec![create])
             .build();
 
-        assert_eq!(
-            hex::encode(tx.encoded()),
-            "e6e2e18203e88c74657374207061796c6f6164c9c883666f6f83626172c6c58362617a2ac0c0c0"
-        );
+        expect_hex(&hex::encode(tx.encoded()), expect!["f840f83bf839c38203e8906170706c69636174696f6e2f6a736f6e927b2274657374223a227061796c6f6164227dc9c883666f6f83626172c6c58362617a2ac0c0c0"]);
     }
 
     #[test]
     fn test_update_with_annotations() {
-        let update = crate::entity::update::Update::new(
-            B256::from_slice(&[1; 32]),
-            b"updated payload".to_vec(),
-            2000,
-        )
-        .with_attribute("status", "active")
-        .with_attribute("version", 2);
+        let update = Update::builder()
+            .entity_key(&[1; 32])
+            .content_type("plain/text")
+            .payload(b"updated payload".to_vec())
+            .btl(2000)
+            .with_attribute(StringAttribute::new("status".into(), "active".into()))
+            .with_attribute(NumericAttribute::new("version".into(), 2))
+            .build()
+            .unwrap();
 
         let tx = GolemBaseTransaction::builder()
             .updates(vec![update])
             .build();
 
-        assert_eq!(
-            hex::encode(tx.encoded()),
-            "f856c0f851f84fa001010101010101010101010101010101010101010101010101010101010101018207d08f75706461746564207061796c6f6164cfce8673746174757386616374697665cac98776657273696f6e02c0c0"
-        );
+        expect_hex(&hex::encode(tx.encoded()), expect!["f862c0f85df85ba00101010101010101010101010101010101010101010101010101010101010101c38207d08a706c61696e2f746578748f75706461746564207061796c6f6164cfce8673746174757386616374697665cac98776657273696f6e02c0c0"]);
     }
 
     #[test]
@@ -124,10 +125,7 @@ mod serialization_tests {
             .deletes(vec![B256::from_slice(&[2; 32]).into()])
             .build();
 
-        assert_eq!(
-            hex::encode(tx.encoded()),
-            "e5c0c0e1a00202020202020202020202020202020202020202020202020202020202020202c0"
-        );
+        expect_hex(&hex::encode(tx.encoded()), expect!["e6c0c0e2e1a00202020202020202020202020202020202020202020202020202020202020202c0"]);
     }
 
     #[test]
@@ -139,26 +137,25 @@ mod serialization_tests {
             }])
             .build();
 
-        assert_eq!(
-            hex::encode(tx.encoded()),
-            "e9c0c0c0e5e4a003030303030303030303030303030303030303030303030303030303030303038201f4"
-        );
+        expect_hex(&hex::encode(tx.encoded()), expect!["e9c0c0c0e5e4a003030303030303030303030303030303030303030303030303030303030303038201f4"]);
     }
 
     #[test]
     fn test_mixed_operations() {
-        let create = Create::new(
-            "application/json".try_into().unwrap(),
-            b"test payload".to_vec(),
-            1000.into(),
-        )
-        .unwrap()
-        .with_attribute("type", "test");
-        let update = Update::new(
-            B256::from_slice(&[1; 32]),
-            b"updated payload".to_vec(),
-            2000,
-        );
+        let create = Create::builder()
+            .content_type("plain/text")
+            .payload("test payload")
+            .btl(1000)
+            .with_attribute(StringAttribute::new("type".to_string(), "test".to_string()))
+            .build()
+            .unwrap();
+        let update = Update::builder()
+            .entity_key(&[1; 32])
+            .content_type("plain/text")
+            .payload(b"updated payload".to_vec())
+            .btl(2000)
+            .build()
+            .unwrap();
         let tx = GolemBaseTransaction::builder()
             .creates(vec![create])
             .updates(vec![update])
@@ -169,9 +166,6 @@ mod serialization_tests {
             }])
             .build();
 
-        assert_eq!(
-            hex::encode(tx.encoded()),
-            "f89fdedd8203e88c74657374207061796c6f6164cbca84747970658474657374c0f7f6a001010101010101010101010101010101010101010101010101010101010101018207d08f75706461746564207061796c6f6164c0c0e1a00202020202020202020202020202020202020202020202020202020202020202e5e4a003030303030303030303030303030303030303030303030303030303030303038201f4"
-        );
+        expect_hex(&hex::encode(tx.encoded()), expect!["f8baeae9c38203e88a706c61696e2f746578748c74657374207061796c6f6164cbca84747970658474657374c0f844f842a00101010101010101010101010101010101010101010101010101010101010101c38207d08a706c61696e2f746578748f75706461746564207061796c6f6164c0c0e2e1a00202020202020202020202020202020202020202020202020202020202020202e5e4a003030303030303030303030303030303030303030303030303030303030303038201f4"]);
     }
 }

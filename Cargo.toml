@@ -15,7 +15,7 @@ resolver = "2"
 # seem that they plan to fix it, so this must be locked at the
 # version found in the Cargo.toml of the alloy crate to maintain
 # compatibility.
-# 
+#
 # https://github.com/alloy-rs/rlp/issues/40
 [dependencies.alloy-rlp]
 features = ["derive"]
@@ -36,7 +36,6 @@ dirs = "6.0"
 displaydoc = "0.2"
 futures = "0.3"
 hex = "0.4"
-mime = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2.0"
 tokio = { version = "1.45", features = ["macros", "rt-multi-thread"] }
@@ -48,6 +47,9 @@ golem-base-sdk = { path = "." }
 golem-base-test-utils = { path = "test-utils" }
 
 [dev-dependencies]
+bincode = "2"
+expect-test = "1.5"
+mime = "0.3"
 serde_json = "1"
 serial_test = "3.2"
 golem-base-test-utils = { workspace = true }

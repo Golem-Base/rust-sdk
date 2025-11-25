@@ -1,7 +1,10 @@
 use anyhow::Result;
 use serial_test::serial;
 
-use golem_base_sdk::entity::{Create, content_type::ContentType};
+use golem_base_sdk::entity::{
+    create::Create,
+    types::attribute::{StringAttribute, WithAttribute},
+};
 use golem_base_test_utils::get_client;
 
 #[tokio::test]
@@ -11,30 +14,36 @@ async fn test_query_entities() -> Result<()> {
 
     if let [entity1, entity2, entity3] = &client
         .create_entities(vec![
-            Create::new(
-                ContentType::try_from("application/json").unwrap(),
-                b"test1".to_vec(),
-                1000,
-            )
-            .unwrap()
-            .annotate_string("type", "test")
-            .annotate_string("category", "alpha"),
-            Create::new(
-                ContentType::try_from("application/json").unwrap(),
-                b"test2".to_vec(),
-                1000,
-            )
-            .unwrap()
-            .annotate_string("type", "test")
-            .annotate_string("category", "beta"),
-            Create::new(
-                ContentType::try_from("application/json").unwrap(),
-                b"test3".to_vec(),
-                1000,
-            )
-            .unwrap()
-            .annotate_string("type", "demo")
-            .annotate_string("category", "alpha"),
+            Create::builder()
+                .content_type("plain/text")
+                .payload(b"test1".to_vec())
+                .btl(1000)
+                .extend_attributes([
+                    StringAttribute::new("type".into(), "test".into()),
+                    StringAttribute::new("category".into(), "alpha".into()),
+                ])
+                .build()
+                .unwrap(),
+            Create::builder()
+                .content_type("plain/text")
+                .payload(b"test2".to_vec())
+                .btl(1000)
+                .extend_attributes([
+                    StringAttribute::new("type".into(), "test".into()),
+                    StringAttribute::new("category".into(), "beta".into()),
+                ])
+                .build()
+                .unwrap(),
+            Create::builder()
+                .content_type("plain/text")
+                .payload(b"test3".to_vec())
+                .btl(1000)
+                .extend_attributes([
+                    StringAttribute::new("type".into(), "demo".into()),
+                    StringAttribute::new("category".into(), "alpha".into()),
+                ])
+                .build()
+                .unwrap(),
         ])
         .await?[..]
     {

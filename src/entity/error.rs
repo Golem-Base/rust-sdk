@@ -8,6 +8,15 @@ pub enum ValidationError {
     #[error("failed to convert string to MIME: {0}")]
     MimeFromStr(String),
 
-    #[error("`BTL` must be a non-zero `u64`.")]
-    InvalidBtl,
+    #[error("Missing EntityKey")]
+    MissingEntityKey,
+
+    #[error("Missing BlocksToLive")]
+    MissingBtl,
+
+    #[error("Missing ContentType")]
+    MissingContentType,
+
+    #[error("Missing Payload")]
+    MissingPayload,
 }

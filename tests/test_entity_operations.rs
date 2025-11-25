@@ -4,7 +4,13 @@ use bytes::Bytes;
 use serial_test::serial;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use golem_base_sdk::entity::{Create, Extend, GolemBaseTransaction, Update};
+use golem_base_sdk::entity::{
+    create::Create,
+    extend::Extend,
+    tx::GolemBaseTransaction,
+    types::attribute::{NumericAttribute, StringAttribute, WithAttribute},
+    update::Update,
+};
 use golem_base_test_utils::get_client;
 
 #[tokio::test]
@@ -18,14 +24,14 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
     let test_payload = b"test payload".to_vec();
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
-    let create_tx = Create::new(
-        "application/json".try_into().unwrap(),
-        test_payload.clone(),
-        1000,
-    )
-    .unwrap()
-    .annotate_string("test_type", "Test")
-    .annotate_number("test_timestamp", timestamp);
+    let create_tx = Create::builder()
+        .content_type("plain/text")
+        .payload(test_payload.clone())
+        .btl(1000)
+        .with_attribute(StringAttribute::new("test_type".into(), "Test".into()))
+        .with_attribute(NumericAttribute::new("test_timestamp".into(), timestamp))
+        .build()
+        .unwrap();
 
     let tx_results = client.create_entities(vec![create_tx]).await?;
     let entity_result = &tx_results[0];
@@ -40,8 +46,8 @@ async fn test_create_and_retrieve_entry() -> Result<()> {
     let metadata = client.get_entity_metadata(entity_result.entity_key).await?;
     tracing::info!("Retrieved metadata: {metadata:?}");
 
-    assert_eq!(metadata.string_annotations[0].value, "Test");
-    assert_eq!(metadata.numeric_annotations[0].value, timestamp);
+    assert_eq!(metadata.string_annotations[0].value(), "Test");
+    assert_eq!(metadata.numeric_annotations[0].value(), &timestamp);
     assert_eq!(metadata.owner, client.get_owner_address());
     // Entry should be created in start_block + 1.
     assert_eq!(metadata.expires_at_block.unwrap(), start_block + 1001);
@@ -56,14 +62,14 @@ async fn test_entity_operations() -> Result<()> {
     // Create first entity
     let payload1 = b"first entity".to_vec();
     let timestamp1 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let create1 = Create::new(
-        "application/json".try_into().unwrap(),
-        payload1.clone(),
-        1000,
-    )
-    .unwrap()
-    .annotate_string("test_type", "First")
-    .annotate_number("test_timestamp", timestamp1);
+    let create1 = Create::builder()
+        .content_type("plain/text")
+        .payload(payload1.clone())
+        .btl(1000)
+        .with_attribute(StringAttribute::new("test_type".into(), "First".into()))
+        .with_attribute(NumericAttribute::new("test_timestamp".into(), timestamp1))
+        .build()
+        .unwrap();
 
     let tx1_results = client.create_entities(vec![create1]).await?;
     let entity1_result = &tx1_results[0];
@@ -72,14 +78,14 @@ async fn test_entity_operations() -> Result<()> {
     // Create second entity
     let payload2 = b"second entity".to_vec();
     let timestamp2 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let create2 = Create::new(
-        "application/json".try_into().unwrap(),
-        payload2.clone(),
-        1000,
-    )
-    .unwrap()
-    .annotate_string("test_type", "Second")
-    .annotate_number("test_timestamp", timestamp2);
+    let create2 = Create::builder()
+        .content_type("plain/text")
+        .payload(payload2.clone())
+        .btl(1000)
+        .with_attribute(StringAttribute::new("test_type".into(), "Second".into()))
+        .with_attribute(NumericAttribute::new("test_timestamp".into(), timestamp2))
+        .build()
+        .unwrap();
 
     let tx2_results = client.create_entities(vec![create2]).await?;
     let entity2_result = &tx2_results[0];
@@ -108,9 +114,18 @@ async fn test_entity_operations() -> Result<()> {
     // Update first entity
     let updated_payload = b"updated first entity".to_vec();
     let updated_timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let update = Update::new(entity1_result.entity_key, updated_payload.clone(), 1000)
-        .annotate_string("test_type", "Updated")
-        .annotate_number("test_timestamp", updated_timestamp);
+    let update = Update::builder()
+        .entity_key(entity1_result.entity_key)
+        .content_type("plain/text")
+        .payload(updated_payload.clone())
+        .btl(1000)
+        .with_attribute(StringAttribute::new("test_type".into(), "Updated".into()))
+        .with_attribute(NumericAttribute::new(
+            "test_timestamp".into(),
+            updated_timestamp,
+        ))
+        .build()
+        .unwrap();
 
     client.update_entities(vec![update]).await?;
     tracing::info!("First entry updated");
@@ -169,10 +184,14 @@ async fn test_concurrent_entity_creation_batch() -> Result<()> {
             let mut creates = Vec::with_capacity(ENTITIES_PER_TASK);
             for i in 0..ENTITIES_PER_TASK {
                 let payload = format!("task1_entity_{i}").into_bytes();
-                let entry = Create::new("application/json".try_into().unwrap(), payload, 300)
-                    .unwrap()
-                    .annotate_string("task", "task1")
-                    .annotate_number("index", i as u64);
+                let entry = Create::builder()
+                    .content_type("plain/text")
+                    .payload(payload)
+                    .btl(300)
+                    .with_attribute(StringAttribute::new("task".into(), "task1".into()))
+                    .with_attribute(NumericAttribute::new("index".into(), i as u64))
+                    .build()
+                    .unwrap();
                 creates.push(entry);
             }
             let results = client.create_entities(creates).await?;
@@ -186,10 +205,14 @@ async fn test_concurrent_entity_creation_batch() -> Result<()> {
             let mut creates = Vec::with_capacity(ENTITIES_PER_TASK);
             for i in 0..ENTITIES_PER_TASK {
                 let payload = format!("task2_entity_{i}").into_bytes();
-                let entry = Create::new("application/json".try_into().unwrap(), payload, 300)
-                    .unwrap()
-                    .annotate_string("task", "task2")
-                    .annotate_number("index", i as u64);
+                let entry = Create::builder()
+                    .content_type("plain/text")
+                    .payload(payload)
+                    .btl(300)
+                    .with_attribute(StringAttribute::new("task".into(), "task2".into()))
+                    .with_attribute(NumericAttribute::new("index".into(), i as u64))
+                    .build()
+                    .unwrap();
                 creates.push(entry);
             }
             let results = client.create_entities(creates).await?;
@@ -213,8 +236,8 @@ async fn test_concurrent_entity_creation_batch() -> Result<()> {
         assert_eq!(entry_str, format!("task1_entity_{i}"));
 
         let metadata = client.get_entity_metadata(result.entity_key).await?;
-        assert_eq!(metadata.string_annotations[0].value, "task1");
-        assert_eq!(metadata.numeric_annotations[0].value, i as u64);
+        assert_eq!(metadata.string_annotations[0].value(), "task1");
+        assert_eq!(metadata.numeric_annotations[0].value(), &(i as u64));
     }
 
     for (i, result) in task2_entities.iter().enumerate() {
@@ -227,8 +250,8 @@ async fn test_concurrent_entity_creation_batch() -> Result<()> {
         assert_eq!(entry_str, format!("task2_entity_{i}"));
 
         let metadata = client.get_entity_metadata(result.entity_key).await?;
-        assert_eq!(metadata.string_annotations[0].value, "task2");
-        assert_eq!(metadata.numeric_annotations[0].value, i as u64);
+        assert_eq!(metadata.string_annotations[0].value(), "task2");
+        assert_eq!(metadata.numeric_annotations[0].value(), &(i as u64));
     }
 
     tracing::info!(

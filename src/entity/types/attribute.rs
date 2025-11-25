@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 pub type StringAttribute = Attribute<String, String>;
 pub type NumericAttribute = Attribute<String, u64>;
 
-/// A trait for attaching attributes to a transaction.
+/// A trait for attaching attributes to a transaction's operation.
 ///
 /// Implementors provide distinct behavior depending on the wrapper type used
 /// (e.g. string attributes vs numeric attributes).
@@ -45,7 +45,7 @@ impl<K: Into<String>, V> Attribute<K, V> {
         Self { key, value }
     }
 
-    /// Provides a closure over `K` and `V` in order to convert
+    /// Provides a closure over `(K, V)` in order to convert
     /// an `Attribute` to another type `T`. This can be particularly
     /// useful for mapping old attributes to new ones.
     ///
@@ -74,16 +74,13 @@ impl<K: Into<String>, V> Attribute<K, V> {
     /// use golem_base_sdk::entity::types::attribute::Attribute;
     ///
     /// const MODE: Attribute<&str, &str> = Attribute::new("mode", "debug");
-    /// let mapped = MODE.map_into::<String>();
+    /// let mapped: Attribute<String, String> = MODE.map_into::<String>();
     /// ```
     pub fn map_into<T>(self) -> Attribute<String, T>
     where
         T: From<V>,
     {
-        self.map(|(key, value)| Attribute {
-            key: key.into(),
-            value: value.into(),
-        })
+        self.map(|(key, value)| Attribute::new(key.into(), value.into()))
     }
 
     /// The key of the attribute.

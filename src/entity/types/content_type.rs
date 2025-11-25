@@ -1,41 +1,71 @@
-use std::str::FromStr;
-
+// TODO: Move validation of mime into a separate type, only validate length of `ContentType`.
+// TODO: Test with content type from hypr/reqwest, add these examples to docs
 use crate::entity::error::ValidationError;
 
+/// `ContentType` in this context refers to what is now called `MediaType`
+/// but is more commonly referred to as `MIME`. This type is intended to be
+/// as minimal as possible, only offering a layer of validation to the underlying
+/// string itself. It's done this way to avoid unnecessary dependencies, but
+/// also to allow flexibility of existing `MIME` crates, like `mime` or `mediatype`,
+/// or any type that meets the trait constraints of `S`. Validation adheres
+/// to RFC 2045 and RFC 7231 `MIME` type standards, as well as the requirements for the Arkiv network.
 #[derive(Debug, Clone)]
-pub struct ContentType {
-    source: String,
-    media_type: mime::Mime,
+pub struct ContentType<Mime: Into<String> + AsRef<str>>(pub(crate) Mime);
+
+impl TryFrom<&str> for ContentType<String> {
+    type Error = ValidationError;
+    /// Create a new `ContentType<S>` at runtime. This will return an error
+    /// if validation fails. If the content type is known at compile time, it's
+    /// recommended to use `ContentType::new_static` to get compile time validation.
+    fn try_from(source: &str) -> Result<Self, Self::Error> {
+        ContentType(source.into()).validate()
+    }
 }
-impl ContentType {
-    /// A reference to the underlying `String` parsed into a `ContentType`.
-    pub fn source(&self) -> &str {
-        &self.source
+impl TryFrom<String> for ContentType<String> {
+    type Error = ValidationError;
+    /// Create a new `ContentType<S>` at runtime. This will return an error
+    /// if validation fails. If the content type is known at compile time, it's
+    /// recommended to use `ContentType::new_static` to get compile time validation.
+    fn try_from(source: String) -> Result<Self, Self::Error> {
+        ContentType(source).validate()
     }
-
-    /// A reference to the parsed source.
-    pub fn media_type(&self) -> &mime::Mime {
-        &self.media_type
+}
+/// The blanket implementation of `TryFrom` is not enough to cover conversion of
+/// `ContentType<&str>` to `ContentType<String>` for compile time validated content types.
+impl TryFrom<ContentType<&str>> for ContentType<String> {
+    type Error = ValidationError;
+    fn try_from(value: ContentType<&str>) -> Result<Self, Self::Error> {
+        Ok(ContentType(value.0.into()))
     }
+}
 
-    /// Used for compile time validation of custom content types as `const` values.
+// TODO: Provide links to the RFCs
+impl ContentType<&'static str> {
+    /// Used for compile time validation of content types as `const` values.
+    /// For a runtime validated `ContentType` use `TryFrom`.
     ///
-    /// In 99% of cases, using `ContentType::try_from` is enough, but this method guarantees that the
-    /// source is valid prior to runtime and will not be rejected by the network. Validation adheres
-    /// to RFC 2045 and RFC 7231 MIME type standards, as well as the requirements for the Arkiv network.
+    /// # Panics
+    ///
+    /// Panics if the source is not a valid `MIME` according to RFC 2045 and 7231.
     ///
     /// # Example
     ///
     /// ```rs,ignore
     /// use golem_base_sdk::entity::ContentType;
     ///
-    /// pub const CUSTOM_CONTENT_TYPE: &str = ContentType::custom("application/vnd.example.long-format+json;version=42;mode=fast;debug=true;region=us-west-2;retry=5");
+    /// pub const CUSTOM_CONTENT_TYPE: ContentType<&str> = ContentType::new("application/vnd.example.long-format+json;version=42;mode=fast;debug=true;region=us-west-2;retry=5");
     /// ```
-    pub const fn custom(source: &'static str) -> &'static str {
+    pub const fn new(source: &'static str) -> ContentType<&'static str> {
         match Self::validate_source(source) {
-            Ok(()) => source,
+            Ok(()) => ContentType(source),
             Err(err) => panic!("{}", err.as_static_str()),
         }
+    }
+}
+impl<Mime: Into<String> + AsRef<str>> ContentType<Mime> {
+    /// A reference to the underlying source string `S`.
+    pub fn source(&self) -> &str {
+        &self.0.as_ref()
     }
 
     /// First checks the length, then iterates over the bytes of the string
@@ -173,55 +203,10 @@ impl ContentType {
     }
 
     /// Return an error if validation fails.
-    pub(crate) fn validate(self) -> Result<Self, ValidationError> {
+    fn validate(self) -> Result<Self, ValidationError> {
         Self::validate_source(self.source()).map_err(ValidationError::from)?;
 
         Ok(self)
-    }
-}
-impl TryFrom<mime::Mime> for ContentType {
-    type Error = ValidationError;
-
-    // `mime::Mime` implements `std::fmt::Display`, automatically implementing
-    // `ToString`, which is writing the original source into the `Formatter`.
-    fn try_from(media_type: mime::Mime) -> Result<Self, Self::Error> {
-        let content_type = Self {
-            source: media_type.to_string(),
-            media_type,
-        };
-
-        content_type.validate()
-    }
-}
-/// Attempts to parse the content type string as `MediaType::Mime` otherwise
-/// defaults to `MediaType::Custom`. Only returns an error if validation fails.
-impl TryFrom<&str> for ContentType {
-    type Error = ValidationError;
-
-    fn try_from(source: &str) -> Result<Self, Self::Error> {
-        let source = source.to_string();
-        let content_type = Self {
-            source: source.clone(),
-            media_type: mime::Mime::from_str(&source)
-                .map_err(|err| ValidationError::MimeFromStr(err.to_string()))?,
-        };
-
-        content_type.validate()
-    }
-}
-/// Attempts to parse the content type string as `MediaType::Mime` otherwise
-/// defaults to `MediaType::Custom`. Only returns an error if validation fails.
-impl TryFrom<String> for ContentType {
-    type Error = ValidationError;
-
-    fn try_from(source: String) -> Result<Self, Self::Error> {
-        let content_type = Self {
-            source: source.clone(),
-            media_type: mime::Mime::from_str(&source)
-                .map_err(|err| ValidationError::MimeFromStr(err.to_string()))?,
-        };
-
-        content_type.validate()
     }
 }
 
@@ -291,16 +276,20 @@ mod mime_tests {
         const CONTROL_CONTENT_TYPE: &str = r#"application/json; version="1";mode=debug"#;
 
         // compile time checks
-        const _CONTROL_COMPILE_TIME: &str = ContentType::custom(CONTROL_CONTENT_TYPE);
+        const _CONTROL_COMPILE_TIME: ContentType<&str> = ContentType::new(CONTROL_CONTENT_TYPE);
 
         // runtime checks
         assert!(ContentType::try_from(CONTROL_CONTENT_TYPE).is_ok());
+
+        // parsed mime compatibility
+        let mime: mime::Mime = "application/json".parse().unwrap();
+        assert!(ContentType::try_from(mime.to_string()).is_ok());
     }
 
     #[test]
     fn length_exceeded() {
         assert_eq!(
-            ContentType::validate_source(
+            ContentType::<&str>::validate_source(
                 "application/vnd.example.super-long-custom-format+json;version=42;mode=fast;region=us-west-2;retry=5;debug=true;feature=experimental",
             ).err(),
             Some(ContentTypeValidationError::LengthExceeded)
@@ -310,7 +299,7 @@ mod mime_tests {
     #[test]
     fn missing_type_subtype_separator() {
         assert_eq!(
-            ContentType::validate_source("applicationjson;version=1").err(),
+            ContentType::<&str>::validate_source("applicationjson;version=1").err(),
             Some(ContentTypeValidationError::MissingTypeSeparator)
         );
     }
@@ -318,7 +307,7 @@ mod mime_tests {
     #[test]
     fn missing_type() {
         assert_eq!(
-            ContentType::validate_source("/json;version=1").err(),
+            ContentType::<&str>::validate_source("/json;version=1").err(),
             Some(ContentTypeValidationError::MissingType)
         );
     }
@@ -326,7 +315,7 @@ mod mime_tests {
     #[test]
     fn invalid_type_char() {
         assert_eq!(
-            ContentType::validate_source("applic@tion/json;version=1").err(),
+            ContentType::<&str>::validate_source("applic@tion/json;version=1").err(),
             Some(ContentTypeValidationError::InvalidTypeChar)
         );
     }
@@ -334,7 +323,7 @@ mod mime_tests {
     #[test]
     fn missing_subtype() {
         assert_eq!(
-            ContentType::validate_source("application/;version=1").err(),
+            ContentType::<&str>::validate_source("application/;version=1").err(),
             Some(ContentTypeValidationError::MissingSubtype)
         );
     }
@@ -342,11 +331,11 @@ mod mime_tests {
     #[test]
     fn invalid_subtype_char() {
         assert_eq!(
-            ContentType::validate_source("application/custom@json;version=1").err(),
+            ContentType::<&str>::validate_source("application/custom@json;version=1").err(),
             Some(ContentTypeValidationError::InvalidSubtypeChar)
         );
         assert_eq!(
-            ContentType::validate_source("application/json ;version=1").err(),
+            ContentType::<&str>::validate_source("application/json ;version=1").err(),
             Some(ContentTypeValidationError::InvalidSubtypeChar)
         );
     }
@@ -354,15 +343,15 @@ mod mime_tests {
     #[test]
     fn missing_parameter_separator() {
         assert_eq!(
-            ContentType::validate_source("application/jsonversion=1").err(),
+            ContentType::<&str>::validate_source("application/jsonversion=1").err(),
             Some(ContentTypeValidationError::MissingParameterSeparator)
         );
         assert_eq!(
-            ContentType::validate_source("application/jsonversion=1").err(),
+            ContentType::<&str>::validate_source("application/jsonversion=1").err(),
             Some(ContentTypeValidationError::MissingParameterSeparator)
         );
         assert_eq!(
-            ContentType::validate_source("application/jsonversion=1;mode=debug").err(),
+            ContentType::<&str>::validate_source("application/jsonversion=1;mode=debug").err(),
             Some(ContentTypeValidationError::MissingParameterSeparator)
         );
     }
@@ -370,7 +359,7 @@ mod mime_tests {
     #[test]
     fn invalid_parameter_key() {
         assert_eq!(
-            ContentType::validate_source("application/json;versi@n=1").err(),
+            ContentType::<&str>::validate_source("application/json;versi@n=1").err(),
             Some(ContentTypeValidationError::InvalidParameterKey)
         );
     }
@@ -378,7 +367,7 @@ mod mime_tests {
     #[test]
     fn missing_parameter_assignment() {
         assert_eq!(
-            ContentType::validate_source("application/json;version1").err(),
+            ContentType::<&str>::validate_source("application/json;version1").err(),
             Some(ContentTypeValidationError::MissingParameterAssignment)
         );
     }
@@ -386,7 +375,7 @@ mod mime_tests {
     #[test]
     fn invalid_parameter_value() {
         assert_eq!(
-            ContentType::validate_source("application/json;version=1@").err(),
+            ContentType::<&str>::validate_source("application/json;version=1@").err(),
             Some(ContentTypeValidationError::InvalidParameterValue)
         );
     }

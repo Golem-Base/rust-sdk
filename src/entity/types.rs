@@ -4,4 +4,3 @@ pub mod content_type;
 
 pub use btl::BlocksToLive;
 pub use content_type::{ContentType, ContentTypeValidationError};
-pub use mime;

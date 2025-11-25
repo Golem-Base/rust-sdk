@@ -2,9 +2,12 @@ use alloy_rlp::{RlpDecodable, RlpEncodable};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
-use super::types::{
-    BlocksToLive, ContentType,
-    attribute::{NumericAttribute, StringAttribute, WithAttribute},
+use super::{
+    error::ValidationError,
+    types::{
+        BlocksToLive, ContentType,
+        attribute::{NumericAttribute, StringAttribute, WithAttribute},
+    },
 };
 use crate::entity::EntityKey;
 
@@ -26,54 +29,141 @@ pub struct Update {
     /// Updated numeric annotations for the entity.
     numeric_attributes: Vec<NumericAttribute>,
 }
+impl Update {
+    pub fn builder<K, B, C, P>() -> UpdateBuilder<K, B, C, P>
+    where
+        K: Into<EntityKey>,
+        B: Into<BlocksToLive>,
+        C: TryInto<ContentType<String>, Error = crate::entity::error::ValidationError>,
+        P: Into<Bytes>,
+    {
+        UpdateBuilder::new()
+    }
 
-#[derive(Debug, Default)]
-pub struct UpdateBuilder<Payload: Into<Bytes> + Default> {
-    entity_key: Option<EntityKey>,
-    btl: Option<BlocksToLive>,
-    content_type: Option<ContentType>,
-    payload: Option<Payload>,
+    pub fn entity_key(&self) -> &EntityKey {
+        &self.entity_key
+    }
+
+    pub fn btl(&self) -> &BlocksToLive {
+        &self.btl
+    }
+
+    pub fn content_type(&self) -> &str {
+        &self.content_type
+    }
+
+    pub fn payload(&self) -> &Bytes {
+        &self.payload
+    }
+
+    pub fn string_attributes(&self) -> &[StringAttribute] {
+        &self.string_attributes
+    }
+
+    pub fn numeric_attributes(&self) -> &[NumericAttribute] {
+        &self.numeric_attributes
+    }
+}
+
+#[derive(Debug)]
+pub struct UpdateBuilder<K, B, C, P>
+where
+    K: Into<EntityKey>,
+    B: Into<BlocksToLive>,
+    C: TryInto<ContentType<String>, Error = crate::entity::error::ValidationError>,
+    P: Into<Bytes>,
+{
+    entity_key: Option<K>,
+    btl: Option<B>,
+    content_type: Option<C>,
+    payload: Option<P>,
     string_attributes: Vec<StringAttribute>,
     numeric_attributes: Vec<NumericAttribute>,
 }
 
-impl<Payload: Into<Bytes> + Default> UpdateBuilder<Payload> {
+// Avoids the `Default` constraint on `Payload` and `Mime`.
+impl<K, B, C, P> Default for UpdateBuilder<K, B, C, P>
+where
+    K: Into<EntityKey>,
+    B: Into<BlocksToLive>,
+    C: TryInto<ContentType<String>, Error = crate::entity::error::ValidationError>,
+    P: Into<Bytes>,
+{
+    fn default() -> Self {
+        Self {
+            entity_key: Default::default(),
+            btl: Default::default(),
+            content_type: Default::default(),
+            payload: Default::default(),
+            string_attributes: Default::default(),
+            numeric_attributes: Default::default(),
+        }
+    }
+}
+
+impl<K, B, C, P> UpdateBuilder<K, B, C, P>
+where
+    K: Into<EntityKey>,
+    B: Into<BlocksToLive>,
+    C: TryInto<ContentType<String>, Error = crate::entity::error::ValidationError>,
+    P: Into<Bytes>,
+{
     pub fn new() -> Self {
         Default::default()
     }
 
-    pub fn entity_key(mut self, entity_key: EntityKey) -> Self {
+    pub fn entity_key(mut self, entity_key: K) -> Self {
         self.entity_key = Some(entity_key);
         self
     }
 
-    pub fn btl(mut self, btl: BlocksToLive) -> Self {
+    pub fn btl(mut self, btl: B) -> Self {
         self.btl = Some(btl);
         self
     }
 
-    pub fn content_type(mut self, content_type: ContentType) -> Self {
+    pub fn content_type(mut self, content_type: C) -> Self {
         self.content_type = Some(content_type);
         self
     }
 
-    pub fn payload(mut self, payload: Payload) -> Self {
+    pub fn payload(mut self, payload: P) -> Self {
         self.payload = Some(payload);
         self
     }
 
-    pub fn build(self) -> Update {
-        Update {
-            entity_key: self.entity_key.unwrap(),
-            btl: self.btl.unwrap(),
-            content_type: self.content_type.unwrap().source().into(),
-            payload: self.payload.unwrap().into(),
+    pub fn build(self) -> Result<Update, ValidationError> {
+        let Some(entity_key) = self.entity_key.map(|key| key.into()) else {
+            return Err(ValidationError::MissingEntityKey);
+        };
+        let Some(btl) = self.btl.map(|btl| btl.into()) else {
+            return Err(ValidationError::MissingBtl);
+        };
+        let Some(content_type) = self.content_type else {
+            return Err(ValidationError::MissingContentType);
+        };
+        let content_type = content_type.try_into()?;
+        let Some(payload) = self.payload.map(Into::<Bytes>::into) else {
+            return Err(ValidationError::MissingPayload);
+        };
+
+        Ok(Update {
+            entity_key,
+            btl,
+            content_type: content_type.source().into(),
+            payload,
             string_attributes: self.string_attributes,
             numeric_attributes: self.numeric_attributes,
-        }
+        })
     }
 }
-impl<Payload: Into<Bytes> + Default> WithAttribute<StringAttribute> for UpdateBuilder<Payload> {
+impl<K, B, C, P> WithAttribute<StringAttribute> for UpdateBuilder<K, B, C, P>
+where
+    K: Into<EntityKey>,
+    B: Into<BlocksToLive>,
+    C: TryInto<ContentType<String>, Error = crate::entity::error::ValidationError>,
+    P: Into<Bytes>,
+{
     fn with_attribute(mut self, attribute: StringAttribute) -> Self {
         self.string_attributes.push(attribute);
         self
@@ -86,7 +176,13 @@ impl<Payload: Into<Bytes> + Default> WithAttribute<StringAttribute> for UpdateBu
         self
     }
 }
-impl<Payload: Into<Bytes> + Default> WithAttribute<NumericAttribute> for UpdateBuilder<Payload> {
+impl<K, B, C, P> WithAttribute<NumericAttribute> for UpdateBuilder<K, B, C, P>
+where
+    K: Into<EntityKey>,
+    B: Into<BlocksToLive>,
+    C: TryInto<ContentType<String>, Error = crate::entity::error::ValidationError>,
+    P: Into<Bytes>,
+{
     fn with_attribute(mut self, attribute: NumericAttribute) -> Self {
         self.numeric_attributes.push(attribute);
         self
