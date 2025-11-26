@@ -79,7 +79,12 @@ mod serialization_tests {
             .creates(vec![create])
             .build();
 
-        expect_hex(&hex::encode(tx.encoded()), expect!["efebeac38203e8906170706c69636174696f6e2f6a736f6e927b2274657374223a227061796c6f6164227dc0c0c0c0c0"]);
+        expect_hex(
+            &hex::encode(tx.encoded()),
+            expect![
+                "efebeac38203e8906170706c69636174696f6e2f6a736f6e927b2274657374223a227061796c6f6164227dc0c0c0c0c0"
+            ],
+        );
     }
 
     #[test]
@@ -97,7 +102,12 @@ mod serialization_tests {
             .creates(vec![create])
             .build();
 
-        expect_hex(&hex::encode(tx.encoded()), expect!["f840f83bf839c38203e8906170706c69636174696f6e2f6a736f6e927b2274657374223a227061796c6f6164227dc9c883666f6f83626172c6c58362617a2ac0c0c0"]);
+        expect_hex(
+            &hex::encode(tx.encoded()),
+            expect![
+                "f840f83bf839c38203e8906170706c69636174696f6e2f6a736f6e927b2274657374223a227061796c6f6164227dc9c883666f6f83626172c6c58362617a2ac0c0c0"
+            ],
+        );
     }
 
     #[test]
@@ -116,7 +126,12 @@ mod serialization_tests {
             .updates(vec![update])
             .build();
 
-        expect_hex(&hex::encode(tx.encoded()), expect!["f862c0f85df85ba00101010101010101010101010101010101010101010101010101010101010101c38207d08a706c61696e2f746578748f75706461746564207061796c6f6164cfce8673746174757386616374697665cac98776657273696f6e02c0c0"]);
+        expect_hex(
+            &hex::encode(tx.encoded()),
+            expect![
+                "f862c0f85df85ba00101010101010101010101010101010101010101010101010101010101010101c38207d08a706c61696e2f746578748f75706461746564207061796c6f6164cfce8673746174757386616374697665cac98776657273696f6e02c0c0"
+            ],
+        );
     }
 
     #[test]
@@ -125,19 +140,26 @@ mod serialization_tests {
             .deletes(vec![B256::from_slice(&[2; 32]).into()])
             .build();
 
-        expect_hex(&hex::encode(tx.encoded()), expect!["e6c0c0e2e1a00202020202020202020202020202020202020202020202020202020202020202c0"]);
+        expect_hex(
+            &hex::encode(tx.encoded()),
+            expect![
+                "e6c0c0e2e1a00202020202020202020202020202020202020202020202020202020202020202c0"
+            ],
+        );
     }
 
     #[test]
     fn test_extend_btl() {
         let tx = GolemBaseTransaction::builder()
-            .extensions(vec![Extend {
-                entity_key: B256::from_slice(&[3; 32]),
-                number_of_blocks: 500,
-            }])
+            .extensions(vec![Extend::new(&[3; 32], 500)])
             .build();
 
-        expect_hex(&hex::encode(tx.encoded()), expect!["e9c0c0c0e5e4a003030303030303030303030303030303030303030303030303030303030303038201f4"]);
+        expect_hex(
+            &hex::encode(tx.encoded()),
+            expect![
+                "e9c0c0c0e5e4a003030303030303030303030303030303030303030303030303030303030303038201f4"
+            ],
+        );
     }
 
     #[test]
@@ -160,12 +182,14 @@ mod serialization_tests {
             .creates(vec![create])
             .updates(vec![update])
             .deletes(vec![B256::from_slice(&[2; 32]).into()])
-            .extensions(vec![Extend {
-                entity_key: B256::from_slice(&[3; 32]),
-                number_of_blocks: 500,
-            }])
+            .extensions(vec![Extend::new(&[3; 32], 500)])
             .build();
 
-        expect_hex(&hex::encode(tx.encoded()), expect!["f8baeae9c38203e88a706c61696e2f746578748c74657374207061796c6f6164cbca84747970658474657374c0f844f842a00101010101010101010101010101010101010101010101010101010101010101c38207d08a706c61696e2f746578748f75706461746564207061796c6f6164c0c0e2e1a00202020202020202020202020202020202020202020202020202020202020202e5e4a003030303030303030303030303030303030303030303030303030303030303038201f4"]);
+        expect_hex(
+            &hex::encode(tx.encoded()),
+            expect![
+                "f8baeae9c38203e88a706c61696e2f746578748c74657374207061796c6f6164cbca84747970658474657374c0f844f842a00101010101010101010101010101010101010101010101010101010101010101c38207d08a706c61696e2f746578748f75706461746564207061796c6f6164c0c0e2e1a00202020202020202020202020202020202020202020202020202020202020202e5e4a003030303030303030303030303030303030303030303030303030303030303038201f4"
+            ],
+        );
     }
 }

@@ -4,24 +4,34 @@ use serde::{Deserialize, Serialize};
 
 use crate::entity::EntityKey;
 
-/// Type representing an extend transaction in GolemBase.
-/// Used to extend the BTL of an entity by a number of blocks.
+/// Type representing an extend operation as part of a `Transaction`.
+/// Used to extend the [`crate::entity::types::btl::BlocksToLive`] of an entity by a number of blocks.
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable, Serialize, Deserialize)]
 pub struct Extend {
     /// The key of the entity to extend.
-    pub entity_key: EntityKey,
+    entity_key: EntityKey,
     /// The number of blocks to extend the BTL by.
-    pub number_of_blocks: u64,
+    number_of_blocks: u64,
 }
 
 impl Extend {
-    /// Creates a new `Update` operation with empty annotations.
-    /// Accepts an entity key, payload as bytes, and a BTL value.
-    pub fn new(entity_key: B256, number_of_blocks: u64) -> Self {
+    /// Construct a new instance of an extend operation as part of a `Transaction`
+    /// for some existing [`crate::entity::Entity`].
+    pub fn new<K: Into<B256>>(entity_key: K, number_of_blocks: u64) -> Self {
         Self {
-            entity_key,
+            entity_key: entity_key.into(),
             number_of_blocks,
         }
+    }
+
+    /// The key of the entity to extend.
+    pub fn entity_key(&self) -> &EntityKey {
+        &self.entity_key
+    }
+
+    /// The number of blocks to extend the BTL by.
+    pub fn number_of_blocks(&self) -> u64 {
+        self.number_of_blocks
     }
 }
 
