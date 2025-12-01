@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// that also takes advantage of compile time checks.
 ///
 /// ```rs
-/// use golem_base_sdk::entity::BlocksToLive;
+/// use arkiv_sdk::entity::BlocksToLive;
 ///
 /// const THIRTY_SECONDS: BlocksToLive = BlocksToLive::new(15u64);
 /// ```

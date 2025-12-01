@@ -51,7 +51,7 @@ impl ContentType<&'static str> {
     /// # Example
     ///
     /// ```rs,ignore
-    /// use golem_base_sdk::entity::ContentType;
+    /// use arkiv_sdk::entity::ContentType;
     ///
     /// pub const CUSTOM_CONTENT_TYPE: ContentType<&str> = ContentType::new("application/vnd.example.long-format+json;version=42;mode=fast;debug=true;region=us-west-2;retry=5");
     /// ```

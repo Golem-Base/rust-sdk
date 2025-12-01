@@ -46,7 +46,7 @@ impl NonceManager {
 /// however, an instance of [`GolemBaseClient`] can be dereferenced to [`GolemBaseRoClient`] like so:
 ///
 /// ```rs
-/// use golem_base_sdk::{GolemBaseClient, GolemBaseRoClient, PrivateKeySigner, Url};
+/// use arkiv_sdk::{GolemBaseClient, GolemBaseRoClient, PrivateKeySigner, Url};
 ///
 /// let keypath = dirs::config_dir()
 ///     .ok_or("Failed to get config directory")?
@@ -63,14 +63,14 @@ impl NonceManager {
 /// let ro_client: &GolemBaseRoClient = *client;
 /// ```
 #[derive(Clone)]
-pub struct GolemBaseRoClient {
+pub struct RoClient {
     /// The underlying provider for making RPC calls.
     pub(crate) provider: DynProvider,
 }
 
 #[bon]
-impl GolemBaseRoClient {
-    /// Creates a new builder for `GolemBaseClient` with the given wallet and RPC URL.
+impl RoClient {
+    /// Creates a new builder for `arkiv::Client` with the given wallet and RPC URL.
     /// Initializes the provider and sets up default configuration.
     #[builder]
     pub fn builder(rpc_url: Url, provider: Option<DynProvider>) -> Self {
@@ -93,7 +93,7 @@ impl GolemBaseRoClient {
 /// however, an instance of [`GolemBaseClient`] can be dereferenced to [`GolemBaseRoClient`] like so:
 ///
 /// ```rs
-/// use golem_base_sdk::{GolemBaseClient, GolemBaseRoClient, PrivateKeySigner, Url};
+/// use arkiv_sdk::{GolemBaseClient, GolemBaseRoClient, PrivateKeySigner, Url};
 ///
 /// let keypath = dirs::config_dir()
 ///     .ok_or("Failed to get config directory")?
@@ -110,17 +110,17 @@ impl GolemBaseRoClient {
 /// let ro_client: &GolemBaseRoClient = *client;
 /// ```
 #[derive(Clone)]
-pub struct GolemBaseClient {
+pub struct Client {
     /// The underlying GolemBaseRoClient
-    pub(crate) ro_client: GolemBaseRoClient,
+    pub(crate) ro_client: RoClient,
     /// The Ethereum address of the client owner.
     pub(crate) wallet: PrivateKeySigner,
     /// Nonce manager for tracking transaction nonces.
     pub(crate) nonce_manager: Arc<Mutex<NonceManager>>,
 }
 
-impl Deref for GolemBaseClient {
-    type Target = GolemBaseRoClient;
+impl Deref for Client {
+    type Target = RoClient;
 
     fn deref(&self) -> &Self::Target {
         &self.ro_client
@@ -128,7 +128,7 @@ impl Deref for GolemBaseClient {
 }
 
 #[bon]
-impl GolemBaseClient {
+impl Client {
     /// Creates a new builder for `GolemBaseClient` with the given wallet and RPC URL.
     /// Initializes the provider and sets up default configuration.
     #[builder]
@@ -138,7 +138,7 @@ impl GolemBaseClient {
             .connect_http(rpc_url.clone())
             .erased();
 
-        let ro_client = GolemBaseRoClient::builder()
+        let ro_client = RoClient::builder()
             .rpc_url(rpc_url)
             .provider(provider)
             .build();

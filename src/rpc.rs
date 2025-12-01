@@ -12,7 +12,7 @@ use std::fmt::Debug;
 use thiserror::Error;
 
 use crate::entity::types::attribute::{NumericAttribute, StringAttribute};
-use crate::{EntityKey, GolemBaseRoClient};
+use crate::{EntityKey, RoClient};
 
 /// Represents errors that can occur in the GolemBase RPC module.
 /// Used to wrap and describe errors from RPC requests, decoding, or deserialization.
@@ -77,7 +77,7 @@ impl SearchResult {
     }
 }
 
-impl GolemBaseRoClient {
+impl RoClient {
     /// Makes a JSON-RPC call to the GolemBase endpoint.
     /// Handles serialization, deserialization, and error mapping for RPC requests.
     pub(crate) async fn rpc_call<S: RpcSend, R: RpcRecv>(

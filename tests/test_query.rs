@@ -1,11 +1,11 @@
 use anyhow::Result;
 use serial_test::serial;
 
-use golem_base_sdk::entity::{
+use arkiv_sdk::entity::{
     create::Create,
     types::attribute::{StringAttribute, WithAttribute},
 };
-use golem_base_test_utils::get_client;
+use arkiv_test_utils::get_client;
 
 #[tokio::test]
 #[serial]

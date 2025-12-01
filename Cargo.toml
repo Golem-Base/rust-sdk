@@ -1,8 +1,10 @@
 [package]
-name = "golem-base-sdk"
-version = "0.4.0"
+name = "arkiv-sdk"
+version = "0.5.0"
 edition = "2024"
-description = "A Rust SDK for interacting with GolemBase."
+description = "A Rust SDK for interacting with the Arkiv Network."
+homepage = "https://arkiv.network/"
+repository = "https://github.com/arkiv-network/arkiv-sdk-rust"
 license = "GPL-3.0-or-later"
 
 [workspace]
@@ -43,8 +45,8 @@ tracing = { version = "0.1" }
 url = "2.5"
 
 [workspace.dependencies]
-golem-base-sdk = { path = "." }
-golem-base-test-utils = { path = "test-utils" }
+arkiv-sdk = { path = "." }
+arkiv-test-utils = { path = "test-utils" }
 
 [dev-dependencies]
 bincode = "2"
@@ -52,4 +54,4 @@ expect-test = "1.5"
 mime = "0.3"
 serde_json = "1"
 serial_test = "3.2"
-golem-base-test-utils = { workspace = true }
+arkiv-test-utils = { workspace = true }

@@ -4,14 +4,14 @@ use bytes::Bytes;
 use serial_test::serial;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use golem_base_sdk::entity::{
+use arkiv_sdk::entity::{
     create::Create,
     extend::Extend,
-    tx::GolemBaseTransaction,
+    tx::Transaction,
     types::attribute::{NumericAttribute, StringAttribute, WithAttribute},
     update::Update,
 };
-use golem_base_test_utils::get_client;
+use arkiv_test_utils::get_client;
 
 #[tokio::test]
 #[serial]
@@ -269,7 +269,7 @@ async fn test_failed_tx_explicit_gas() -> Result<()> {
     let start_block = client.get_current_block_number().await?;
     tracing::info!("Starting at block: {start_block}");
 
-    let create_tx = GolemBaseTransaction::builder()
+    let create_tx = Transaction::builder()
         .extensions(vec![Extend::new(FixedBytes::with_last_byte(1), 1000)])
         .gas_limit(235200)
         .build();

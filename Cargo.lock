@@ -835,6 +835,60 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkiv-sdk"
+version = "0.5.0"
+dependencies = [
+ "alloy",
+ "alloy-rlp",
+ "anyhow",
+ "arkiv-test-utils",
+ "base64",
+ "bigdecimal",
+ "bincode",
+ "bon",
+ "bytes",
+ "dirs",
+ "displaydoc",
+ "expect-test",
+ "futures",
+ "hex",
+ "mime",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "thiserror 2.0.15",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "arkiv-sdk-demo"
+version = "0.1.0"
+dependencies = [
+ "arkiv-sdk",
+ "dirs",
+ "futures",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "arkiv-test-utils"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anyhow",
+ "arkiv-sdk",
+ "bigdecimal",
+ "dirs",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1810,60 +1864,6 @@ name = "glob"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
-
-[[package]]
-name = "golem-base-sdk"
-version = "0.4.0"
-dependencies = [
- "alloy",
- "alloy-rlp",
- "anyhow",
- "base64",
- "bigdecimal",
- "bincode",
- "bon",
- "bytes",
- "dirs",
- "displaydoc",
- "expect-test",
- "futures",
- "golem-base-test-utils",
- "hex",
- "mime",
- "serde",
- "serde_json",
- "serial_test",
- "thiserror 2.0.15",
- "tokio",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "golem-base-sdk-demo"
-version = "0.1.0"
-dependencies = [
- "dirs",
- "futures",
- "golem-base-sdk",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "golem-base-test-utils"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "anyhow",
- "bigdecimal",
- "dirs",
- "golem-base-sdk",
- "tracing",
- "tracing-subscriber",
- "url",
-]
 
 [[package]]
 name = "group"

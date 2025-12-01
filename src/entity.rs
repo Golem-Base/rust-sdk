@@ -51,7 +51,7 @@ mod serialization_tests {
     use crate::entity::{
         create::Create,
         extend::Extend,
-        tx::GolemBaseTransaction,
+        tx::Transaction,
         types::attribute::{NumericAttribute, StringAttribute, WithAttribute},
         update::Update,
     };
@@ -62,7 +62,7 @@ mod serialization_tests {
 
     #[test]
     fn test_empty_transaction() {
-        let tx = GolemBaseTransaction::builder().build();
+        let tx = Transaction::builder().build();
         expect_hex(&hex::encode(tx.encoded()), expect!["c4c0c0c0c0"]);
     }
 
@@ -75,9 +75,7 @@ mod serialization_tests {
             .build()
             .unwrap();
 
-        let tx = GolemBaseTransaction::builder()
-            .creates(vec![create])
-            .build();
+        let tx = Transaction::builder().creates(vec![create]).build();
 
         expect_hex(
             &hex::encode(tx.encoded()),
@@ -98,9 +96,7 @@ mod serialization_tests {
             .build()
             .unwrap();
 
-        let tx = GolemBaseTransaction::builder()
-            .creates(vec![create])
-            .build();
+        let tx = Transaction::builder().creates(vec![create]).build();
 
         expect_hex(
             &hex::encode(tx.encoded()),
@@ -122,9 +118,7 @@ mod serialization_tests {
             .build()
             .unwrap();
 
-        let tx = GolemBaseTransaction::builder()
-            .updates(vec![update])
-            .build();
+        let tx = Transaction::builder().updates(vec![update]).build();
 
         expect_hex(
             &hex::encode(tx.encoded()),
@@ -136,7 +130,7 @@ mod serialization_tests {
 
     #[test]
     fn test_delete_operation() {
-        let tx = GolemBaseTransaction::builder()
+        let tx = Transaction::builder()
             .deletes(vec![B256::from_slice(&[2; 32]).into()])
             .build();
 
@@ -150,7 +144,7 @@ mod serialization_tests {
 
     #[test]
     fn test_extend_btl() {
-        let tx = GolemBaseTransaction::builder()
+        let tx = Transaction::builder()
             .extensions(vec![Extend::new(&[3; 32], 500)])
             .build();
 
@@ -178,7 +172,7 @@ mod serialization_tests {
             .btl(2000)
             .build()
             .unwrap();
-        let tx = GolemBaseTransaction::builder()
+        let tx = Transaction::builder()
             .creates(vec![create])
             .updates(vec![update])
             .deletes(vec![B256::from_slice(&[2; 32]).into()])

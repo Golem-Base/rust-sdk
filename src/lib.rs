@@ -7,7 +7,7 @@ pub use alloy::{
     transports::http::reqwest::Url,
 };
 
-pub use client::{GolemBaseClient, GolemBaseRoClient};
+pub use client::{Client, RoClient};
 pub use entity::{EntityKey, types::attribute::Attribute};
 
 /// Module for Ethereum transaction-related functionality.

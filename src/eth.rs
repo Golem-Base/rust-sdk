@@ -3,13 +3,13 @@
 // the overhead in situations when the expected type from an end user is really just
 // some B256 hash or other arbitrary string or numeric data.
 use crate::{
-    GolemBaseClient,
+    Client,
     entity::{
         EntityKey, EntityResult,
         create::Create,
         delete::{Delete, DeleteResult},
         extend::{Extend, ExtendResult},
-        tx::{GolemBaseTransaction, TransactionResult},
+        tx::{Transaction, TransactionResult},
         update::Update,
     },
 };
@@ -22,22 +22,22 @@ use displaydoc::Display;
 use thiserror::Error;
 
 alloy::sol! {
-    contract GolemBaseABI {
-        event GolemBaseStorageEntityCreated(
+    contract ArkivAbi {
+        event EntityCreated(
             uint256 indexed entityKey,
             uint256 expirationBlock
         );
 
-        event GolemBaseStorageEntityUpdated(
+        event EntityUpdated(
             uint256 indexed entityKey,
             uint256 expirationBlock
         );
 
-        event GolemBaseStorageEntityDeleted(
+        event EntityDeleted(
             uint256 indexed entityKey
         );
 
-        event GolemBaseStorageEntityBTLExtended(
+        event EntityExtended(
             uint256 indexed entityKey,
             uint256 oldExpirationBlock,
             uint256 newExpirationBlock
@@ -61,11 +61,8 @@ pub enum Error {
 /// All entity-related transactions are sent to this address.
 pub const STORAGE_ADDRESS: Address = address!("0x0000000000000000000000000000000060138453");
 
-impl GolemBaseClient {
-    pub async fn send_transaction(
-        &self,
-        tx: GolemBaseTransaction,
-    ) -> Result<TransactionResult, Error> {
+impl Client {
+    pub async fn send_transaction(&self, tx: Transaction) -> Result<TransactionResult, Error> {
         let receipt = self.create_raw_transaction(tx).await?;
         receipt.try_into()
     }
@@ -74,7 +71,7 @@ impl GolemBaseClient {
     /// Sends a transaction to the storage contract and parses the resulting logs.
     pub async fn create_entities(&self, creates: Vec<Create>) -> Result<Vec<EntityResult>, Error> {
         let result = self
-            .send_transaction(GolemBaseTransaction::builder().creates(creates).build())
+            .send_transaction(Transaction::builder().creates(creates).build())
             .await;
 
         result.and_then(|res| match res {
@@ -94,7 +91,7 @@ impl GolemBaseClient {
     /// Sends a transaction to the storage contract and parses the resulting logs.
     pub async fn update_entities(&self, updates: Vec<Update>) -> Result<Vec<EntityResult>, Error> {
         let result = self
-            .send_transaction(GolemBaseTransaction::builder().updates(updates).build())
+            .send_transaction(Transaction::builder().updates(updates).build())
             .await;
 
         result.and_then(|res| match res {
@@ -118,7 +115,7 @@ impl GolemBaseClient {
     ) -> Result<Vec<DeleteResult>, Error> {
         let result = self
             .send_transaction(
-                GolemBaseTransaction::builder()
+                Transaction::builder()
                     // TODO: See mod comment
                     .deletes(deletes.into_iter().map(From::from).collect::<Vec<Delete>>())
                     .build(),
@@ -145,11 +142,7 @@ impl GolemBaseClient {
         extensions: Vec<Extend>,
     ) -> Result<Vec<ExtendResult>, Error> {
         let result = self
-            .send_transaction(
-                GolemBaseTransaction::builder()
-                    .extensions(extensions)
-                    .build(),
-            )
+            .send_transaction(Transaction::builder().extensions(extensions).build())
             .await;
 
         result.and_then(|res| match res {
@@ -192,7 +185,7 @@ impl GolemBaseClient {
     /// Encodes the transaction payload and sends it to the contract address.
     pub async fn create_raw_transaction(
         &self,
-        payload: GolemBaseTransaction,
+        payload: Transaction,
     ) -> Result<TransactionReceipt, Error> {
         tracing::debug!("payload: {payload:?}");
         let encoded = payload.encoded();

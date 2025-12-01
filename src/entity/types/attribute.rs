@@ -37,7 +37,7 @@ impl<K: Into<String>, V> Attribute<K, V> {
     /// # Example
     ///
     /// ```rs,ignore
-    /// use golem_base_sdk::entity::types::attribute::Attribute;
+    /// use arkiv_sdk::entity::types::attribute::Attribute;
     ///
     /// const VERS: Attribute<&str, u64> = Attribute::new("version", 1u64);
     /// ```
@@ -52,7 +52,7 @@ impl<K: Into<String>, V> Attribute<K, V> {
     /// # Example
     ///
     /// ```rs,ignore
-    /// use golem_base_sdk::entity::types::attribute::Attribute;
+    /// use arkiv_sdk::entity::types::attribute::Attribute;
     ///
     /// const VERS: Attribute<&str, u32> = Attribute::new("version", 1);
     /// let mapped = VERS.map(NumericAttribute::from);
@@ -71,7 +71,7 @@ impl<K: Into<String>, V> Attribute<K, V> {
     /// # Example
     ///
     /// ```rs,ignore
-    /// use golem_base_sdk::entity::types::attribute::Attribute;
+    /// use arkiv_sdk::entity::types::attribute::Attribute;
     ///
     /// const MODE: Attribute<&str, &str> = Attribute::new("mode", "debug");
     /// let mapped: Attribute<String, String> = MODE.map_into::<String>();

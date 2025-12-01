@@ -10,14 +10,14 @@ use crate::{
         extend::{Extend, ExtendResult},
         update::Update,
     },
-    eth::{self, GolemBaseABI},
+    eth::{self, ArkivAbi},
 };
 
 /// Type representing a transaction in GolemBase, including creates, updates, deletes, and extensions.
 /// Used as the main payload for submitting entity changes to the chain.
 #[derive(Debug, Clone)]
-pub struct GolemBaseTransaction {
-    pub encodable: EncodableGolemBaseTransaction,
+pub struct Transaction {
+    pub encodable: EncodableTransaction,
     pub gas_limit: Option<u64>,
     pub max_priority_fee_per_gas: Option<u128>,
     pub max_fee_per_gas: Option<u128>,
@@ -25,14 +25,15 @@ pub struct GolemBaseTransaction {
 
 // A transaction that can be encoded in RLP
 #[derive(Debug, Clone, Default, RlpEncodable, RlpDecodable)]
-pub struct EncodableGolemBaseTransaction {
-    /// A list of entities to create.
+pub struct EncodableTransaction {
+    // TODO: Add chown
+    /// A list of [`Create`] operations.
     pub creates: Vec<Create>,
-    /// A list of entities to update.
+    /// A list of [`Update`] operations.
     pub updates: Vec<Update>,
-    /// A list of entity keys to delete.
+    /// A list of [`Delete`] operations.
     pub deletes: Vec<Delete>,
-    /// A list of entities to extend.
+    /// A list of [`Extend`] operations.
     pub extensions: Vec<Extend>,
 }
 
@@ -58,31 +59,31 @@ impl TryFrom<TransactionReceipt> for TransactionResult {
         let mut txres = TransactionResult::default();
         receipt.logs().iter().cloned().try_for_each(|log| {
             let log: alloy::primitives::Log = log.into();
-            let parsed = GolemBaseABI::GolemBaseABIEvents::decode_log(&log).map_err(|e| {
+            let parsed = ArkivAbi::ArkivAbiEvents::decode_log(&log).map_err(|e| {
                 Self::Error::UnexpectedLogDataError(format!("Error decoding event log: {e}"))
             })?;
             match parsed.data {
-                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityCreated(data) => {
+                ArkivAbi::ArkivAbiEvents::EntityCreated(data) => {
                     txres.creates.push(EntityResult {
                         entity_key: data.entityKey.into(),
                         expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
                     });
                     Ok(())
                 }
-                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityUpdated(data) => {
+                ArkivAbi::ArkivAbiEvents::EntityUpdated(data) => {
                     txres.updates.push(EntityResult {
                         entity_key: data.entityKey.into(),
                         expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
                     });
                     Ok(())
                 }
-                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityDeleted(data) => {
+                ArkivAbi::ArkivAbiEvents::EntityDeleted(data) => {
                     txres.deletes.push(DeleteResult {
                         entity_key: data.entityKey.into(),
                     });
                     Ok(())
                 }
-                GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityBTLExtended(data) => {
+                ArkivAbi::ArkivAbiEvents::EntityExtended(data) => {
                     txres.extensions.push(ExtendResult {
                         entity_key: data.entityKey.into(),
                         old_expiration_block: data
@@ -104,7 +105,7 @@ impl TryFrom<TransactionReceipt> for TransactionResult {
 }
 
 #[bon]
-impl GolemBaseTransaction {
+impl Transaction {
     #[builder]
     pub fn builder(
         creates: Option<Vec<Create>>,
@@ -116,7 +117,7 @@ impl GolemBaseTransaction {
         max_fee_per_gas: Option<u128>,
     ) -> Self {
         Self {
-            encodable: EncodableGolemBaseTransaction {
+            encodable: EncodableTransaction {
                 creates: creates.unwrap_or_default(),
                 updates: updates.unwrap_or_default(),
                 deletes: deletes.unwrap_or_default(),
@@ -129,7 +130,7 @@ impl GolemBaseTransaction {
     }
 }
 
-impl GolemBaseTransaction {
+impl Transaction {
     /// Returns the RLP-encoded bytes of the transaction.
     /// Useful for submitting the transaction to the chain.
     pub fn encoded(&self) -> Vec<u8> {

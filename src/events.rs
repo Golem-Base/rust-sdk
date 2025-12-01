@@ -10,7 +10,7 @@ use std::convert::TryFrom;
 use std::pin::Pin;
 
 use crate::entity::EntityKey;
-use crate::eth::{self, GolemBaseABI};
+use crate::eth::{self, ArkivAbi};
 
 /// Represents a GolemBase event parsed from the blockchain log.
 /// Used to distinguish between entity creation, update, and removal events.
@@ -78,40 +78,32 @@ impl TryFrom<Log> for Event {
         let transaction_hash = log
             .transaction_hash
             .ok_or_else(|| anyhow::anyhow!("Missing transaction hash"))?;
-        let parsed = GolemBaseABI::GolemBaseABIEvents::decode_log(&log.into())?;
+        let parsed = ArkivAbi::ArkivAbiEvents::decode_log(&log.into())?;
         match parsed.data {
-            GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityCreated(data) => {
-                Ok(Event::EntityCreated {
-                    entity_id: data.entityKey.into(),
-                    expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
-                    block_number,
-                    transaction_hash,
-                })
-            }
-            GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityUpdated(data) => {
-                Ok(Event::EntityUpdated {
-                    entity_id: data.entityKey.into(),
-                    expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
-                    block_number,
-                    transaction_hash,
-                })
-            }
-            GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityDeleted(data) => {
-                Ok(Event::EntityRemoved {
-                    entity_id: data.entityKey.into(),
-                    block_number,
-                    transaction_hash,
-                })
-            }
-            GolemBaseABI::GolemBaseABIEvents::GolemBaseStorageEntityBTLExtended(data) => {
-                Ok(Event::EntityExtended {
-                    entity_id: data.entityKey.into(),
-                    old_expiration_block: data.oldExpirationBlock.try_into().unwrap_or_default(),
-                    new_expiration_block: data.newExpirationBlock.try_into().unwrap_or_default(),
-                    block_number,
-                    transaction_hash,
-                })
-            }
+            ArkivAbi::ArkivAbiEvents::EntityCreated(data) => Ok(Event::EntityCreated {
+                entity_id: data.entityKey.into(),
+                expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
+                block_number,
+                transaction_hash,
+            }),
+            ArkivAbi::ArkivAbiEvents::EntityUpdated(data) => Ok(Event::EntityUpdated {
+                entity_id: data.entityKey.into(),
+                expiration_block: data.expirationBlock.try_into().unwrap_or_default(),
+                block_number,
+                transaction_hash,
+            }),
+            ArkivAbi::ArkivAbiEvents::EntityDeleted(data) => Ok(Event::EntityRemoved {
+                entity_id: data.entityKey.into(),
+                block_number,
+                transaction_hash,
+            }),
+            ArkivAbi::ArkivAbiEvents::EntityExtended(data) => Ok(Event::EntityExtended {
+                entity_id: data.entityKey.into(),
+                old_expiration_block: data.oldExpirationBlock.try_into().unwrap_or_default(),
+                new_expiration_block: data.newExpirationBlock.try_into().unwrap_or_default(),
+                block_number,
+                transaction_hash,
+            }),
         }
     }
 }
@@ -165,10 +157,10 @@ impl EventsClient {
             .address(eth::STORAGE_ADDRESS)
             .from_block(block)
             .events(vec![
-                GolemBaseABI::GolemBaseStorageEntityCreated::SIGNATURE,
-                GolemBaseABI::GolemBaseStorageEntityUpdated::SIGNATURE,
-                GolemBaseABI::GolemBaseStorageEntityDeleted::SIGNATURE,
-                GolemBaseABI::GolemBaseStorageEntityBTLExtended::SIGNATURE,
+                ArkivAbi::EntityCreated::SIGNATURE,
+                ArkivAbi::EntityUpdated::SIGNATURE,
+                ArkivAbi::EntityDeleted::SIGNATURE,
+                ArkivAbi::EntityExtended::SIGNATURE,
             ])
     }
 
